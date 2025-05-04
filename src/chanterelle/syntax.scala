@@ -1,18 +1,25 @@
 package chanterelle
 
 import scala.NamedTuple.*
-import scala.deriving.Mirror
+import chanterelle.internal.EntryPoint
 
 extension [Labels <: Tuple, Values <: Tuple](self: NamedTuple[Labels, Values]) {
   def modify = {
     ???
   }
+
+  inline def showStruct: Unit = EntryPoint.struct[NamedTuple[Labels, Values]]
 }
 
 object test {
-
   val a: (name: Int, age: Int, other: (something: (name: Int, age: Int))) =
     (name = 1, age = 2, other = (something = (name = 1, age = 2)))
+
+  // NamedTu
+
+  internal.Logger.locally {
+    a.showStruct
+  }
 
   val repr: Field[
     (name: Int, age: Int, other: (something: (name: Int, age: Int)))
