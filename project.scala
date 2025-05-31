@@ -1,2 +1,2 @@
-// using scala 3.7.0-RC4
-//> using options -experimental -language:experimental.namedTuples -Wunused:all
+// using scala 3.7.0
+//> using options -Wunused:all

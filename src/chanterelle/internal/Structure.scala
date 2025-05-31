@@ -1,8 +1,7 @@
 package chanterelle.internal
 
-import scala.annotation.{tailrec, unused}
+import scala.annotation.{tailrec}
 import scala.collection.immutable.VectorMap
-import scala.deriving.Mirror
 import scala.quoted.*
 import scala.reflect.TypeTest
 
@@ -96,7 +95,7 @@ private[chanterelle] object Structure {
             )
           )
 
-        case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
+        case '[type t <: NamedTuple.AnyNamedTuple; t] =>
           val structures =
             tupleTypeElements(Type.of[NamedTuple.DropNames[t]])
               .zip(constStringTuple(TypeRepr.of[NamedTuple.Names[t]]))
@@ -141,7 +140,7 @@ private[chanterelle] object Structure {
 
           Structure.Tuple(Type.of[A], path, structures, isPlain = true)
 
-        case tpe =>
+        case _ =>
           Structure.Leaf(Type.of[A], path)
       }
   }

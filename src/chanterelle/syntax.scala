@@ -3,6 +3,13 @@ package chanterelle
 import scala.NamedTuple.*
 import chanterelle.internal.EntryPoint
 
+sealed trait Modifier[Path <: Selector[Tpe], Tpe] {
+  def add[FieldTpe <: NamedTuple.AnyNamedTuple, FieldName <: String, A](
+    selector: Path => Selector[FieldTpe]
+  )(value: NamedTuple[FieldName *: EmptyTuple, A *: EmptyTuple]): Modifier[Path, Tpe] = ???
+
+}
+
 extension [Labels <: Tuple, Values <: Tuple](self: NamedTuple[Labels, Values]) {
   def modify = {
     ???
@@ -12,8 +19,8 @@ extension [Labels <: Tuple, Values <: Tuple](self: NamedTuple[Labels, Values]) {
 }
 
 object test {
-  val a: (name: Int, age: Int, other: (something: (name: Int, age: Int))) =
-    (name = 1, age = 2, other = (something = (name = 1, age = 2)))
+  val a: (name: Int, age: Int, other: (something: (name: Int, age: Int))) = ???
+    // (name = 1, age = 2, other = (something = (name = 1, age = 2)))
 
   // NamedTu
 
@@ -21,23 +28,30 @@ object test {
     a.showStruct
   }
 
-  val repr: Field[
+  type Sel = Selector[
     (name: Int, age: Int, other: (something: (name: Int, age: Int)))
   ] {
-    val name: Field[Int]
-    val age: Field[Int]
-    val optional: Field[Option[String]] {
-      val element: Field[String]
+    val name: Selector[Int]
+    val age: Selector[Int]
+    val optional: Selector[Option[String]] {
+      val element: Selector[String]
     }
-    val other: Field[(something: (name: Int, age: Int))] {
-      val something: Field[((name: Int, age: Int))] {
-        val name: Field[Int]
-        val age: Field[Int]
+    val other: Selector[(something: (name: Int, age: Int))] {
+      val something: Selector[((name: Int, age: Int))] {
+        val name: Selector[Int]
+        val age: Selector[Int]
       }
     }
-  } = ???
+  }
 
-  val asd = repr.age
+  val mod: Modifier[Sel, (name: Int, age: Int, other: (something: (name: Int, age: Int)))] = ???
+
+
+  mod
+    .add(_.other)((newField = 1))
+    .add(_.other.something)((newField2 = 2))
+
+  // val asd = repr.age
 
   def costam(a: Int ?=> String => String*) = ???
 
@@ -49,12 +63,32 @@ object test {
   // )
 
   // a.costam
+
+
+  type Unbuild[A] =
+    A match {
+      case NamedTuple[labels, types] => Tuple.Zip[labels, Tuple.Map[types, Unbuild]]
+      case _ => A
+    }
+
+  type Build[LabelsAndTypes <: Tuple, OutLabels <: Tuple, OutTypes <: Tuple] =
+    LabelsAndTypes match {
+      case (label, Option[tpe]) *: tail => 
+        Build[tail, label *: OutLabels, Build[("element", tpe) *: EmptyTuple, EmptyTuple, EmptyTuple] *: OutTypes]
+      case (label, Iterable[tpe]) *: tail => Nothing
+      case (label, tpe) *: tail => 
+        Build[tail, label *: OutLabels, tpe *: OutTypes]
+      case EmptyTuple => NamedTuple[OutLabels, OutTypes]
+    }
+
+
+
+  type Test = Build[("int", Int) *: ("opt", Option[Int]) *: EmptyTuple, EmptyTuple, EmptyTuple]
+
+  type Unbuilt = Unbuild[(name: Int, str: String, other: (someOtherField: Int, field23: Int))]
 }
 
-sealed trait Field[A] extends Selectable { self =>
-  type Reprs
-
-  inline def selectDynamic(name: String): Nothing = ???
-
-  def update(f: A => A): Field[A] { type Repr = self.Reprs }
+sealed trait Selector[A] extends Selectable { self =>
+  
+  def selectDynamic(name: String): Nothing = ???
 }
