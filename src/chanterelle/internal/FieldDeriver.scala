@@ -2,45 +2,42 @@ package chanterelle.internal
 
 import chanterelle.*
 import scala.quoted.*
+import Selector as Sel
 
 private[chanterelle] object FieldDeriver {
-  def fromStructure(structure: Structure)(using Quotes): Type[Field[?]] = {
-    def recurse(using Quotes)(current: Structure): quotes.reflect.TypeRepr = {
-      import quotes.reflect.*
-      current match
-        case Structure.Named(tpe = tpe, fields = fields) => 
-          tpe match {
-            case '[tpe] =>
-              fields.foldLeft(TypeRepr.of[Field[tpe]]) { case (acc, (name, curr)) =>
-                Refinement(acc, name, recurse(curr))
-              }
-          }
-        case Structure.Tuple(tpe = tpe, elements = elems) => 
-          tpe match {
-            case '[tpe] =>
-              elems.zipWithIndex.foldLeft(TypeRepr.of[Field[tpe]]) { case (acc, (curr, idx)) =>
-                Refinement(acc, s"_$idx", recurse(curr))
-              }
-          }
-        case Structure.Optional(tpe = tpe, paramStruct = param) => 
-          tpe match {
-            case '[tpe] =>
-              Refinement(TypeRepr.of[Field[tpe]], "element", recurse(param))
-          }
-        case Structure.Collection(tpe = tpe, paramStruct = param) => 
-          tpe match {
-            case '[tpe] =>
-              Refinement(TypeRepr.of[Field[tpe]], "element", recurse(param))
-          }
-        case Structure.Leaf(tpe = tpe) => 
-          tpe match {
-            case '[tpe] =>
-              TypeRepr.of[Field[tpe]]
-          }
+  inline def testParsing[A](using DummyImplicit)[Tpe](inline selector: Selector ?=> A => Tpe) = ${ testParsinMacro[A, Tpe]('selector) }
+
+  def testParsinMacro[A: Type, Tpe: Type](selector: Expr[Selector ?=> A => Tpe])(using Quotes) = {
+    import quotes.reflect.*
+
+    // report.info(selector.asTerm.show)
+    val translated: Expr[(Sel, A) => Tpe] = selector match {
+      case '{ (sel: Sel) ?=> (a: A) => ($body(sel, a): Tpe)  } => body
     }
-      
-    recurse(structure).asType match {
-      case tpe @ '[Field[?]] => tpe 
+
+    def recurse[A, Tpe](expr: Expr[(Sel, A) => Tpe], descriptions: List[String])(using Quotes): List[String] = {
+      expr match {
+        case '{ (_: Sel, a: t) => a } => "identity" :: descriptions
+        case '{ (sel: Sel, a: Option[a] | Iterable[a]) => sel.element(($next(sel, a))) } =>
+          recurse(next, "elem" :: descriptions)
+          // import quotes.reflect.*
+
+          // recurse(nextTerm.asExprOf[(Sel, Any) => Any], "field" :: descriptions)
+        // case '{ (sel: Sel) ?=> (a: A) => ($body(sel, a): Option[a] | Iterable[a]).element } => 
+          // report.info(s"matched elem, rest: ${body.asTerm.show}")
+      }
     }
+
+    val msg = recurse(translated, Nil).reverse.mkString(", ")
+    report.info(msg)
+
+    '{}
   }
 }
+
+/*
+case '{ (arg: Renamer) => arg } => accumulatedFunctions
+
+case '{ (arg: Renamer) => ($body(arg): Renamer).toUpperCase } =>
+  recurse(body, ((str: String) => str.toUpperCase) :: accumulatedFunctions)
+*/
