@@ -28,7 +28,7 @@ private[chanterelle] object Structure {
     Structure.Leaf(Type.of[Nothing], Path.empty(Type.of[Nothing]))
 
   case class Named(
-      tpe: Type[?],
+      tpe: Type[? <: NamedTuple.AnyNamedTuple],
       path: Path,
       fields: VectorMap[String, Structure]
   ) extends Structure
@@ -67,11 +67,6 @@ private[chanterelle] object Structure {
   def of[A: Type](path: Path)(using Quotes): Structure = {
     import quotes.reflect.*
 
-    Logger.info(
-      (TypeRepr.of[Int] <:< TypeRepr.of[scala.NamedTuple.AnyNamedTuple])
-        .toString()
-    )
-
     Logger.loggedInfo("Structure"):
       Type.of[A] match {
         case tpe @ '[Nothing] =>
@@ -109,7 +104,7 @@ private[chanterelle] object Structure {
               )
               .to(VectorMap)
 
-          Structure.Named(Type.of[A], path, structures)
+          Structure.Named(Type.of[t], path, structures)
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =
