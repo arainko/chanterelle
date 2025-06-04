@@ -10,4 +10,8 @@ object EntryPoint {
     Logger.info("", struct)
     '{}
   }
+
+  transparent inline def run[A] = ???
+
+  // private def ru
 }

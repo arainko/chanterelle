@@ -4,6 +4,7 @@ import scala.Ordering.Implicits.*
 import scala.annotation.nowarn
 import scala.quoted.*
 
+@scala.annotation.publicInBinary
 private[chanterelle] object Logger {
 
   object locally {
@@ -12,7 +13,9 @@ private[chanterelle] object Logger {
 
   // Logger Config
   private[chanterelle] transparent inline given level: Level = Level.Info
-  private val output = Output.StdOut
+  
+  @scala.annotation.publicInBinary
+  private[Logger] val output = Output.StdOut
   @nowarn private def filter(msg: String, loc: String)(using Quotes) = Expr.summon[locally.type].isDefined
   enum Level {
     case Off, Debug, Info

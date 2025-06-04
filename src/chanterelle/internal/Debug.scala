@@ -12,6 +12,8 @@ private[chanterelle] trait Debug[-A] {
   extension (self: A) final def show(using Quotes): String = astify(self).dropEmpty.show
 }
 
+
+@scala.annotation.publicInBinary
 private[chanterelle] object Debug extends LowPriorityDebug {
   import AST.*
 
