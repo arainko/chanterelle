@@ -20,15 +20,15 @@ import scala.language.dynamics
 opaque type TupleModifier[Tup] = Unit
 
 object TupleModifier {
-  opaque type Builder[Tup] = Unit
 
-  extension [Tup](self: Builder[Tup]) {
-    def add[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField](value: NewField): TupleModifier[Tup] = ()
+  sealed trait Builder[Tup] {
+    def add[Selected](selector: Selector ?=> Tup => Selected)[NewField](value: NewField): TupleModifier[Tup]
 
-    def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup] = ()
+    def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup]
 
-    def update[Selected](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup] = ()
+    def update[Selected](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup]
 
-    def remove[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ()
+    def remove[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
   }
+
 }

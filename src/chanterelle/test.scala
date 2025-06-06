@@ -10,7 +10,6 @@ object test {
 
   a.modify(
     _.add(_.other.element.something)((newField = 1)),
-    _.add(_.other.element.something)((newField = 1)),
-    _.compute(_.other.element.something)(a => (computedField = a.name + a.age))
   )
+
 }

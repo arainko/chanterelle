@@ -21,7 +21,11 @@ object EntryPoint {
 
     val mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
 
-    report.info(mods.map(expr => expr.asTerm.show(using Printer.TreeShortCode)).mkString(System.lineSeparator() * 2))
+    val modifiers = Modifier.parse(mods.toList)
+
+    report.info(modifiers.toString())
+
+    // report.info(mods.map(expr => expr.asTerm.show(using Printer.TreeShortCode)).mkString(System.lineSeparator() * 2))
     '{}
   }
 }
