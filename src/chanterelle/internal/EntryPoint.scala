@@ -1,6 +1,7 @@
 package chanterelle.internal
 
 import scala.quoted.*
+import chanterelle.TupleModifier
 
 object EntryPoint {
   inline def struct[A] = ${ structMacro[A] }
@@ -11,7 +12,16 @@ object EntryPoint {
     '{}
   }
 
-  transparent inline def run[A] = ???
+  transparent inline def run[A](tuple: A, inline mods: TupleModifier.Builder[A] => TupleModifier[A]*) = ${ runMacro[A]('tuple, 'mods) }
 
-  // private def ru
+  def runMacro[A: Type](tuple: Expr[A], modifications: Expr[Seq[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes) = {
+    import quotes.reflect.* 
+
+    val structure = Structure.toplevel[A]
+
+    val mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
+
+    report.info(mods.map(expr => expr.asTerm.show(using Printer.TreeShortCode)).mkString(System.lineSeparator() * 2))
+    '{}
+  }
 }

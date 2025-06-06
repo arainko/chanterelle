@@ -5,7 +5,8 @@ import chanterelle.internal.EntryPoint
 
 
 extension [Tup <: AnyNamedTuple](self: Tup) {
-  transparent inline def modify[A <: Tup](inline modifications: TupleModifier.Builder[Tup] => TupleModifier[A]*) = ???
+  transparent inline def modify(inline modifications: TupleModifier.Builder[Tup] => TupleModifier[Tup]*) = 
+    EntryPoint.run[Tup](self, modifications*)
 
   inline def showStruct: Unit = EntryPoint.struct[Tup]
 }
