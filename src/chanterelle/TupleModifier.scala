@@ -22,9 +22,9 @@ opaque type TupleModifier[Tup] = Unit
 object TupleModifier {
 
   sealed trait Builder[Tup] {
-    def add[Selected](selector: Selector ?=> Tup => Selected)[NewField](value: NewField): TupleModifier[Tup]
+    def add[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField <: AnyNamedTuple](value: NewField): TupleModifier[Tup]
 
-    def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup]
+    def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField <: AnyNamedTuple](f: Selected => NewField): TupleModifier[Tup]
 
     def update[Selected](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup]
 

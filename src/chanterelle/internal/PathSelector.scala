@@ -25,7 +25,7 @@ private[chanterelle] object PathSelector {
                 )
               ),
               _,
-              Typed(term, tpe @ Applied(TypeIdent("Elem"), _))
+              Typed(_, tpe @ Applied(TypeIdent("Elem"), _))
             ) =>
           recurse(
             acc.prepended(Path.Segment.TupleElement(tpe.tpe.asType, index)),
@@ -89,9 +89,11 @@ private[chanterelle] object PathSelector {
               ),
               Literal(IntConstant(idx)) :: Nil
             ) if tree.tpe <:< TypeRepr.of[NamedTuple.AnyNamedTuple] => 
+              // widen here because we're dealing with a singleton type of the lambda param, eg. '_$4'
               tree.tpe.widen.asType match {
                 case '[type tpe <: NamedTuple.AnyNamedTuple; tpe] => 
                   val names = constStringTuple(TypeRepr.of[NamedTuple.Names[tpe]])
+                  //TODO: 'names' is a List and indexed access on a list is... Not the best to say the least
                   recurse(acc.prepended(Path.Segment.Field(Type.of[tpe], names(idx))), tree)
               }
 

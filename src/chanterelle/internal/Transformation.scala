@@ -5,7 +5,7 @@ import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
 
-private[chanterelle] sealed trait Structure extends scala.Product
+private[chanterelle] sealed trait Transformation extends scala.Product
     derives Debug {
   def tpe: Type[?]
 
@@ -13,118 +13,122 @@ private[chanterelle] sealed trait Structure extends scala.Product
 
   def _1: Type[?] = tpe
 
-  final def narrow[A <: Structure](using
-      tt: TypeTest[Structure, A]
+  final def narrow[A <: Transformation](using
+      tt: TypeTest[Transformation, A]
   ): Option[A] = tt.unapply(this)
+
+  final def applyModifier(modifier: Modifier)(using Quotes): Transformation = {
+    def recurse(segments: List[Path.Segment], curr: Transformation)(using Quotes): Transformation = {
+      import quotes.reflect.*
+      (segments, curr) match {
+        case (Path.Segment.Field(name = name) :: next, t: Transformation.Named) => ??? 
+        case (Path.Segment.TupleElement(index = index) :: next, t: Transformation.Tuple) => ??? 
+        case (Path.Segment.Element(tpe) :: next, t: Transformation.Optional) => ??? 
+        case (Path.Segment.Element(tpe) :: next, t: Transformation.Collection) => ??? 
+        case (Nil, t) => ???
+        case (_, t) => report.errorAndAbort("Illegal path segment to transformation combo")
+      }
+    }
+    ???
+  }
 }
 
-private[chanterelle] object Structure {
-  def unapply(struct: Structure): Structure = struct
-
-  def toplevelAny(using Quotes) =
-    Structure.Leaf(Type.of[Any], Path.empty(Type.of[Any]))
-
-  def toplevelNothing(using Quotes) =
-    Structure.Leaf(Type.of[Nothing], Path.empty(Type.of[Nothing]))
+private[chanterelle] object Transformation {
+  def unapply(struct: Transformation): Transformation = struct
 
   case class Named(
       tpe: Type[? <: NamedTuple.AnyNamedTuple],
       path: Path,
-      fields: VectorMap[String, Structure]
-  ) extends Structure
+      fields: VectorMap[String, Transformation]
+  ) extends Transformation
 
   case class Tuple(
       tpe: Type[?],
       path: Path,
-      elements: Vector[Structure],
+      elements: Vector[Transformation],
       isPlain: Boolean
-  ) extends Structure
+  ) extends Transformation
 
   case class Optional(
       tpe: Type[? <: Option[?]],
       path: Path,
-      paramStruct: Structure
-  ) extends Structure
+      paramStruct: Transformation
+  ) extends Transformation
 
   case class Collection(
       tpe: Type[? <: Iterable[?]],
       path: Path,
-      paramStruct: Structure
-  ) extends Structure
+      paramStruct: Transformation
+  ) extends Transformation
 
-  case class Leaf(tpe: Type[?], path: Path) extends Structure
+  case class Modified(tpe: Type[?], path: Path, modifier: Modifier) extends Transformation
 
-  def fromTypeRepr(using
-      Quotes
-  )(repr: quotes.reflect.TypeRepr, path: Path): Structure =
-    repr.widen.asType match {
-      case '[tpe] => Structure.of[tpe](path)
-    }
+  case class Leaf(tpe: Type[?], path: Path) extends Transformation
 
-  def toplevel[A: Type](using Quotes): Structure =
-    Structure.of[A](Path.empty(Type.of[A]))
+  def toplevel[A: Type](using Quotes): Transformation =
+    Transformation.of[A](Path.empty(Type.of[A]))
 
-  def of[A: Type](path: Path)(using Quotes): Structure = {
+  def of[A: Type](path: Path)(using Quotes): Transformation = {
     import quotes.reflect.*
 
     Logger.loggedInfo("Structure"):
       Type.of[A] match {
         case tpe @ '[Nothing] =>
-          Structure.Leaf(tpe, path)
+          Transformation.Leaf(tpe, path)
 
         case tpe @ '[Option[param]] =>
-          Structure.Optional(
+          Transformation.Optional(
             tpe,
             path,
-            Structure.of[param](
+            Transformation.of[param](
               path.appended(Path.Segment.Element(Type.of[param]))
             )
           )
 
         case tpe @ '[Iterable[param]] =>
-          Structure.Collection(
+          Transformation.Collection(
             tpe,
             path,
-            Structure.of[param](
+            Transformation.of[param](
               path.appended(Path.Segment.Element(Type.of[param]))
             )
           )
 
         case '[type t <: NamedTuple.AnyNamedTuple; t] =>
-          val structures =
+          val transformations =
             tupleTypeElements(Type.of[NamedTuple.DropNames[t]])
               .zip(constStringTuple(TypeRepr.of[NamedTuple.Names[t]]))
               .map((tpe, name) =>
                 name -> (tpe.asType match {
                   case '[tpe] =>
-                    Structure.of[tpe](
+                    Transformation.of[tpe](
                       path.appended(Path.Segment.Field(Type.of[tpe], name))
                     )
                 })
               )
               .to(VectorMap)
 
-          Structure.Named(Type.of[t], path, structures)
+          Transformation.Named(Type.of[t], path, transformations)
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =
             tupleTypeElements(tpe).zipWithIndex.map { (tpe, idx) =>
               tpe.asType match {
                 case '[tpe] =>
-                  Structure.of[tpe](
+                  Transformation.of[tpe](
                     path.appended(Path.Segment.TupleElement(Type.of[tpe], idx))
                   )
               }
             }.toVector
-          Structure.Tuple(Type.of[A], path, elements, isPlain = false)
+          Transformation.Tuple(Type.of[A], path, elements, isPlain = false)
 
         case tpe @ '[types] if tpe.repr.isTupleN =>
-          val structures =
+          val transformations =
             tupleTypeElements(Type.of[types]).zipWithIndex
               .map((tpe, idx) =>
                 tpe.asType match {
                   case '[tpe] =>
-                    Structure.of[tpe](
+                    Transformation.of[tpe](
                       path.appended(
                         Path.Segment.TupleElement(Type.of[tpe], idx)
                       )
@@ -133,10 +137,10 @@ private[chanterelle] object Structure {
               )
               .toVector
 
-          Structure.Tuple(Type.of[A], path, structures, isPlain = true)
+          Transformation.Tuple(Type.of[A], path, transformations, isPlain = true)
 
         case _ =>
-          Structure.Leaf(Type.of[A], path)
+          Transformation.Leaf(Type.of[A], path)
       }
   }
 

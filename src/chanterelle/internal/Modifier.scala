@@ -4,9 +4,11 @@ import NamedTuple.AnyNamedTuple
 import scala.quoted.*
 import chanterelle.TupleModifier
 
-enum Modifier {
+enum Modifier derives Debug {
   case Add(path: Path, value: Expr[? <: AnyNamedTuple])
   case Compute(path: Path, function: Expr[? <: AnyNamedTuple => ? <: AnyNamedTuple])
+  case Update(path: Path, function: Expr[? => ?])
+  case Remove(path: Path)
 }
 
 object Modifier {
@@ -15,21 +17,37 @@ object Modifier {
     mods.map {
       case '{
         type selected <: AnyNamedTuple
-        // type newField <: AnyNamedTuple
-        (a: TupleModifier.Builder[tup]) => a.add[selected]($selector)[newField]($value) 
+        type newField <: AnyNamedTuple
+        (a: TupleModifier.Builder[tup]) => a.add[selected](${ AsTerm(PathSelector(path)) })[newField]($value) 
       } => 
-        val path = PathSelector.unapply(selector.asTerm).value
-        Modifier.Add(path, value.asInstanceOf)
+        Modifier.Add(path, value)
 
       case '{
         type selected <: AnyNamedTuple
-        // type newField <: AnyNamedTuple
-        (a: TupleModifier.Builder[tup]) => a.compute[selected]($selector)[newField]($fn) 
+        type newField <: AnyNamedTuple
+        (a: TupleModifier.Builder[tup]) => a.compute[selected](${ AsTerm(PathSelector(path)) })[newField]($fn) 
       } => 
-        val path = PathSelector.unapply(selector.asTerm).value
         Modifier.Compute(path, fn.asInstanceOf) //TODO: get rid of cast MAYBE
 
+      case '{
+        (a: TupleModifier.Builder[tup]) => a.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn) 
+      } => 
+        Modifier.Update(path, fn)
+
+      case '{
+        type selected <: AnyNamedTuple
+        (a: TupleModifier.Builder[tup]) => a.remove[selected](${ AsTerm(PathSelector(path)) })
+      } => 
+        Modifier.Remove(path)
+
       case other => report.errorAndAbort("fucky wucky:")
+    }
+  }
+
+  private object AsTerm {
+    def unapply(expr: Expr[Any])(using Quotes): Some[quotes.reflect.Term] = {
+      import quotes.reflect.*
+      Some(expr.asTerm)
     }
   }
 }
