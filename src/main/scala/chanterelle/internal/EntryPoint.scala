@@ -23,11 +23,12 @@ object EntryPoint {
 
     val modifiers = Modifier.parse(mods.toList)
 
-    modifiers.foreach(transformation.applyModifier)
+    // modifiers.foreach(transformation.applyModifier)
+
+    Interpreter.run(tuple, transformation)
 
     // report.info(Debug.show(modifiers))
 
     // report.info(mods.map(expr => expr.asTerm.show(using Printer.TreeShortCode)).mkString(System.lineSeparator() * 2))
-    '{}
   }
 }

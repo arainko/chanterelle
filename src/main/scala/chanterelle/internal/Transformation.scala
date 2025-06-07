@@ -77,7 +77,7 @@ private[chanterelle] object Transformation {
       paramStruct: Transformation
   ) extends Transformation
 
-  case class Modified(tpe: Type[?], path: Path, modifier: Modifier) extends Transformation
+  // case class Modified(tpe: Type[?], path: Path, modifier: Modifier) extends Transformation
 
   case class Leaf(tpe: Type[?], path: Path) extends Transformation
 

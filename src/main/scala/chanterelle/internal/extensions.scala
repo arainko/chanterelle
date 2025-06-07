@@ -19,16 +19,16 @@ extension (expr: Expr[Any]) {
     Select.unique(expr.asTerm, name)
   }
 
-  // private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
-  //   import quotes.reflect.*
-  //   if parentStructure.isPlain then accessFieldByName(s"_${index + 1}").asExpr // tuple accessors are 1 based
-  //   else
-  //     val tpeAtIndex = parentStructure.elements(index).tpe
-  //     (expr, tpeAtIndex) match {
-  //       case '{ $prod: scala.Product } -> '[tpe] => '{ $prod.productElement(${ Expr(index) }).asInstanceOf[tpe] }
-  //     }
+  private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Transformation.Tuple)(using Quotes): Expr[Any] = {
+    import quotes.reflect.*
+    if parentStructure.isPlain then accessFieldByName(s"_${index + 1}").asExpr // tuple accessors are 1 based
+    else
+      val tpeAtIndex = parentStructure.elements(index).tpe
+      (expr, tpeAtIndex) match {
+        case '{ $prod: scala.Product } -> '[tpe] => '{ $prod.productElement(${ Expr(index) }).asInstanceOf[tpe] }
+      }
 
-  // }
+  }
 }
 
 extension [A, B](self: Either[A, B]) {
