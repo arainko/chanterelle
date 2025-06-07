@@ -5,6 +5,8 @@ import scala.quoted.*
 import chanterelle.TupleModifier
 
 enum Modifier derives Debug {
+  def path: Path
+
   case Add(path: Path, value: Expr[? <: AnyNamedTuple])
   case Compute(path: Path, function: Expr[? <: AnyNamedTuple => ? <: AnyNamedTuple])
   case Update(path: Path, function: Expr[? => ?])

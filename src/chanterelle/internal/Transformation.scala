@@ -18,17 +18,33 @@ private[chanterelle] sealed trait Transformation extends scala.Product
   ): Option[A] = tt.unapply(this)
 
   final def applyModifier(modifier: Modifier)(using Quotes): Transformation = {
+    def apply(modifier: Modifier, transformation: Transformation) = {
+      (modifier, transformation) match {
+        case (m: Modifier.Add, t: Transformation.Named) => 
+        case (m: Modifier.Compute, t: Transformation.Named) => 
+        case (m: Modifier.Remove, t) =>
+        case (m: Modifier.Update, t) =>
+      }
+      
+    }
+
     def recurse(segments: List[Path.Segment], curr: Transformation)(using Quotes): Transformation = {
       import quotes.reflect.*
       (segments, curr) match {
-        case (Path.Segment.Field(name = name) :: next, t: Transformation.Named) => ??? 
-        case (Path.Segment.TupleElement(index = index) :: next, t: Transformation.Tuple) => ??? 
-        case (Path.Segment.Element(tpe) :: next, t: Transformation.Optional) => ??? 
-        case (Path.Segment.Element(tpe) :: next, t: Transformation.Collection) => ??? 
-        case (Nil, t) => ???
+        case (Path.Segment.Field(name = name) :: next, t: Transformation.Named) => 
+          val fieldTransformation = t.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}"))
+          t.copy(fields = t.fields.updated(name, recurse(next, fieldTransformation)))
+        case (Path.Segment.TupleElement(index = index) :: next, t: Transformation.Tuple) => 
+          t.copy(elements = t.elements.updated(index, t.elements(index)))
+        case (Path.Segment.Element(tpe) :: next, t: Transformation.Optional) => 
+          t.copy(paramStruct = recurse(next, t.paramStruct))
+        case (Path.Segment.Element(tpe) :: next, t: Transformation.Collection) => 
+          t.copy(paramStruct = recurse(next, t.paramStruct)) 
+        case (Nil, t) => report.errorAndAbort(s"Arrived at: ${t.show}")
         case (_, t) => report.errorAndAbort("Illegal path segment to transformation combo")
       }
     }
+    recurse(modifier.path.segments.toList, this)
     ???
   }
 }
