@@ -7,8 +7,8 @@ import chanterelle.TupleModifier
 enum Modifier derives Debug {
   def path: Path
 
-  case Add(path: Path, value: Expr[? <: AnyNamedTuple])
-  case Compute(path: Path, function: Expr[? <: AnyNamedTuple => ? <: AnyNamedTuple])
+  case Add(path: Path, outputStructure: Structure.Named, value: Expr[? <: AnyNamedTuple])
+  case Compute(path: Path, outputStructure: Structure.Named, function: Expr[? <: AnyNamedTuple => ? <: AnyNamedTuple])
   case Update(path: Path, function: Expr[? => ?])
   case Remove(path: Path)
 }
@@ -22,14 +22,17 @@ object Modifier {
         type newField <: AnyNamedTuple
         (a: TupleModifier.Builder[tup]) => a.add[selected](${ AsTerm(PathSelector(path)) })[newField]($value) 
       } => 
-        Modifier.Add(path, value)
+        val outputStructure = Structure.toplevel[newField].narrow[Structure.Named].getOrElse(report.errorAndAbort("Needs to be a named struct"))
+        Modifier.Add(path, outputStructure, value)
 
       case '{
         type selected <: AnyNamedTuple
         type newField <: AnyNamedTuple
         (a: TupleModifier.Builder[tup]) => a.compute[selected](${ AsTerm(PathSelector(path)) })[newField]($fn) 
       } => 
-        Modifier.Compute(path, fn.asInstanceOf) //TODO: get rid of cast MAYBE
+        val outputStructure = Structure.toplevel[newField].narrow[Structure.Named].getOrElse(report.errorAndAbort("Needs to be a named struct"))
+
+        Modifier.Compute(path, outputStructure, fn.asInstanceOf) //TODO: get rid of cast MAYBE
 
       case '{
         (a: TupleModifier.Builder[tup]) => a.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn) 

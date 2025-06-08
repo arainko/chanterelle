@@ -19,7 +19,7 @@ extension (expr: Expr[Any]) {
     Select.unique(expr.asTerm, name)
   }
 
-  private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Transformation.Tuple)(using Quotes): Expr[Any] = {
+  private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
     import quotes.reflect.*
     if parentStructure.isPlain then accessFieldByName(s"_${index + 1}").asExpr // tuple accessors are 1 based
     else

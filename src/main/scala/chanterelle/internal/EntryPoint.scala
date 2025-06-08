@@ -7,7 +7,7 @@ object EntryPoint {
   inline def struct[A] = ${ structMacro[A] }
 
   def structMacro[A: Type](using Quotes) = {
-    val struct = Transformation.toplevel[A]
+    val struct = Structure.toplevel[A]
     Logger.info("", struct)
     '{}
   }
@@ -17,7 +17,7 @@ object EntryPoint {
   def runMacro[A: Type](tuple: Expr[A], modifications: Expr[Seq[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes) = {
     import quotes.reflect.* 
 
-    val transformation = Transformation.toplevel[A]
+    val transformation = Structure.toplevel[A]
 
     val mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
 
