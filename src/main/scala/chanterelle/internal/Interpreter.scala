@@ -12,30 +12,14 @@ object Tuples {
 private[chanterelle] object Interpreter {
   def run(value: Expr[Any], transformation: Structure)(using Quotes): Expr[?] = {
     transformation match {
-      case Named(tpe, namesTpe, valuesTpe, path, fields) =>
-        // any other configuration and this falls apart with a MatchError...
-        tpe match {
-          case '[type tpe <: NamedTuple.AnyNamedTuple; tpe] =>
-            ((Type.of[NamedTuple.DropNames[tpe]], Type.of[NamedTuple.Names[tpe]]): @unchecked) match {
-              case ('[type values <: scala.Tuple; values], '[type names <: scala.Tuple; names]) =>
-                value match {
-                  case '{
-                        type upper <: NamedTuple[names, values]
-                        $v: upper
-                      } =>
-                    val values = Type.of[values]
-                    val castedValue = '{ Tuples.valuesOf($v) }
-                    val tup = Structure.Tuple(values, path, fields.values.toVector, true)
-                    val args = fields.zipWithIndex.map {
-                      case ((_, t), idx) => run(castedValue.accesFieldByIndex(idx, tup), t)
-                    }.toVector
-                    val recreated = Expr.ofTupleFromSeq(args).asExprOf[values]
-                    '{ $recreated: NamedTuple[names, values] }
-                }
-
-            }
-
+      case t @ Named(tpe, namesTpe, valuesTpe, path, fields) =>
+        ((namesTpe, valuesTpe): @unchecked) match {
+          case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
+            val args = fields.map { (name, struct) => run(value.accessNamedTupleFieldByName(name, t), struct) }.toVector
+            val recreated = Expr.ofTupleFromSeq(args).asExprOf[values]
+            '{ $recreated: NamedTuple[names, values] }
         }
+
       case tup @ Structure.Tuple(tpe, path, elements, isPlain) =>
         val args = elements.zipWithIndex.map((t, idx) => run(value.accesFieldByIndex(idx, tup), t))
         Expr.ofTupleFromSeq(args)
@@ -55,6 +39,26 @@ private[chanterelle] object Interpreter {
       // case Modified(tpe, path, modifier) =>
       case Leaf(tpe, path) => value
     }
+  }
 
+  def runTransformation(value: Expr[Any], transformation: Transformation)(using Quotes): Expr[?] = {
+    transformation match
+      case Transformation.Named(source, output, fields) => ???
+      case Transformation.Tuple(source, output, fields) => ???
+      case Transformation.Optional(source, output, paramTransformation) =>
+        source.tpe match {
+          case '[Option[a]] =>
+            val optValue = value.asExprOf[Option[a]]
+            '{ $optValue.map[a](a => ${ runTransformation('a, paramTransformation).asExprOf[a] }) }
+        }
+      case Transformation.Collection(source, output, paramTransformation) =>
+        source.tpe match {
+          case '[type cc[a] <: Iterable[a]; cc[a]] =>
+            val optValue = value.asExprOf[cc[a]]
+            val factory = Expr.summon[Factory[a, cc[a]]].get
+            '{ $optValue.map[a](a => ${ runTransformation('a, paramTransformation).asExprOf[a] }).to($factory) }
+        }
+      case Transformation.Leaf(structure) => value
+    
   }
 }

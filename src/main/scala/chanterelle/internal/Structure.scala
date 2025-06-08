@@ -27,7 +27,10 @@ private[chanterelle] object Structure {
       valuesTpe: Type[? <: scala.Tuple],
       path: Path,
       fields: VectorMap[String, Structure]
-  ) extends Structure
+  ) extends Structure {
+    val asTuple: Structure.Tuple =
+      Tuple(valuesTpe, path, fields.values.toVector, true /* Not actually sure if isPlain = true is correct here */)
+  }
 
   case class Tuple(
       tpe: Type[?],

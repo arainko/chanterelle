@@ -3,6 +3,7 @@ package chanterelle
 import scala.NamedTuple.*
 import chanterelle.internal.EntryPoint
 import chanterelle.internal.CodePrinter
+import scala.runtime.Tuples
 
 object test extends App {
   val a: (name: Int, age: Int, other: Option[(something: (name: Int, age: Int), tup: (String, (name123: Int, name1: Int)))]) = 
@@ -13,10 +14,6 @@ object test extends App {
 
   val b = 
     CodePrinter.code(a.modify())
-
-
-
-
 
 
   println(b)

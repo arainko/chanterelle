@@ -26,15 +26,14 @@ sealed trait Transformation derives Debug {
     def apply(modifier: Modifier, transformation: Transformation): Transformation = {
       (modifier, transformation) match {
         case (m: Modifier.Add, t: Transformation.Named)     => 
-          val modifiedFielfs = m.outputStructure.fields.map( )
+          val modifiedFields = m.outputStructure.fields.map((name, _) => name -> Transformation.OfField.FromModifier(m))
+          t.copy(fields = t.fields ++ modifiedFields)
         case (m: Modifier.Compute, t: Transformation.Named) => ???
         case (m: Modifier.Remove, t)                   => ???
         case (m: Modifier.Update, t)                   => ???
       }
-
     }
     recurse(modifier.path.segments.toList, this)
-    ???
   }
 }
 
@@ -43,16 +42,16 @@ object Transformation {
   def fromStructure(structure: Structure): Transformation = {
     structure match {
       case named: Structure.Named =>
-        Named(named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
+        Named(named, named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
 
       case tuple: Structure.Tuple =>
-        Tuple(tuple, tuple.elements.zipWithIndex.map { (field, idx) => Transformation.OfField.FromSource(idx, fromStructure(field)) })
+        Tuple(tuple, tuple, tuple.elements.zipWithIndex.map { (field, idx) => Transformation.OfField.FromSource(idx, fromStructure(field)) })
 
       case optional: Structure.Optional =>
-        Optional(optional, fromStructure(optional.paramStruct))
+        Optional(optional, optional, fromStructure(optional.paramStruct))
 
       case coll: Structure.Collection =>
-        Collection(coll, fromStructure(coll.paramStruct))
+        Collection(coll, coll, fromStructure(coll.paramStruct))
 
       case leaf: Structure.Leaf =>
         Leaf(leaf)
@@ -60,22 +59,26 @@ object Transformation {
   }
 
   case class Named(
-    structure: Structure.Named,
+    source: Structure.Named,
+    output: Structure.Named,
     fields: VectorMap[String, Transformation.OfField[String]]
   ) extends Transformation
 
   case class Tuple(
-    structure: Structure.Tuple,
+    source: Structure.Tuple,
+    output: Structure.Tuple,
     fields: Vector[Transformation.OfField[Int]]
   ) extends Transformation
 
   case class Optional(
-    structure: Structure.Optional,
+    source: Structure.Optional,
+    output: Structure.Optional,
     paramTransformation: Transformation
   ) extends Transformation
 
   case class Collection(
-    structure: Structure.Collection,
+    source: Structure.Collection,
+    output: Structure.Collection,
     paramTransformation: Transformation
   ) extends Transformation
 
@@ -83,6 +86,6 @@ object Transformation {
 
   enum OfField[+Idx <: Int | String] derives Debug {
     case FromSource(idx: Idx, transformation: Transformation)
-    case FromModifier(modifier: Modifier)
+    case FromModifier(modifier: Modifier) extends OfField[Nothing]
   }
 }

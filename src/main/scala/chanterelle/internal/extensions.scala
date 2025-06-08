@@ -14,6 +14,23 @@ extension (tpe: Type[? <: AnyKind]) {
 }
 
 extension (expr: Expr[Any]) {
+
+  private[chanterelle] def namedTupleToTuple(structure: Structure.Named)(using Quotes) = {
+    import quotes.reflect.*
+    val TuplesCompanion = '{ Tuples }.asTerm
+    Select.unique(TuplesCompanion, "valuesOf")
+      .appliedToTypes(structure.namesTpe.repr :: structure.valuesTpe.repr :: Nil)
+      .appliedTo(expr.asTerm)
+      .asExpr
+  }
+
+  private[chanterelle] def accessNamedTupleFieldByName(name: String, structure: Structure.Named)(using Quotes) = {
+    val asTuple = expr.namedTupleToTuple(structure)
+    val idxOfName = structure.fields.keys.indexOf(name) //TODO: check for -1
+    assert(idxOfName != -1, s"no field $name found in named tuple") //TODO: get rid of later
+    asTuple.accesFieldByIndex(idxOfName, structure.asTuple)
+  }
+
   private[chanterelle] def accessFieldByName(name: String)(using Quotes): quotes.reflect.Select = {
     import quotes.reflect.*
     Select.unique(expr.asTerm, name)
