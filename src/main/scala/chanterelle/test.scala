@@ -11,7 +11,7 @@ object test extends App {
     (1, 2, Some((something = (1, 2), tup = ("3", (1, 2)))))
 
 
-  // val easy = (name = 1, name2 = 2, name3 = 3)
+  val easy = (name = 1, nested = (wow = 1, wow2 = 2))
 
   // val b: (String, (name: Int)) = ???
 
@@ -20,7 +20,8 @@ object test extends App {
 
   val b = 
     // EntryPoint.run(easy)
-    a.modify(_.add(_.other.element.something)((newField123 = 123)))
+    easy.modify(_.add(_.nested)((newField123 = 123)))
+
 
 
 

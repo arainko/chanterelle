@@ -43,6 +43,7 @@ private[chanterelle] object Interpreter {
 //   }
 
   def runTransformation(value: Expr[Any], transformation: Transformation)(using Quotes): Expr[?] = {
+    import quotes.reflect.*
     transformation match
       case Transformation.Named(source, output, fields) => 
         (output.calculateNamesTpe, output.calculateValuesTpe): @unchecked match {
@@ -60,8 +61,9 @@ private[chanterelle] object Interpreter {
               case (_, Transformation.OfField.FromSource(idx, transformation)) =>
                 runTransformation(value.accessNamedTupleFieldByName(idx, output), transformation)
             }
+            // report.errorAndAbort(Debug.show(transformation))
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
-            '{ $recreated: NamedTuple[names, values] }
+            '{ ($recreated: values): NamedTuple[names, values] }
         }
       case Transformation.Tuple(source, output, fields) => 
         (source.calculateTpe, output.calculateTpe): @unchecked match {

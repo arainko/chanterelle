@@ -18,7 +18,8 @@ extension (expr: Expr[Any]) {
   private[chanterelle] def namedTupleToTuple(structure: Structure.Named)(using Quotes) = {
     import quotes.reflect.*
     val TuplesCompanion = '{ Tuples }.asTerm
-    Select.unique(TuplesCompanion, "valuesOf")
+    Select
+      .unique(TuplesCompanion, "valuesOf")
       .appliedToTypes(structure.calculateNamesTpe.repr :: structure.calculateValuesTpe.repr :: Nil)
       .appliedTo(expr.asTerm)
       .asExpr
@@ -26,8 +27,8 @@ extension (expr: Expr[Any]) {
 
   private[chanterelle] def accessNamedTupleFieldByName(name: String, structure: Structure.Named)(using Quotes) = {
     val asTuple = expr.namedTupleToTuple(structure)
-    val idxOfName = structure.fields.keys.indexOf(name) //TODO: check for -1
-    assert(idxOfName != -1, s"no field $name found in named tuple") //TODO: get rid of later
+    val idxOfName = structure.fields.keys.indexOf(name) // TODO: check for -1
+    assert(idxOfName != -1, s"no field $name found in named tuple") // TODO: get rid of later
     asTuple.accesFieldByIndex(idxOfName, structure.asTuple)
   }
 
@@ -38,7 +39,12 @@ extension (expr: Expr[Any]) {
 
   private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
     import quotes.reflect.*
-    if parentStructure.isPlain then accessFieldByName(s"_${index + 1}").asExpr // tuple accessors are 1 based
+    if parentStructure.isPlain then
+      parentStructure.elements(index).calculateTpe.match {
+        case '[tpe] =>
+          '{ ${ accessFieldByName(s"_${index + 1}").asExprOf[tpe] }: tpe } // tuple accessors are 1 based
+
+      }
     else
       val tpeAtIndex = parentStructure.elements(index).calculateTpe
       (expr, tpeAtIndex): @unchecked match {
