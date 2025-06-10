@@ -1,57 +1,92 @@
 package chanterelle.internal
 
-import scala.annotation.{tailrec}
+import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
 
-private[chanterelle] sealed trait Structure extends scala.Product
-    derives Debug {
-  def tpe: Type[?]
+private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
+  def calculateTpe(using Quotes): Type[?]
 
   def path: Path
 
-  def _1: Type[?] = tpe
-
-  final def narrow[A <: Structure](using
-      tt: TypeTest[Structure, A]
-  ): Option[A] = tt.unapply(this)
+  final def narrow[A <: Structure](using tt: TypeTest[Structure, A]): Option[A] = tt.unapply(this)
 }
 
 private[chanterelle] object Structure {
+
   def unapply(struct: Structure): Structure = struct
 
   case class Named(
-      tpe: Type[? <: NamedTuple.AnyNamedTuple],
-      namesTpe: Type[? <: scala.Tuple],
-      valuesTpe: Type[? <: scala.Tuple],
-      path: Path,
-      fields: VectorMap[String, Structure]
+    path: Path,
+    fields: VectorMap[String, Structure]
   ) extends Structure {
-    val asTuple: Structure.Tuple =
-      Tuple(valuesTpe, path, fields.values.toVector, true /* Not actually sure if isPlain = true is correct here */)
+    def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
+      import quotes.reflect.*
+      val values = rollupTuple(fields.values.map(_.calculateTpe.repr).toVector)
+      val names = rollupTuple(fields.keys.map(name => ConstantType(StringConstant(name))))
+      ((names, values): @unchecked) match {
+        case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
+          Type.of[NamedTuple.NamedTuple[names, values]]
+      }
+    }
   }
 
   case class Tuple(
-      tpe: Type[?],
-      path: Path,
-      elements: Vector[Structure],
-      isPlain: Boolean
-  ) extends Structure
+    path: Path,
+    elements: Vector[Structure],
+    isPlain: Boolean
+  ) extends Structure {
+    def calculateTpe(using Quotes): Type[? <: scala.Tuple] = rollupTuple(elements.map(_.calculateTpe.repr))
+  }
+
+  private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
+    import quotes.reflect.*
+
+    elements.size match {
+      case 0 => Type.of[EmptyTuple]
+      case 1 =>
+        elements.head.asType.match { case '[tpe] => Type.of[Tuple1[tpe]] }
+      case size if size <= 22 =>
+        defn
+          .TupleClass(size)
+          .typeRef
+          .appliedTo(elements.toList)
+          .asType
+          .match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
+      case _ =>
+        val TupleCons = TypeRepr.of[*:]
+        val tpe = elements
+          .foldRight(TypeRepr.of[EmptyTuple])((curr, acc) => TupleCons.appliedTo(curr :: acc :: Nil))
+        tpe.asType.match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
+    }
+  }
 
   case class Optional(
-      tpe: Type[? <: Option[?]],
-      path: Path,
-      paramStruct: Structure
-  ) extends Structure
+    path: Path,
+    paramStruct: Structure
+  ) extends Structure {
+    def calculateTpe(using Quotes): Type[? <: Option[?]] =
+      paramStruct.calculateTpe match {
+        case '[tpe] => Type.of[Option[tpe]]
+      }
+  }
 
   case class Collection(
-      tpe: Type[? <: Iterable[?]],
-      path: Path,
-      paramStruct: Structure
-  ) extends Structure
+    collectionTpe: Type[? <: Iterable],
+    path: Path,
+    paramStruct: Structure
+  ) extends Structure {
+    def calculateTpe(using Quotes): Type[? <: Iterable[?]] =
+      ((collectionTpe, paramStruct.calculateTpe): @unchecked) match {
+        case ('[type coll[a] <: Iterable[a]; coll], '[tpe]) =>
+          Type.of[coll[tpe]]
+      }
+  }
 
-  case class Leaf(tpe: Type[?], path: Path) extends Structure
+  case class Leaf(tpe: Type[?], path: Path) extends Structure {
+    def calculateTpe(using Quotes): Type[?] = tpe
+  }
 
   def toplevel[A: Type](using Quotes): Structure =
     Structure.of[A](Path.empty(Type.of[A]))
@@ -64,18 +99,17 @@ private[chanterelle] object Structure {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
 
-        case tpe @ '[Option[param]] =>
+        case '[Option[param]] =>
           Structure.Optional(
-            tpe,
             path,
             Structure.of[param](
               path.appended(Path.Segment.Element(Type.of[param]))
             )
           )
 
-        case tpe @ '[Iterable[param]] =>
+        case '[type coll[a] <: Iterable[a]; coll[param]] =>
           Structure.Collection(
-            tpe,
+            Type.of[coll],
             path,
             Structure.of[param](
               path.appended(Path.Segment.Element(Type.of[param]))
@@ -98,7 +132,7 @@ private[chanterelle] object Structure {
               )
               .to(VectorMap)
 
-          Structure.Named(Type.of[t], namesTpe, valuesTpe, path, transformations)
+          Structure.Named(path, transformations)
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =
@@ -110,7 +144,7 @@ private[chanterelle] object Structure {
                   )
               }
             }.toVector
-          Structure.Tuple(Type.of[A], path, elements, isPlain = false)
+          Structure.Tuple(path, elements, isPlain = false)
 
         case tpe @ '[types] if tpe.repr.isTupleN =>
           val transformations =
@@ -127,7 +161,7 @@ private[chanterelle] object Structure {
               )
               .toVector
 
-          Structure.Tuple(Type.of[A], path, transformations, isPlain = true)
+          Structure.Tuple(path, transformations, isPlain = true)
 
         case _ =>
           Structure.Leaf(Type.of[A], path)
@@ -135,13 +169,13 @@ private[chanterelle] object Structure {
   }
 
   private def tupleTypeElements(
-      tpe: Type[?]
+    tpe: Type[?]
   )(using Quotes): List[quotes.reflect.TypeRepr] = {
     @tailrec def loop(using
-        Quotes
+      Quotes
     )(
-        curr: Type[?],
-        acc: List[quotes.reflect.TypeRepr]
+      curr: Type[?],
+      acc: List[quotes.reflect.TypeRepr]
     ): List[quotes.reflect.TypeRepr] = {
       import quotes.reflect.*
 
@@ -161,11 +195,12 @@ private[chanterelle] object Structure {
   }
 
   private def constStringTuple(using
-      Quotes
+    Quotes
   )(tp: quotes.reflect.TypeRepr): List[String] = {
     import quotes.reflect.*
-    tupleTypeElements(tp.asType).map { case ConstantType(StringConstant(l)) =>
-      l
+    tupleTypeElements(tp.asType).map {
+      case ConstantType(StringConstant(l)) =>
+        l
     }
   }
 }

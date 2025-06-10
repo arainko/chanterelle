@@ -16,7 +16,7 @@ object test extends App {
     CodePrinter.code(a.modify())
 
 
-  println(b)
+  // println(b)
 
 
 }

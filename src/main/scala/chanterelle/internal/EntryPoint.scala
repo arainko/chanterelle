@@ -23,9 +23,14 @@ object EntryPoint {
 
     val modifiers = Modifier.parse(mods.toList)
 
+    report.info(Debug.show(transformation.calculateTpe))
+    transformation.calculateTpe match {
+      case '[tpe] => tuple.asExprOf[tpe]
+    }
+
     // modifiers.foreach(transformation.applyModifier)
 
-    Interpreter.run(tuple, transformation)
+    // Interpreter.run(tuple, transformation)
 
     // report.info(Debug.show(modifiers))
 
