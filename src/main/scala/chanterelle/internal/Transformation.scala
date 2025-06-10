@@ -27,7 +27,10 @@ sealed trait Transformation derives Debug {
       (modifier, transformation) match {
         case (m: Modifier.Add, t: Transformation.Named)     => 
           val modifiedFields = m.outputStructure.fields.map((name, _) => name -> Transformation.OfField.FromModifier(m))
-          t.copy(fields = t.fields ++ modifiedFields)
+          t.copy(
+            output = t.output.copy(fields = t.output.fields ++ m.outputStructure.fields), 
+            fields = t.fields ++ modifiedFields
+          )
         case (m: Modifier.Compute, t: Transformation.Named) => ???
         case (m: Modifier.Remove, t)                   => ???
         case (m: Modifier.Update, t)                   => ???

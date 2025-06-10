@@ -17,16 +17,17 @@ object EntryPoint {
   def runMacro[A: Type](tuple: Expr[A], modifications: Expr[Seq[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes) = {
     import quotes.reflect.* 
 
-    val transformation = Structure.toplevel[A]
+    val structure = Structure.toplevel[A]
 
     val mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
 
     val modifiers = Modifier.parse(mods.toList)
 
-    report.info(Debug.show(transformation.calculateTpe))
-    transformation.calculateTpe match {
-      case '[tpe] => tuple.asExprOf[tpe]
-    }
+    val transformation = Transformation.fromStructure(structure)
+
+    val modifiedTransformation = modifiers.foldLeft(transformation)((acc, mod) => acc.applyModifier(mod))
+
+    Interpreter.runTransformation(tuple, modifiedTransformation)
 
     // modifiers.foreach(transformation.applyModifier)
 

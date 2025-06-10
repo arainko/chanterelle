@@ -21,10 +21,19 @@ private[chanterelle] object Structure {
     path: Path,
     fields: VectorMap[String, Structure]
   ) extends Structure {
+    def asTuple: Structure.Tuple =
+      Tuple(path, fields.values.toVector, true)
+
+    def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] = 
+      rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
+
+    def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] = 
+      rollupTuple(fields.values.map(_.calculateTpe.repr).toVector)
+
     def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
       import quotes.reflect.*
-      val values = rollupTuple(fields.values.map(_.calculateTpe.repr).toVector)
-      val names = rollupTuple(fields.keys.map(name => ConstantType(StringConstant(name))))
+      val values = calculateValuesTpe
+      val names = calculateNamesTpe
       ((names, values): @unchecked) match {
         case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
           Type.of[NamedTuple.NamedTuple[names, values]]
@@ -38,28 +47,6 @@ private[chanterelle] object Structure {
     isPlain: Boolean
   ) extends Structure {
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] = rollupTuple(elements.map(_.calculateTpe.repr))
-  }
-
-  private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
-    import quotes.reflect.*
-
-    elements.size match {
-      case 0 => Type.of[EmptyTuple]
-      case 1 =>
-        elements.head.asType.match { case '[tpe] => Type.of[Tuple1[tpe]] }
-      case size if size <= 22 =>
-        defn
-          .TupleClass(size)
-          .typeRef
-          .appliedTo(elements.toList)
-          .asType
-          .match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
-      case _ =>
-        val TupleCons = TypeRepr.of[*:]
-        val tpe = elements
-          .foldRight(TypeRepr.of[EmptyTuple])((curr, acc) => TupleCons.appliedTo(curr :: acc :: Nil))
-        tpe.asType.match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
-    }
   }
 
   case class Optional(
@@ -92,8 +79,6 @@ private[chanterelle] object Structure {
     Structure.of[A](Path.empty(Type.of[A]))
 
   def of[A: Type](path: Path)(using Quotes): Structure = {
-    import quotes.reflect.*
-
     Logger.loggedInfo("Structure"):
       Type.of[A] match {
         case tpe @ '[Nothing] =>
@@ -168,9 +153,7 @@ private[chanterelle] object Structure {
       }
   }
 
-  private def tupleTypeElements(
-    tpe: Type[?]
-  )(using Quotes): List[quotes.reflect.TypeRepr] = {
+  private def tupleTypeElements(tpe: Type[?])(using Quotes): List[quotes.reflect.TypeRepr] = {
     @tailrec def loop(using
       Quotes
     )(
@@ -194,13 +177,29 @@ private[chanterelle] object Structure {
     loop(tpe, Nil).reverse
   }
 
-  private def constStringTuple(using
-    Quotes
-  )(tp: quotes.reflect.TypeRepr): List[String] = {
+  private def constStringTuple(using Quotes)(tp: quotes.reflect.TypeRepr): List[String] = {
     import quotes.reflect.*
-    tupleTypeElements(tp.asType).map {
-      case ConstantType(StringConstant(l)) =>
-        l
+    tupleTypeElements(tp.asType).map { case ConstantType(StringConstant(l)) => l }
+  }
+
+  private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
+    import quotes.reflect.*
+
+    elements.size match {
+      case 0 => Type.of[EmptyTuple]
+      case 1 =>
+        elements.head.asType.match { case '[tpe] => Type.of[Tuple1[tpe]] }
+      case size if size <= 22 =>
+        defn
+          .TupleClass(size)
+          .typeRef
+          .appliedTo(elements.toList)
+          .asType
+          .match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
+      case _ =>
+        val TupleCons = TypeRepr.of[*:]
+        val tpe = elements.foldRight(TypeRepr.of[EmptyTuple])((curr, acc) => TupleCons.appliedTo(curr :: acc :: Nil))
+        tpe.asType.match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
     }
   }
 }
