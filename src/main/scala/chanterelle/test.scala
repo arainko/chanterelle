@@ -17,9 +17,9 @@ object test extends App {
   val b =
     // EntryPoint.run(easy)
     // CodePrinter.code(
-      EntryPoint.run(easy, _.add(_.nested)((newField123 = 123)))
+      a.modify(_.add(_.other.element)((newField123 = 123)))
     // )
 
-  println(b.nested.newField123)
+  println(b.other.map(_.newField123))
 
 }
