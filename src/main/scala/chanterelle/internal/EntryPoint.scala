@@ -12,7 +12,7 @@ object EntryPoint {
     '{}
   }
 
-  transparent inline def run[A](tuple: A, inline mods: TupleModifier.Builder[A] => TupleModifier[A]*) = ${ runMacro[A]('tuple, 'mods) }
+  transparent inline def run[A](tuple: A, inline mods: TupleModifier.Builder[A] => TupleModifier[A]*): Any = ${ runMacro[A]('tuple, 'mods) }
 
   def runMacro[A: Type](tuple: Expr[A], modifications: Expr[Seq[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes) = {
     import quotes.reflect.* 
@@ -23,11 +23,20 @@ object EntryPoint {
 
     val modifiers = Modifier.parse(mods.toList)
 
+    // val modifiers = List(
+    //   Modifier.Add(Path.empty(Type.of[Int]), Structure.toplevel[(newField: Int)].narrow[Structure.Named].get, '{ (newField = 123) })
+    // )
+
     val transformation = Transformation.fromStructure(structure)
 
     val modifiedTransformation = modifiers.foldLeft(transformation)((acc, mod) => acc.applyModifier(mod))
 
-    Interpreter.runTransformation(tuple, modifiedTransformation)
+    // report.errorAndAbort(s"GOING IN ${modifiedTransformation.asInstanceOf[Transformation.Named].output.show}")
+
+    val expr = Interpreter.runTransformation(tuple, modifiedTransformation)
+
+    // report.errorAndAbort(expr.asTerm.show(using Printer.TreeShortCode))
+    expr
 
     // modifiers.foreach(transformation.applyModifier)
 

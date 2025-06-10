@@ -1,1 +1,28 @@
-// scala.Tuple3.apply[scala.Tuple3[scala.Int, scala.Int, scala.Int]._1.type, scala.Tuple3[scala.Int, scala.Int, scala.Int]._2.type, scala.Tuple1[scala.Int]._1.type](chanterelle.internal.Tuples.valuesOf[scala.Tuple3["wow", "wow2", "newField123"], scala.Tuple3[scala.Int, scala.Int, scala.Int]](chanterelle.internal.Tuples.valuesOf[scala.Tuple2["name", "nested"], scala.Tuple2[scala.Int, scala.NamedTuple.NamedTuple[scala.Tuple2["wow", "wow2"], scala.Tuple2[scala.Int, scala.Int]]]](chanterelle.test.easy)._2)._1, chanterelle.internal.Tuples.valuesOf[scala.Tuple3["wow", "wow2", "newField123"], scala.Tuple3[scala.Int, scala.Int, scala.Int]](chanterelle.internal.Tuples.valuesOf[scala.Tuple2["name", "nested"], scala.Tuple2[scala.Int, scala.NamedTuple.NamedTuple[scala.Tuple2["wow", "wow2"], scala.Tuple2[scala.Int, scala.Int]]]](chanterelle.test.easy)._2)._2, chanterelle.internal.Tuples.valuesOf[scala.Tuple1["newField123"], scala.Tuple1[scala.Int]](scala.NamedTuple.build[scala.Tuple1["newField123"]]()[scala.Tuple1[scala.Int]](scala.Tuple1.apply[scala.Int](123)))._1)
+// (Tuple3.apply[Int, NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]], Int](
+//   Tuples
+//     .valuesOf[Tuple3["name", "nested", "newField"], Tuple3[Int, NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]], Int]](easy)
+//     ._1: Int,
+//   Tuple2.apply[Int, Int](
+//     Tuples
+//       .valuesOf[Tuple2["wow", "wow2"], Tuple2[Int, Int]](
+//         Tuples
+//           .valuesOf[Tuple3["name", "nested", "newField"], Tuple3[Int, NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]], Int]](
+//             easy
+//           )
+//           ._2: NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]]
+//       )
+//       ._1: Int,
+//     Tuples
+//       .valuesOf[Tuple2["wow", "wow2"], Tuple2[Int, Int]](
+//         Tuples
+//           .valuesOf[Tuple3["name", "nested", "newField"], Tuple3[Int, NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]], Int]](
+//             easy
+//           )
+//           ._2: NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]]
+//       )
+//       ._2: Int
+//   ): NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]],
+//   Tuples
+//     .valuesOf[Tuple1["newField"], Tuple1[Int]](NamedTuple.build[Tuple1["newField"]]()[Tuple1[Int]](Tuple1.apply[Int](123)))
+//     ._1: Int
+// ): NamedTuple[Tuple3["name", "nested", "newField"], Tuple3[Int, NamedTuple[Tuple2["wow", "wow2"], Tuple2[Int, Int]], Int]])
