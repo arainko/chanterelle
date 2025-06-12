@@ -4,14 +4,14 @@ import scala.quoted.*
 import scala.collection.immutable.VectorMap
 
 sealed trait Transformation derives Debug {
-  def output(using Quotes): Structure
+  val output: Structure
 
   final def applyModifier(modifier: Modifier)(using Quotes): Transformation = {
     def recurse(segments: List[Path.Segment], curr: Transformation)(using Quotes): Transformation = {
       import quotes.reflect.*
       (segments, curr) match {
         case (Path.Segment.Field(name = name) :: next, t: Transformation.Named) =>
-          val fieldTransformation  @ Transformation.OfField.FromSource(idx, transformation) =
+          val fieldTransformation @ Transformation.OfField.FromSource(idx, transformation) =
              t.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
           t.copy(fields = t.fields.updated(name, fieldTransformation.copy(transformation = recurse(next, transformation))))
         case (Path.Segment.TupleElement(index = index) :: next, t: Transformation.Tuple) =>
@@ -48,16 +48,16 @@ object Transformation {
   def fromStructure(structure: Structure): Transformation = {
     structure match {
       case named: Structure.Named =>
-        Named(named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
+        Named(named, named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
 
       case tuple: Structure.Tuple =>
-        Tuple(tuple,  tuple.elements.zipWithIndex.map { (field, idx) => Transformation.OfField.FromSource(idx, fromStructure(field)) })
+        Tuple(tuple, tuple,  tuple.elements.zipWithIndex.map { (field, idx) => Transformation.OfField.FromSource(idx, fromStructure(field)) })
 
       case optional: Structure.Optional =>
-        Optional(optional, fromStructure(optional.paramStruct))
+        Optional(optional, optional, fromStructure(optional.paramStruct))
 
       case coll: Structure.Collection =>
-        Collection(coll, fromStructure(coll.paramStruct))
+        Collection(coll, coll, fromStructure(coll.paramStruct))
 
       case leaf: Structure.Leaf =>
         Leaf(leaf)
@@ -66,64 +66,76 @@ object Transformation {
 
   case class Named(
     source: Structure.Named,
+    output: Structure.Named,
     fields: VectorMap[String, Transformation.OfField[String]]
   ) extends Transformation {
-    def output(using Quotes): Structure.Named =
-      Structure.Named(
-        source.path,
-        fields.map { case (name, field) =>
-          field match {
-            case OfField.FromSource(_, transformation) => name -> transformation.output
-            case OfField.FromModifier(Modifier.Add(path, str, _)) => name -> Structure.Leaf(str.fields(name).calculateTpe, path)
-          }
-        }
-      )
+    // def output(using Quotes): Structure.Named =
+    //   Structure.Named(
+    //     source.path,
+    //     fields.map { case (name, field) =>
+    //       field match {
+    //         case OfField.FromSource(_, transformation) => name -> transformation.output
+    //         case OfField.FromModifier(Modifier.Add(path, str, _)) => name -> Structure.Leaf(str.fields(name).calculateTpe, path)
+    //       }
+    //     }
+    //   )
   }
 
   case class Tuple(
     source: Structure.Tuple,
+    output: Structure.Tuple,
     fields: Vector[Transformation.OfField[Int]]
   ) extends Transformation {
-    def output(using Quotes): Structure.Tuple =
-      Structure.Tuple(
-        source.path,
-        fields.map {
-          case OfField.FromSource(_, transformation) => transformation.output
-          case OfField.FromModifier(Modifier.Add(path, str, _)) => Structure.Leaf(str.calculateTpe, path)
-        },
-        true
-      )
+    // def output(using Quotes): Structure.Tuple =
+    //   Structure.Tuple(
+    //     source.path,
+    //     fields.map {
+    //       case OfField.FromSource(_, transformation) => transformation.output
+    //       case OfField.FromModifier(Modifier.Add(path, _, _)) => ???
+    //     },
+    //     true
+    //   )
   }
 
   case class Optional(
     source: Structure.Optional,
+    output: Structure.Optional,
     paramTransformation: Transformation
   ) extends Transformation {
-    def output(using Quotes): Structure.Optional =
-      Structure.Optional(
-        source.path,
-        paramTransformation.output
-      )
+    // def output(using Quotes): Structure.Optional =
+    //   Structure.Optional(
+    //     source.path,
+    //     paramTransformation.output
+    //   )
   }
 
   case class Collection(
     source: Structure.Collection,
+    output: Structure.Collection,
     paramTransformation: Transformation
   ) extends Transformation {
-    def output(using Quotes): Structure.Collection =
-      Structure.Collection(
-        source.collectionTpe,
-        source.path,
-        paramTransformation.output
-      )
+    // def output(using Quotes): Structure.Collection =
+    //   Structure.Collection(
+    //     source.collectionTpe,
+    //     source.path,
+    //     paramTransformation.output
+    //   )
   }
 
-  case class Leaf(structure: Structure.Leaf) extends Transformation {
-    def output(using Quotes) = structure
-  }
+  case class Leaf(output: Structure.Leaf) extends Transformation
 
   enum OfField[+Idx <: Int | String] derives Debug {
     case FromSource(idx: Idx, transformation: Transformation)
     case FromModifier(modifier: Modifier) extends OfField[Nothing]
+  }
+}
+
+opaque type StructuredExpr[S <: Structure, A <: Expr[Any] & Singleton] <: S = S
+
+object StructuredExpr {
+  def create[S <: Structure, A <: Expr[Any] & Singleton](value: A, str: S): StructuredExpr[S, value.type] = str
+
+  extension [S <: Structure, A <: Expr[Any] & Singleton](self: StructuredExpr[S, A]) {
+    def accessThat(using value: ValueOf[A]) = value.value
   }
 }
