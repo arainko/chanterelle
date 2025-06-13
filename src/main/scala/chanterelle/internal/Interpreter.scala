@@ -11,46 +11,12 @@ object Tuples {
 }
 
 private[chanterelle] object Interpreter {
-//   def run(value: Expr[Any], transformation: Structure)(using Quotes): Expr[?] = {
-//     transformation match {
-//       case t @ Named(tpe, namesTpe, valuesTpe, path, fields) =>
-//         ((namesTpe, valuesTpe): @unchecked) match {
-//           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
-//             val args = fields.map { (name, struct) => run(value.accessNamedTupleFieldByName(name, t), struct) }.toVector
-//             val recreated = Expr.ofTupleFromSeq(args).asExprOf[values]
-//             '{ $recreated: NamedTuple[names, values] }
-//         }
-
-//       case tup @ Structure.Tuple(tpe, path, elements, isPlain) =>
-//         val args = elements.zipWithIndex.map((t, idx) => run(value.accesFieldByIndex(idx, tup), t))
-//         Expr.ofTupleFromSeq(args)
-//       case Optional(tpe, path, paramStruct) =>
-//         tpe match {
-//           case '[Option[a]] =>
-//             val optValue = value.asExprOf[Option[a]]
-//             '{ $optValue.map[a](a => ${ run('a, paramStruct).asExprOf[a] }) }
-//         }
-//       case Collection(tpe, path, paramStruct) =>
-//         tpe match {
-//           case '[type cc[a] <: Iterable[a]; cc[a]] =>
-//             val optValue = value.asExprOf[cc[a]]
-//             val factory = Expr.summon[Factory[a, cc[a]]].get
-//             '{ $optValue.map[a](a => ${ run('a, paramStruct).asExprOf[a] }).to($factory) }
-//         }
-//       // case Modified(tpe, path, modifier) =>
-//       case Leaf(tpe, path) => value
-//     }
-//   }
-
   def runTransformation(value: Expr[Any], transformation: Transformation)(using Quotes): Expr[?] = {
     import quotes.reflect.*
-    // report.errorAndAbort(transformation.asInstanceOf[Transformation.Named].output.show)
     transformation match
       case t @ Transformation.Named(source, fields) => 
-        val output = t.output
-        ((output.calculateNamesTpe, output.calculateValuesTpe): @unchecked) match {
+        ((t.calculateNamesTpe, t.calculateValuesTpe): @unchecked) match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
-            // quotes.reflect.report.errorAndAbort(Type.show[values])
             val args = fields.map {
               case (name, Transformation.OfField.FromModifier(Modifier.Add(path, outputStructure, value))) =>
                   value.accessNamedTupleFieldByName(name, outputStructure)
@@ -61,13 +27,11 @@ private[chanterelle] object Interpreter {
               case (_, Transformation.OfField.FromSource(idx, transformation)) =>
                 runTransformation(value.accessNamedTupleFieldByName(idx, source), transformation)
             }
-            // println(Type.show[values])
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
             '{ $recreated: NamedTuple[names, values] }
         }
       case t @ Transformation.Tuple(source, fields) => 
-        val output = t.output
-        (source.calculateTpe, output.calculateTpe): @unchecked match {
+        (source.tpe, t.calculateTpe): @unchecked match {
           case '[source] -> '[output] =>
             val exprs = fields.map {
               case OfField.FromSource(idx, transformation) => 
@@ -78,21 +42,19 @@ private[chanterelle] object Interpreter {
             Expr.ofTupleFromSeq(exprs).asExprOf[output]
         }
       case t @ Transformation.Optional(source, paramTransformation) =>
-        val output = t.output
-        (source.calculateTpe, output.calculateTpe): @unchecked match {
+        (source.tpe, t.calculateTpe): @unchecked match {
           case ('[Option[a]], '[Option[out]]) =>
             val optValue = value.asExprOf[Option[a]]
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
       case t @ Transformation.Collection(source, paramTransformation) =>
-        val output = t.output
-        (source.calculateTpe, output.calculateTpe): @unchecked match {
+        (source.tpe, t.calculateTpe): @unchecked match {
           case '[type cc[a] <: Iterable[a]; cc[a]] -> '[type ccOut[out] <: Iterable[out]; ccOut[out]] =>
             val optValue = value.asExprOf[cc[a]]
             val factory = Expr.summon[Factory[out, ccOut[out]]].get
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }).to($factory) }
         }
-      case Transformation.Leaf(structure) => value
+      case Transformation.Leaf(_) => value
   }
 
 }

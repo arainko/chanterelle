@@ -20,7 +20,7 @@ extension (expr: Expr[Any]) {
     val TuplesCompanion = '{ Tuples }.asTerm
     Select
       .unique(TuplesCompanion, "valuesOf")
-      .appliedToTypes(structure.calculateNamesTpe.repr :: structure.calculateValuesTpe.repr :: Nil)
+      .appliedToTypes(structure.namesTpe.repr :: structure.valuesTpe.repr :: Nil)
       .appliedTo(expr.asTerm)
       .asExpr
   }
@@ -40,13 +40,13 @@ extension (expr: Expr[Any]) {
   private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
     import quotes.reflect.*
     if parentStructure.isPlain then
-      parentStructure.elements(index).calculateTpe.match {
+      parentStructure.elements(index).tpe.match {
         case '[tpe] =>
           '{ ${ accessFieldByName(s"_${index + 1}").asExprOf[tpe] }: tpe } // tuple accessors are 1 based
 
       }
     else
-      val tpeAtIndex = parentStructure.elements(index).calculateTpe
+      val tpeAtIndex = parentStructure.elements(index).tpe
       (expr, tpeAtIndex): @unchecked match {
         case '{ $prod: scala.Product } -> '[tpe] => '{ $prod.productElement(${ Expr(index) }).asInstanceOf[tpe] }
       }

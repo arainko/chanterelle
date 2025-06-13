@@ -4,7 +4,8 @@ import scala.quoted.*
 import scala.collection.immutable.VectorMap
 
 sealed trait Transformation derives Debug {
-  val output: Structure
+
+  def calculateTpe(using Quotes): Type[?]
 
   final def applyModifier(modifier: Modifier)(using Quotes): Transformation = {
     def recurse(segments: List[Path.Segment], curr: Transformation)(using Quotes): Transformation = {
@@ -12,7 +13,7 @@ sealed trait Transformation derives Debug {
       (segments, curr) match {
         case (Path.Segment.Field(name = name) :: next, t: Transformation.Named) =>
           val fieldTransformation @ Transformation.OfField.FromSource(idx, transformation) =
-             t.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
+            t.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
           t.copy(fields = t.fields.updated(name, fieldTransformation.copy(transformation = recurse(next, transformation))))
         case (Path.Segment.TupleElement(index = index) :: next, t: Transformation.Tuple) =>
           t.copy(fields = t.fields.updated(index, t.fields(index)))
@@ -27,10 +28,10 @@ sealed trait Transformation derives Debug {
 
     def apply(modifier: Modifier, transformation: Transformation)(using Quotes): Transformation = {
       (modifier, transformation) match {
-        case (m: Modifier.Add, t: Transformation.Named)     => 
+        case (m: Modifier.Add, t: Transformation.Named) =>
           val modifiedFields = m.outputStructure.fields.map((name, _) => name -> Transformation.OfField.FromModifier(m))
           val res = t.copy(
-            // output = t.output.copy(fields = t.output.fields ++ m.outputStructure.fields), 
+            // output = t.output.copy(fields = t.output.fields ++ m.outputStructure.fields),
             fields = t.fields ++ modifiedFields
           )
           res
@@ -48,16 +49,19 @@ object Transformation {
   def fromStructure(structure: Structure): Transformation = {
     structure match {
       case named: Structure.Named =>
-        Named(named, named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
+        Named(named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
 
       case tuple: Structure.Tuple =>
-        Tuple(tuple, tuple,  tuple.elements.zipWithIndex.map { (field, idx) => Transformation.OfField.FromSource(idx, fromStructure(field)) })
+        Tuple(
+          tuple,
+          tuple.elements.zipWithIndex.map { (field, idx) => Transformation.OfField.FromSource(idx, fromStructure(field)) }
+        )
 
       case optional: Structure.Optional =>
-        Optional(optional, optional, fromStructure(optional.paramStruct))
+        Optional(optional, fromStructure(optional.paramStruct))
 
       case coll: Structure.Collection =>
-        Collection(coll, coll, fromStructure(coll.paramStruct))
+        Collection(coll, fromStructure(coll.paramStruct))
 
       case leaf: Structure.Leaf =>
         Leaf(leaf)
@@ -66,76 +70,92 @@ object Transformation {
 
   case class Named(
     source: Structure.Named,
-    output: Structure.Named,
     fields: VectorMap[String, Transformation.OfField[String]]
   ) extends Transformation {
-    // def output(using Quotes): Structure.Named =
-    //   Structure.Named(
-    //     source.path,
-    //     fields.map { case (name, field) =>
-    //       field match {
-    //         case OfField.FromSource(_, transformation) => name -> transformation.output
-    //         case OfField.FromModifier(Modifier.Add(path, str, _)) => name -> Structure.Leaf(str.fields(name).calculateTpe, path)
-    //       }
-    //     }
-    //   )
+
+    def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
+      rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
+
+    def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
+      rollupTuple(
+        fields.map {
+          case _ -> OfField.FromSource(idx, transformation)                      => transformation.calculateTpe.repr
+          case name -> OfField.FromModifier(Modifier.Add(outputStructure = struct)) => struct.fields(name).tpe.repr
+        }.toVector
+      )
+
+    def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
+      val values = calculateValuesTpe
+      val names = calculateNamesTpe
+      ((names, values): @unchecked) match {
+        case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
+          Type.of[NamedTuple.NamedTuple[names, values]]
+      }
+    }
   }
 
   case class Tuple(
     source: Structure.Tuple,
-    output: Structure.Tuple,
     fields: Vector[Transformation.OfField[Int]]
   ) extends Transformation {
-    // def output(using Quotes): Structure.Tuple =
-    //   Structure.Tuple(
-    //     source.path,
-    //     fields.map {
-    //       case OfField.FromSource(_, transformation) => transformation.output
-    //       case OfField.FromModifier(Modifier.Add(path, _, _)) => ???
-    //     },
-    //     true
-    //   )
+
+    def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
+      rollupTuple(
+        fields.map {
+          case OfField.FromSource(idx, transformation)                      => transformation.calculateTpe.repr
+          case OfField.FromModifier(Modifier.Add(outputStructure = struct)) => struct.tpe.repr
+        }
+      )
   }
 
   case class Optional(
     source: Structure.Optional,
-    output: Structure.Optional,
     paramTransformation: Transformation
   ) extends Transformation {
-    // def output(using Quotes): Structure.Optional =
-    //   Structure.Optional(
-    //     source.path,
-    //     paramTransformation.output
-    //   )
+    def calculateTpe(using Quotes): Type[? <: Option[?]] =
+      paramTransformation.calculateTpe match {
+        case '[tpe] => Type.of[Option[tpe]]
+      }
   }
 
   case class Collection(
     source: Structure.Collection,
-    output: Structure.Collection,
     paramTransformation: Transformation
   ) extends Transformation {
-    // def output(using Quotes): Structure.Collection =
-    //   Structure.Collection(
-    //     source.collectionTpe,
-    //     source.path,
-    //     paramTransformation.output
-    //   )
+    def calculateTpe(using Quotes): Type[? <: Iterable[?]] =
+      ((source.collectionTpe, paramTransformation.calculateTpe): @unchecked) match {
+        case ('[type coll[a] <: Iterable[a]; coll], '[tpe]) =>
+          Type.of[coll[tpe]]
+      }
   }
 
-  case class Leaf(output: Structure.Leaf) extends Transformation
+  case class Leaf(output: Structure.Leaf) extends Transformation {
+    def calculateTpe(using Quotes): Type[? <: AnyKind] = output.tpe
+  }
 
   enum OfField[+Idx <: Int | String] derives Debug {
     case FromSource(idx: Idx, transformation: Transformation)
     case FromModifier(modifier: Modifier) extends OfField[Nothing]
   }
-}
 
-opaque type StructuredExpr[S <: Structure, A <: Expr[Any] & Singleton] <: S = S
+  private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
+    import quotes.reflect.*
 
-object StructuredExpr {
-  def create[S <: Structure, A <: Expr[Any] & Singleton](value: A, str: S): StructuredExpr[S, value.type] = str
-
-  extension [S <: Structure, A <: Expr[Any] & Singleton](self: StructuredExpr[S, A]) {
-    def accessThat(using value: ValueOf[A]) = value.value
+    elements.size match {
+      case 0 => Type.of[EmptyTuple]
+      case 1 =>
+        elements.head.asType.match { case '[tpe] => Type.of[Tuple1[tpe]] }
+      case size if size <= 22 =>
+        defn
+          .TupleClass(size)
+          .typeRef
+          .appliedTo(elements.toList)
+          .asType
+          .match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
+      case _ =>
+        val TupleCons = TypeRepr.of[*:]
+        val tpe = elements.foldRight(TypeRepr.of[EmptyTuple])((curr, acc) => TupleCons.appliedTo(curr :: acc :: Nil))
+        tpe.asType.match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
+    }
   }
 }

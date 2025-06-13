@@ -6,7 +6,7 @@ import scala.quoted.*
 import scala.reflect.TypeTest
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
-  def calculateTpe(using Quotes): Type[?]
+  def tpe: Type[?]
 
   def path: Path
 
@@ -18,57 +18,39 @@ private[chanterelle] object Structure {
   def unapply(struct: Structure): Structure = struct
 
   case class Named(
+    tpe: Type[? <: NamedTuple.AnyNamedTuple],
+    namesTpe: Type[? <: scala.Tuple],
+    valuesTpe: Type[? <: scala.Tuple],
     path: Path,
     fields: VectorMap[String, Structure]
   ) extends Structure {
     def asTuple: Structure.Tuple =
-      Tuple(path, fields.values.toVector, true)
-
-    def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] = 
-      rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
-
-    def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] = 
-      rollupTuple(fields.values.map(_.calculateTpe.repr).toVector)
-
-    def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
-      import quotes.reflect.*
-      val values = calculateValuesTpe
-      val names = calculateNamesTpe
-      ((names, values): @unchecked) match {
-        case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
-          Type.of[NamedTuple.NamedTuple[names, values]]
-      }
-    }
+      Tuple(valuesTpe, path, fields.values.toVector, fields.size < 23)
   }
 
   case class Tuple(
+    tpe: Type[? <: scala.Tuple],
     path: Path,
     elements: Vector[Structure],
     isPlain: Boolean
   ) extends Structure {
-    def calculateTpe(using Quotes): Type[? <: scala.Tuple] = rollupTuple(elements.map(_.calculateTpe.repr))
   }
 
   case class Optional(
+    tpe: Type[? <: Option[?]],
     path: Path,
     paramStruct: Structure
   ) extends Structure {
-    def calculateTpe(using Quotes): Type[? <: Option[?]] =
-      paramStruct.calculateTpe match {
-        case '[tpe] => Type.of[Option[tpe]]
-      }
+    
   }
 
   case class Collection(
+    tpe: Type[? <: Iterable[?]],
     collectionTpe: Type[? <: Iterable],
     path: Path,
     paramStruct: Structure
   ) extends Structure {
-    def calculateTpe(using Quotes): Type[? <: Iterable[?]] =
-      ((collectionTpe, paramStruct.calculateTpe): @unchecked) match {
-        case ('[type coll[a] <: Iterable[a]; coll], '[tpe]) =>
-          Type.of[coll[tpe]]
-      }
+   
   }
 
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
@@ -84,16 +66,18 @@ private[chanterelle] object Structure {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
 
-        case '[Option[param]] =>
+        case tpe @ '[Option[param]] =>
           Structure.Optional(
+            tpe,
             path,
             Structure.of[param](
               path.appended(Path.Segment.Element(Type.of[param]))
             )
           )
 
-        case '[type coll[a] <: Iterable[a]; coll[param]] =>
+        case tpe @ '[type coll[a] <: Iterable[a]; coll[param]] =>
           Structure.Collection(
+            tpe,
             Type.of[coll],
             path,
             Structure.of[param](
@@ -101,7 +85,7 @@ private[chanterelle] object Structure {
             )
           )
 
-        case '[type t <: NamedTuple.AnyNamedTuple; t] =>
+        case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
           val valuesTpe = Type.of[NamedTuple.DropNames[t]]
           val namesTpe = Type.of[NamedTuple.Names[t]]
           val transformations =
@@ -117,7 +101,7 @@ private[chanterelle] object Structure {
               )
               .to(VectorMap)
 
-          Structure.Named(path, transformations)
+          Structure.Named(tpe, namesTpe, valuesTpe, path, transformations)
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =
@@ -129,9 +113,9 @@ private[chanterelle] object Structure {
                   )
               }
             }.toVector
-          Structure.Tuple(path, elements, isPlain = false)
+          Structure.Tuple(tpe, path, elements, isPlain = false)
 
-        case tpe @ '[types] if tpe.repr.isTupleN =>
+        case tpe @ '[types & scala.Tuple] if tpe.repr.isTupleN =>
           val transformations =
             tupleTypeElements(Type.of[types]).zipWithIndex
               .map((tpe, idx) =>
@@ -146,7 +130,7 @@ private[chanterelle] object Structure {
               )
               .toVector
 
-          Structure.Tuple(path, transformations, isPlain = true)
+          Structure.Tuple(tpe, path, transformations, isPlain = true)
 
         case _ =>
           Structure.Leaf(Type.of[A], path)
@@ -180,26 +164,5 @@ private[chanterelle] object Structure {
   private def constStringTuple(using Quotes)(tp: quotes.reflect.TypeRepr): List[String] = {
     import quotes.reflect.*
     tupleTypeElements(tp.asType).map { case ConstantType(StringConstant(l)) => l }
-  }
-
-  private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
-    import quotes.reflect.*
-
-    elements.size match {
-      case 0 => Type.of[EmptyTuple]
-      case 1 =>
-        elements.head.asType.match { case '[tpe] => Type.of[Tuple1[tpe]] }
-      case size if size <= 22 =>
-        defn
-          .TupleClass(size)
-          .typeRef
-          .appliedTo(elements.toList)
-          .asType
-          .match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
-      case _ =>
-        val TupleCons = TypeRepr.of[*:]
-        val tpe = elements.foldRight(TypeRepr.of[EmptyTuple])((curr, acc) => TupleCons.appliedTo(curr :: acc :: Nil))
-        tpe.asType.match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
-    }
   }
 }
