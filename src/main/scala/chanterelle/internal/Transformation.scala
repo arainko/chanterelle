@@ -12,15 +12,13 @@ sealed trait Transformation derives Debug {
       import quotes.reflect.*
       (segments, curr) match {
         case (Path.Segment.Field(name = name) :: next, t: Transformation.Named) =>
-          val fieldTransformation @ Transformation.OfField.FromSource(idx, transformation) =
-            t.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
-          t.copy(fields = t.fields.updated(name, fieldTransformation.copy(transformation = recurse(next, transformation))))
+          t.update(name, recurse(next, _))
         case (Path.Segment.TupleElement(index = index) :: next, t: Transformation.Tuple) =>
-          t.copy(fields = t.fields.updated(index, t.fields(index)))
+          t.update(index, recurse(next, _))
         case (Path.Segment.Element(tpe) :: next, t: Transformation.Optional) =>
-          t.copy(paramTransformation = recurse(next, t.paramTransformation))
+          t.update(recurse(next, _))
         case (Path.Segment.Element(tpe) :: next, t: Transformation.Collection) =>
-          t.copy(paramTransformation = recurse(next, t.paramTransformation))
+          t.update(recurse(next, _))
         case (Nil, t) => apply(modifier, t)
         case (_, t)   => report.errorAndAbort("Illegal path segment and transformation combo")
       }
@@ -30,11 +28,7 @@ sealed trait Transformation derives Debug {
       (modifier, transformation) match {
         case (m: Modifier.Add, t: Transformation.Named) =>
           val modifiedFields = m.outputStructure.fields.map((name, _) => name -> Transformation.OfField.FromModifier(m))
-          val res = t.copy(
-            // output = t.output.copy(fields = t.output.fields ++ m.outputStructure.fields),
-            fields = t.fields ++ modifiedFields
-          )
-          res
+          t.withModifiedFields(modifiedFields)
         // case (m: Modifier.Compute, t: Transformation.Named) => ???
         // case (m: Modifier.Remove, t)                   => ???
         // case (m: Modifier.Update, t)                   => ???
@@ -92,6 +86,16 @@ object Transformation {
           Type.of[NamedTuple.NamedTuple[names, values]]
       }
     }
+
+    def update(name: String, f: Transformation => Transformation)(using Quotes): Named = {
+      import quotes.reflect.*
+      val fieldTransformation @ Transformation.OfField.FromSource(idx, transformation) =
+        this.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
+      this.copy(fields = this.fields.updated(name, fieldTransformation.copy(transformation = f(transformation))))
+    }
+
+    def withModifiedFields(fields: VectorMap[String, Transformation.OfField[Nothing]]): Named =
+      this.copy(fields = this.fields ++ fields)
   }
 
   case class Tuple(
@@ -106,6 +110,11 @@ object Transformation {
           case OfField.FromModifier(Modifier.Add(outputStructure = struct)) => struct.tpe.repr
         }
       )
+
+    def update(index: Int, f: Transformation => Transformation): Tuple = {
+      val t @ Transformation.OfField.FromSource(idx, transformation) = fields(index): @unchecked  //TODO: temporary
+      this.copy(fields = fields.updated(index, t.copy(transformation = f(transformation))))
+    }
   }
 
   case class Optional(
@@ -116,6 +125,10 @@ object Transformation {
       paramTransformation.calculateTpe match {
         case '[tpe] => Type.of[Option[tpe]]
       }
+
+    def update(f: Transformation => Transformation): Optional =
+      this.copy(paramTransformation = f(paramTransformation))
+
   }
 
   case class Collection(
@@ -127,11 +140,15 @@ object Transformation {
         case ('[type coll[a] <: Iterable[a]; coll], '[tpe]) =>
           Type.of[coll[tpe]]
       }
+
+    def update(f: Transformation => Transformation): Collection =
+      this.copy(paramTransformation = f(paramTransformation))
   }
 
   case class Leaf(output: Structure.Leaf) extends Transformation {
     def calculateTpe(using Quotes): Type[? <: AnyKind] = output.tpe
   }
+  
 
   enum OfField[+Idx <: Int | String] derives Debug {
     case FromSource(idx: Idx, transformation: Transformation)
