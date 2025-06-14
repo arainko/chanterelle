@@ -132,7 +132,9 @@ private[chanterelle] object Structure {
 
           Structure.Tuple(tpe, path, transformations, isPlain = true)
 
-        case _ =>
+        case tpe @ '[tpe] =>
+          import quotes.reflect.*
+          println(s"${Type.show[tpe]} -> ${ tpe.repr <:< TypeRepr.of[Iterable[?]] }")
           Structure.Leaf(Type.of[A], path)
       }
   }

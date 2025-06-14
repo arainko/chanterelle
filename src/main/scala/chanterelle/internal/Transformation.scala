@@ -20,7 +20,7 @@ sealed trait Transformation derives Debug {
         case (Path.Segment.Element(tpe) :: next, t: Transformation.Collection) =>
           t.update(recurse(next, _))
         case (Nil, t) => apply(modifier, t)
-        case (_, t)   => report.errorAndAbort("Illegal path segment and transformation combo")
+        case (p, t)   => report.errorAndAbort(s"Illegal path segment and transformation combo: ${Debug.show(t)}")
       }
     }
 
@@ -62,7 +62,7 @@ object Transformation {
     }
   }
 
-  case class Named(
+  case class Named (
     source: Structure.Named,
     fields: VectorMap[String, Transformation.OfField[String]]
   ) extends Transformation {

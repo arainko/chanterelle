@@ -7,8 +7,8 @@ import scala.runtime.Tuples
 import scala.reflect.TypeTest
 
 object test extends App {
-  val a: (name: Int, age: Int, other: Option[(something: (name: Int, age: Int), tup: (String, (name123: Int, name1: Int)))]) =
-    (1, 2, Some((something = (1, 2), tup = ("3", (1, 2)))))
+  val a: (name: Int, age: Int, other: List[(something: (name: Int, age: Int), tup: (String, (name123: Int, name1: Int)))]) =
+    (1, 2, List((something = (1, 2), tup = ("3", (1, 2)))))
 
   val easy: (name : Int, nested : (wow: Int, nah: Int)) = (1, (2, 3))
 
@@ -17,7 +17,7 @@ object test extends App {
   val b =
     // EntryPoint.run(easy)
     // CodePrinter.code(
-      easy.modify(_.add(_.nested)((newField123 = 123)))
+      a.modify(_.add(_.other.element.tup._2)((newField123 = 123)))
 
     // )
 
