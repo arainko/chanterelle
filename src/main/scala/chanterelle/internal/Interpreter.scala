@@ -19,18 +19,17 @@ private[chanterelle] object Interpreter {
         ((t.calculateNamesTpe, t.calculateValuesTpe): @unchecked) match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map {
-              case (name, Transformation.OfField.FromModifier(Transformation.Configured.Add(fieldName, outputStructure, valueStructure, value))) =>
-                  value.accessNamedTupleFieldByName(name, valueStructure)
+              case (name, Transformation.OfField.FromModifier(Transformation.Configured.Add(valueStructure = struct, value = value))) =>
+                StructuredValue.of(struct, value).fieldValue(name)
               case (name, Transformation.OfField.FromModifier(Transformation.Configured.Update(fn = fn))) =>
                   fn match {
                     case '{ $fn: (src => out) } => 
-                      val fieldValue = value.accessNamedTupleFieldByName(name, source)
-
+                      val fieldValue = StructuredValue.of(source, value).fieldValue(name)
                       '{ $fn(${ fieldValue.asExprOf[src] }) }
                   }
                 
               case (_, Transformation.OfField.FromSource(idx, transformation)) =>
-                runTransformation(value.accessNamedTupleFieldByName(idx, source), transformation)
+                runTransformation(StructuredValue.of(source, value).fieldValue(idx), transformation)
             }
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
             '{ $recreated: NamedTuple[names, values] }
@@ -38,11 +37,17 @@ private[chanterelle] object Interpreter {
       case t @ Transformation.Tuple(source, fields) => 
         (source.tpe, t.calculateTpe): @unchecked match {
           case '[source] -> '[output] =>
-            val exprs = fields.map {
-              case OfField.FromSource(idx, transformation) => 
-                runTransformation(value.accesFieldByIndex(idx, source), transformation)
-              case OfField.FromModifier(modifier) =>
-                ???
+            val exprs = fields.zipWithIndex.map {
+              case OfField.FromSource(idx, transformation) -> _ => 
+                runTransformation(StructuredValue.of(source, value).elementValue(idx), transformation)
+              case OfField.FromModifier(Transformation.Configured.Add(valueStructure = struct, value = value)) -> _ =>
+                ??? //TODO: Come up with a way that woul reject this from the AST at compiletime
+              case OfField.FromModifier(Transformation.Configured.Update(fn = fn)) -> idx =>
+                fn match {
+                    case '{ $fn: (src => out) } => 
+                      val fieldValue = StructuredValue.of(source, value).elementValue(idx)
+                      '{ $fn(${ fieldValue.asExprOf[src] }) }
+                  }
             }
             Expr.ofTupleFromSeq(exprs).asExprOf[output]
         }
@@ -70,7 +75,4 @@ private[chanterelle] object Interpreter {
         }
       case Transformation.Leaf(_) => value
   }
-
-  type CollOf[F[a] <: Iterable, A] = F[A]
-
 }

@@ -10,7 +10,8 @@ enum Modifier derives Debug {
 
   case Add(path: Path, outputStructure: Structure.Named, value: Expr[? <: AnyNamedTuple])
   // case Compute(path: Path, outputStructure: Structure.Named, function: Expr[? <: AnyNamedTuple => ? <: AnyNamedTuple])
-  case Update(path: Path, tpe: Type[?], fieldToUpdate: String, function: Expr[? => ?])
+  // this should actually just accept a `segment: Path.Segment` in place of `fieldToUpdate` since we should be able to update anything, be it an option elem, a classic tuple field, a named tuple field etc.
+  case Update(path: Path, tpe: Type[?], segmentToUpdate: Path.Segment, function: Expr[? => ?])
   case Remove(path: Path, fieldToRemove: String)
 }
 
@@ -40,9 +41,7 @@ object Modifier {
       } => 
         path
           .stripLast
-          .collect {
-            case (path, Path.Segment.Field(name = name)) => Modifier.Update(path, Type.of[newField], name, fn)
-          }
+          .map(stripped => Modifier.Update(stripped.path, Type.of[newField], stripped.last, fn))
           .getOrElse(report.errorAndAbort("Needs to point to a field"))
 
       case '{

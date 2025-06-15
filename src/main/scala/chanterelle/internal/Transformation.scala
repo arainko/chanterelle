@@ -38,8 +38,19 @@ sealed trait Transformation derives Debug {
         case (m: Modifier.Remove, t: Transformation.Named) =>
           t.withoutField(m.fieldToRemove)
 
-        case (m: Modifier.Update, t: Transformation.Named) => 
-          t.withModifiedField(m.fieldToUpdate, Transformation.OfField.FromModifier(Configured.Update(m.fieldToUpdate, m.tpe, m.function)))
+        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Field(_, name), function = fn), t: Transformation.Named) => 
+          t.withModifiedField(name, Transformation.OfField.FromModifier(Configured.Update(tpe, fn)))
+
+        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.TupleElement(_, idx), function = fn), t: Transformation.Tuple) => 
+          t.withModifiedElement(idx, Transformation.OfField.FromModifier(Configured.Update(tpe, fn)))
+
+        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Optional) => 
+          ??? //TODO
+
+        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Collection) => 
+          ??? //TODO
+          
+
       }
     }
     recurse(modifier.path.segments.toList, this)
@@ -122,6 +133,7 @@ object Transformation {
       rollupTuple(
         fields.map {
           case OfField.FromSource(idx, transformation)                        => transformation.calculateTpe.repr
+          case OfField.FromModifier(Configured.Update(tpe = tpe)) => tpe.repr
           case OfField.FromModifier(Configured.Add(outputStructure = struct)) =>
             quotes.reflect.report.errorAndAbort("TODO!")
         }
@@ -131,6 +143,9 @@ object Transformation {
       val t @ Transformation.OfField.FromSource(idx, transformation) = fields(index): @unchecked // TODO: temporary
       this.copy(fields = fields.updated(index, t.copy(transformation = f(transformation))))
     }
+
+    def withModifiedElement(idx: Int, transformation: Transformation.OfField[Nothing]): Tuple =
+      this.copy(fields = fields.updated(idx, transformation))
   }
 
   case class Optional(
@@ -180,7 +195,6 @@ object Transformation {
     )
 
     case Update(
-      fieldToUpdate: String,
       tpe: Type[?],
       fn: Expr[? => ?]
     )

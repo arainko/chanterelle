@@ -19,9 +19,9 @@ object test extends App {
   val b =
     // EntryPoint.run(easy)
     // CodePrinter.code(
-      a.modify(
+      a.transform(
         _.add(_.other.element.tup._2)((newField123 = 123, aaa = 333)),
-        _.update(_.other.element.tup._2.name123)(_.toString + "WOW UPDATED???"),
+        _.update(_.other.element.tup._2)(_.toString + "garmanbozzziaa"),
       )
 
     // )

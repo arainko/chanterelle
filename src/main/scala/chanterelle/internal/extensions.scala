@@ -13,42 +13,6 @@ extension (tpe: Type[? <: AnyKind]) {
     quotes.reflect.TypeRepr.of(using tpe)
 }
 
-extension (expr: Expr[Any]) {
-
-  private[chanterelle] def namedTupleToTuple(structure: Structure.Named)(using Quotes) = {
-    import quotes.reflect.*
-    val TuplesCompanion = '{ Tuples }.asTerm
-    Select
-      .unique(TuplesCompanion, "valuesOf")
-      .appliedToTypes(structure.namesTpe.repr :: structure.valuesTpe.repr :: Nil)
-      .appliedTo(expr.asTerm)
-      .asExpr
-  }
-
-  private[chanterelle] def accessNamedTupleFieldByName(name: String, structure: Structure.Named)(using Quotes) = {
-    val asTuple = expr.namedTupleToTuple(structure)
-    val idxOfName = structure.fields.keys.indexOf(name) // TODO: check for -1
-    assert(idxOfName != -1, s"no field $name found in named tuple") // TODO: get rid of later
-    asTuple.accesFieldByIndex(idxOfName, structure.asTuple)
-  }
-
-  private[chanterelle] def accessFieldByName(name: String, tpe: Type[?])(using Quotes): quotes.reflect.Term = {
-    import quotes.reflect.*
-    Typed(Select.unique(expr.asTerm, name), TypeTree.of(using tpe))
-  }
-
-  private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
-    import quotes.reflect.*
-    if parentStructure.isPlain then
-      accessFieldByName(s"_${index + 1}", parentStructure.elements(index).tpe).asExpr
-    else
-      val tpeAtIndex = parentStructure.elements(index).tpe
-      (expr, tpeAtIndex): @unchecked match {
-        case '{ $prod: scala.Product } -> '[tpe] => '{ $prod.productElement(${ Expr(index) }).asInstanceOf[tpe] }
-      }
-  }
-}
-
 extension [A, B](self: Either[A, B]) {
   private[chanterelle] inline def zipRight[AA >: A, C](inline that: Either[AA, C]): Either[AA, C] =
     self.flatMap(_ => that)
