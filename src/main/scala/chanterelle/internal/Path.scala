@@ -29,6 +29,12 @@ private[chanterelle] final case class Path(root: Type[?], segments: Vector[Path.
 
   def toList: List[Path.Segment] = self.segments.toList
 
+  def stripLast: Option[(path: Path, last:Path.Segment)] =
+    segments.lastOption match {
+      case Some(last) => Some(this.copy(root, segments.dropRight(1)) -> last)
+      case None => None
+    }
+
   def isAncestorOrSiblingOf(that: Path)(using Quotes): Boolean = {
     /*
     import quotes.reflect.*

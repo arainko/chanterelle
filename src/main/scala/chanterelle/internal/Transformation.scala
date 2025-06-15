@@ -2,6 +2,7 @@ package chanterelle.internal
 
 import scala.quoted.*
 import scala.collection.immutable.VectorMap
+import chanterelle.internal.Transformation.Configured
 
 sealed trait Transformation derives Debug {
 
@@ -26,12 +27,19 @@ sealed trait Transformation derives Debug {
 
     def apply(modifier: Modifier, transformation: Transformation)(using Quotes): Transformation = {
       (modifier, transformation) match {
-        case (m: Modifier.Add, t: Transformation.Named) =>
-          val modifiedFields = m.outputStructure.fields.map((name, _) => name -> Transformation.OfField.FromModifier(m))
+        case (mod: Modifier.Add, t: Transformation.Named) =>
+          val modifiedFields =
+            mod.outputStructure.fields
+              .map((name, struct) =>
+                name -> Transformation.OfField.FromModifier(Configured.Add(name, struct, mod.outputStructure, mod.value))
+              )
           t.withModifiedFields(modifiedFields)
         // case (m: Modifier.Compute, t: Transformation.Named) => ???
-        // case (m: Modifier.Remove, t)                   => ???
-        // case (m: Modifier.Update, t)                   => ???
+        case (m: Modifier.Remove, t: Transformation.Named) =>
+          t.withoutField(m.fieldToRemove)
+
+        case (m: Modifier.Update, t: Transformation.Named) => 
+          t.withModifiedField(m.fieldToUpdate, Transformation.OfField.FromModifier(Configured.Update(m.fieldToUpdate, m.tpe, m.function)))
       }
     }
     recurse(modifier.path.segments.toList, this)
@@ -62,7 +70,7 @@ object Transformation {
     }
   }
 
-  case class Named (
+  case class Named(
     source: Structure.Named,
     fields: VectorMap[String, Transformation.OfField[String]]
   ) extends Transformation {
@@ -73,8 +81,9 @@ object Transformation {
     def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
-          case _ -> OfField.FromSource(idx, transformation)                      => transformation.calculateTpe.repr
-          case name -> OfField.FromModifier(Modifier.Add(outputStructure = struct)) => struct.fields(name).tpe.repr
+          case _ -> OfField.FromSource(idx, transformation)                           => transformation.calculateTpe.repr
+          case _ -> OfField.FromModifier(Configured.Add(outputStructure = struct)) => struct.tpe.repr
+          case _ -> OfField.FromModifier(Configured.Update(tpe = tpe)) => tpe.repr
         }.toVector
       )
 
@@ -96,6 +105,12 @@ object Transformation {
 
     def withModifiedFields(fields: VectorMap[String, Transformation.OfField[Nothing]]): Named =
       this.copy(fields = this.fields ++ fields)
+
+    def withModifiedField(name: String, transformation: Transformation.OfField[Nothing]): Named =
+      this.copy(fields = this.fields.updated(name, transformation)) // this will uhhh... create a new record if it doesn't exist
+
+    def withoutField(name: String): Named =
+      this.copy(fields = this.fields - name)
   }
 
   case class Tuple(
@@ -106,13 +121,14 @@ object Transformation {
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
-          case OfField.FromSource(idx, transformation)                      => transformation.calculateTpe.repr
-          case OfField.FromModifier(Modifier.Add(outputStructure = struct)) => struct.tpe.repr
+          case OfField.FromSource(idx, transformation)                        => transformation.calculateTpe.repr
+          case OfField.FromModifier(Configured.Add(outputStructure = struct)) =>
+            quotes.reflect.report.errorAndAbort("TODO!")
         }
       )
 
     def update(index: Int, f: Transformation => Transformation): Tuple = {
-      val t @ Transformation.OfField.FromSource(idx, transformation) = fields(index): @unchecked  //TODO: temporary
+      val t @ Transformation.OfField.FromSource(idx, transformation) = fields(index): @unchecked // TODO: temporary
       this.copy(fields = fields.updated(index, t.copy(transformation = f(transformation))))
     }
   }
@@ -136,8 +152,8 @@ object Transformation {
     paramTransformation: Transformation
   ) extends Transformation {
     def calculateTpe(using Quotes): Type[? <: Iterable[?]] =
-      (paramTransformation.calculateTpe) match {
-        case ('[tpe]) =>
+      paramTransformation.calculateTpe match {
+        case '[tpe] =>
           import quotes.reflect.*
           AppliedType(source.collectionTpe.repr, TypeRepr.of[tpe] :: Nil).asType.asInstanceOf[Type[? <: Iterable[?]]]
       }
@@ -149,11 +165,25 @@ object Transformation {
   case class Leaf(output: Structure.Leaf) extends Transformation {
     def calculateTpe(using Quotes): Type[? <: AnyKind] = output.tpe
   }
-  
 
   enum OfField[+Idx <: Int | String] derives Debug {
     case FromSource(idx: Idx, transformation: Transformation)
-    case FromModifier(modifier: Modifier) extends OfField[Nothing]
+    case FromModifier(modifier: Configured) extends OfField[Nothing]
+  }
+
+  enum Configured derives Debug {
+    case Add(
+      fieldName: String,
+      outputStructure: Structure,
+      valueStructure: Structure.Named,
+      value: Expr[? <: NamedTuple.AnyNamedTuple]
+    )
+
+    case Update(
+      fieldToUpdate: String,
+      tpe: Type[?],
+      fn: Expr[? => ?]
+    )
   }
 
   private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {

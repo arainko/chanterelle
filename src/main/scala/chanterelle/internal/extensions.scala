@@ -32,19 +32,15 @@ extension (expr: Expr[Any]) {
     asTuple.accesFieldByIndex(idxOfName, structure.asTuple)
   }
 
-  private[chanterelle] def accessFieldByName(name: String)(using Quotes): quotes.reflect.Select = {
+  private[chanterelle] def accessFieldByName(name: String, tpe: Type[?])(using Quotes): quotes.reflect.Term = {
     import quotes.reflect.*
-    Select.unique(expr.asTerm, name)
+    Typed(Select.unique(expr.asTerm, name), TypeTree.of(using tpe))
   }
 
   private[chanterelle] def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
     import quotes.reflect.*
     if parentStructure.isPlain then
-      parentStructure.elements(index).tpe.match {
-        case '[tpe] =>
-          '{ ${ accessFieldByName(s"_${index + 1}").asExprOf[tpe] }: tpe } // tuple accessors are 1 based
-
-      }
+      accessFieldByName(s"_${index + 1}", parentStructure.elements(index).tpe).asExpr
     else
       val tpeAtIndex = parentStructure.elements(index).tpe
       (expr, tpeAtIndex): @unchecked match {

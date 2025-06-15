@@ -44,6 +44,7 @@ private[chanterelle] object Structure {
     
   }
 
+  //TODO: This is broken, pretty please revisit it later
   case class Collection(
     tpe: Type[? <: Iterable[?]],
     collectionTpe: Type[? <: Iterable],
@@ -75,6 +76,7 @@ private[chanterelle] object Structure {
             )
           )
 
+        //TODO: This is broken, pretty please revisit it later
         case tpe @ '[Iterable[param]] =>
           import quotes.reflect.*
             tpe.repr match {
