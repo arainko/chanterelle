@@ -2,11 +2,31 @@ package chanterelle.internal
 
 import scala.quoted.*
 import chanterelle.TupleModifier
+import scala.collection.BuildFrom
 
 object EntryPoint {
   inline def struct[A] = ${ structMacro[A] }
 
   def structMacro[A: Type](using Quotes) = {
+    import quotes.reflect.*
+    Type.of[A] match {
+      case tpe @ '[Iterable[param]] => 
+        tpe.repr match {
+          case AppliedType(tycon, _) =>
+            tycon.asType match {
+              case '[f] => 
+                report.errorAndAbort(s"Ok, we matched: ${Type.show[f]}")
+            }
+        }
+        // typeCon.tpe.asType match {
+        //   case '[type f <: AnyKind; f] => 
+        //     report.errorAndAbort(s"Ok, we matched: ${Type.show[f]}")
+        //   case _ => report.errorAndAbort("No in here ffs")
+        // }
+        
+      case _ =>  report.errorAndAbort("No")
+    }
+
     val struct = Structure.toplevel[A]
     Logger.info("", struct)
     '{}
@@ -23,27 +43,11 @@ object EntryPoint {
 
     val modifiers = Modifier.parse(mods.toList)
 
-    // val modifiers = List(
-    //   Modifier.Add(Path.empty(Type.of[Int]), Structure.toplevel[(newField: Int)].narrow[Structure.Named].get, '{ (newField = 123) })
-    // )
-
     val transformation = Transformation.fromStructure(structure)
 
     val modifiedTransformation = modifiers.foldLeft(transformation)((acc, mod) => acc.applyModifier(mod))
 
-    // report.errorAndAbort(s"GOING IN ${modifiedTransformation.asInstanceOf[Transformation.Named].output.show}")
+    Interpreter.runTransformation(tuple, modifiedTransformation)
 
-    val expr = Interpreter.runTransformation(tuple, modifiedTransformation)
-
-    // report.errorAndAbort(expr.asTerm.show(using Printer.TreeShortCode))
-    expr
-
-    // modifiers.foreach(transformation.applyModifier)
-
-    // Interpreter.run(tuple, transformation)
-
-    // report.info(Debug.show(modifiers))
-
-    // report.info(mods.map(expr => expr.asTerm.show(using Printer.TreeShortCode)).mkString(System.lineSeparator() * 2))
   }
 }

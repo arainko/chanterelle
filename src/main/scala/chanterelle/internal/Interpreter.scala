@@ -48,13 +48,26 @@ private[chanterelle] object Interpreter {
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
       case t @ Transformation.Collection(source, paramTransformation) =>
-        (source.tpe, t.calculateTpe): @unchecked match {
-          case '[type cc[a] <: Iterable[a]; cc[a]] -> '[type ccOut[out] <: Iterable[out]; ccOut[out]] =>
-            val optValue = value.asExprOf[cc[a]]
-            val factory = Expr.summon[Factory[out, ccOut[out]]].get
-            '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }).to($factory) }
+        value match {
+          case '{ 
+            type a
+            type srcColl <: Iterable[a]
+            $coll: srcColl 
+          } =>
+
+            report.errorAndAbort(Type.show[srcColl])
+            ???
+
+        
+        // (source.tpe, t.calculateTpe): @unchecked match {
+        //   case '[type ccSource <: Iterable[a]; ccSource] -> '[outParam] =>
+        //     val optValue = value.asExprOf[ccSource]
+        //     val factory = Expr.summon[Factory[out, ccOut[out]]].get
+        //     '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }).to($factory) }
         }
       case Transformation.Leaf(_) => value
   }
+
+  type CollOf[F[a] <: Iterable, A] = F[A]
 
 }

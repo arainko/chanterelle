@@ -136,9 +136,10 @@ object Transformation {
     paramTransformation: Transformation
   ) extends Transformation {
     def calculateTpe(using Quotes): Type[? <: Iterable[?]] =
-      ((source.collectionTpe, paramTransformation.calculateTpe): @unchecked) match {
-        case ('[type coll[a] <: Iterable[a]; coll], '[tpe]) =>
-          Type.of[coll[tpe]]
+      (paramTransformation.calculateTpe) match {
+        case ('[tpe]) =>
+          import quotes.reflect.*
+          AppliedType(source.collectionTpe.repr, TypeRepr.of[tpe] :: Nil).asType.asInstanceOf[Type[? <: Iterable[?]]]
       }
 
     def update(f: Transformation => Transformation): Collection =

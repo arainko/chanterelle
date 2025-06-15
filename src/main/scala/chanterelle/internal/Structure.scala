@@ -50,7 +50,7 @@ private[chanterelle] object Structure {
     path: Path,
     paramStruct: Structure
   ) extends Structure {
-   
+  
   }
 
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
@@ -75,15 +75,24 @@ private[chanterelle] object Structure {
             )
           )
 
-        case tpe @ '[type coll[a] <: Iterable[a]; coll[param]] =>
-          Structure.Collection(
-            tpe,
-            Type.of[coll],
-            path,
-            Structure.of[param](
-              path.appended(Path.Segment.Element(Type.of[param]))
-            )
+        case tpe @ '[Iterable[param]] =>
+          import quotes.reflect.*
+            tpe.repr match {
+              case AppliedType(tycon, _) =>
+                tycon.asType match {
+                  case '[f] => 
+                    Structure.Collection(
+                      tpe,
+                      Type.of[f].asInstanceOf,
+                      // tpe match { case '[type coll[a]; coll[a]] => Type.of[coll] },
+                      path,
+                      Structure.of[param](
+                        path.appended(Path.Segment.Element(Type.of[param]))
+                    )
           )
+                }
+            }
+          
 
         case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
           val valuesTpe = Type.of[NamedTuple.DropNames[t]]

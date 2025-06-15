@@ -14,12 +14,16 @@ object test extends App {
 
   // val b: (String, (name: Int)) = ???
 
+  // Map(1 -> 2, 2 -> 1).map()
+
   val b =
     // EntryPoint.run(easy)
     // CodePrinter.code(
       a.modify(_.add(_.other.element.tup._2)((newField123 = 123)))
 
     // )
+
+  // EntryPoint.struct[scala.collection.immutable.Map[Int, Int]]
 
   println(b)
 
