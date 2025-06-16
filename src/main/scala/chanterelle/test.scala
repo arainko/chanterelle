@@ -21,7 +21,7 @@ object test extends App {
     // CodePrinter.code(
       a.transform(
         _.add(_.other.element.tup._2)((newField123 = 123, aaa = 333)),
-        _.update(_.other.element.tup._2)(_.toString + "garmanbozzziaa"),
+        _.update(_.other.element.tup._1)(a => (iHaveANameNow = a)),
       )
 
     // )

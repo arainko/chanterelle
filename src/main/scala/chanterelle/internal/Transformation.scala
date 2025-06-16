@@ -2,7 +2,7 @@ package chanterelle.internal
 
 import scala.quoted.*
 import scala.collection.immutable.VectorMap
-import chanterelle.internal.Transformation.Configured
+import chanterelle.internal.Transformation.NamedSpecificConfigured
 
 sealed trait Transformation derives Debug {
 
@@ -31,25 +31,35 @@ sealed trait Transformation derives Debug {
           val modifiedFields =
             mod.outputStructure.fields
               .map((name, struct) =>
-                name -> Transformation.OfField.FromModifier(Configured.Add(name, struct, mod.outputStructure, mod.value))
+                name -> Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(name, struct.tpe, mod.outputStructure, mod.value))
               )
           t.withModifiedFields(modifiedFields)
         // case (m: Modifier.Compute, t: Transformation.Named) => ???
         case (m: Modifier.Remove, t: Transformation.Named) =>
           t.withoutField(m.fieldToRemove)
 
-        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Field(_, name), function = fn), t: Transformation.Named) => 
-          t.withModifiedField(name, Transformation.OfField.FromModifier(Configured.Update(tpe, fn)))
+        case (m: Modifier.Update, t) =>
+          Transformation.ConfedUp(Configured.Update(m.tpe, fn))
+        case (
+              Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Field(_, name), function = fn),
+              t: Transformation.Named
+            ) =>
+          t.withModifiedField(name, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
 
-        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.TupleElement(_, idx), function = fn), t: Transformation.Tuple) => 
-          t.withModifiedElement(idx, Transformation.OfField.FromModifier(Configured.Update(tpe, fn)))
+        case (
+              Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.TupleElement(_, idx), function = fn),
+              t: Transformation.Tuple
+            ) =>
+          t.withModifiedElement(idx, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
 
-        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Optional) => 
-          ??? //TODO
+        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Optional) =>
+          ??? // TODO
 
-        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Collection) => 
-          ??? //TODO
-          
+        case (
+              Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn),
+              t: Transformation.Collection
+            ) =>
+          ??? // TODO
 
       }
     }
@@ -92,9 +102,8 @@ object Transformation {
     def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
-          case _ -> OfField.FromSource(idx, transformation)                           => transformation.calculateTpe.repr
-          case _ -> OfField.FromModifier(Configured.Add(outputStructure = struct)) => struct.tpe.repr
-          case _ -> OfField.FromModifier(Configured.Update(tpe = tpe)) => tpe.repr
+          case _ -> OfField.FromSource(idx, transformation) => transformation.calculateTpe.repr
+          case _ -> OfField.FromModifier(conf)              => conf.tpe.repr
         }.toVector
       )
 
@@ -132,10 +141,8 @@ object Transformation {
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
-          case OfField.FromSource(idx, transformation)                        => transformation.calculateTpe.repr
-          case OfField.FromModifier(Configured.Update(tpe = tpe)) => tpe.repr
-          case OfField.FromModifier(Configured.Add(outputStructure = struct)) =>
-            quotes.reflect.report.errorAndAbort("TODO!")
+          case OfField.FromSource(idx, transformation) => transformation.calculateTpe.repr
+          case OfField.FromModifier(conf)              => conf.tpe.repr
         }
       )
 
@@ -183,16 +190,22 @@ object Transformation {
 
   enum OfField[+Idx <: Int | String] derives Debug {
     case FromSource(idx: Idx, transformation: Transformation)
-    case FromModifier(modifier: Configured) extends OfField[Nothing]
+    case FromModifier(modifier: NamedSpecificConfigured) extends OfField[Nothing]
   }
 
-  enum Configured derives Debug {
+  enum NamedSpecificConfigured derives Debug {
+    def tpe: Type[?]
+
     case Add(
       fieldName: String,
-      outputStructure: Structure,
+      tpe: Type[?],
       valueStructure: Structure.Named,
       value: Expr[? <: NamedTuple.AnyNamedTuple]
     )
+  }
+
+  enum Configured {
+    def tpe: Type[?]
 
     case Update(
       tpe: Type[?],

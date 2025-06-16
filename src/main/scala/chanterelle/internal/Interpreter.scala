@@ -19,9 +19,9 @@ private[chanterelle] object Interpreter {
         ((t.calculateNamesTpe, t.calculateValuesTpe): @unchecked) match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map {
-              case (name, Transformation.OfField.FromModifier(Transformation.Configured.Add(valueStructure = struct, value = value))) =>
+              case (name, Transformation.OfField.FromModifier(Transformation.NamedSpecificConfigured.Add(valueStructure = struct, value = value))) =>
                 StructuredValue.of(struct, value).fieldValue(name)
-              case (name, Transformation.OfField.FromModifier(Transformation.Configured.Update(fn = fn))) =>
+              case (name, Transformation.OfField.FromModifier(Transformation.NamedSpecificConfigured.Update(fn = fn))) =>
                   fn match {
                     case '{ $fn: (src => out) } => 
                       val fieldValue = StructuredValue.of(source, value).fieldValue(name)
@@ -40,9 +40,9 @@ private[chanterelle] object Interpreter {
             val exprs = fields.zipWithIndex.map {
               case OfField.FromSource(idx, transformation) -> _ => 
                 runTransformation(StructuredValue.of(source, value).elementValue(idx), transformation)
-              case OfField.FromModifier(Transformation.Configured.Add(valueStructure = struct, value = value)) -> _ =>
+              case OfField.FromModifier(Transformation.NamedSpecificConfigured.Add(valueStructure = struct, value = value)) -> _ =>
                 ??? //TODO: Come up with a way that woul reject this from the AST at compiletime
-              case OfField.FromModifier(Transformation.Configured.Update(fn = fn)) -> idx =>
+              case OfField.FromModifier(Transformation.NamedSpecificConfigured.Update(fn = fn)) -> idx =>
                 fn match {
                     case '{ $fn: (src => out) } => 
                       val fieldValue = StructuredValue.of(source, value).elementValue(idx)
@@ -53,7 +53,7 @@ private[chanterelle] object Interpreter {
         }
       case t @ Transformation.Optional(source, paramTransformation) =>
         (source.tpe, t.calculateTpe): @unchecked match {
-          case ('[Option[a]], '[Option[out]]) =>
+          case ('[Option[a]], '[Option[out]]) => 
             val optValue = value.asExprOf[Option[a]]
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
