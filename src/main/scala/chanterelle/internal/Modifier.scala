@@ -11,7 +11,7 @@ enum Modifier derives Debug {
   case Add(path: Path, outputStructure: Structure.Named, value: Expr[? <: AnyNamedTuple])
   // case Compute(path: Path, outputStructure: Structure.Named, function: Expr[? <: AnyNamedTuple => ? <: AnyNamedTuple])
   // this should actually just accept a `segment: Path.Segment` in place of `fieldToUpdate` since we should be able to update anything, be it an option elem, a classic tuple field, a named tuple field etc.
-  case Update(path: Path, tpe: Type[?], segmentToUpdate: Path.Segment, function: Expr[? => ?])
+  case Update(path: Path, tpe: Type[?], function: Expr[? => ?])
   case Remove(path: Path, fieldToRemove: String)
 }
 
@@ -20,38 +20,34 @@ object Modifier {
     import quotes.reflect.*
     mods.map {
       case '{
-        type selected <: AnyNamedTuple
-        type newField <: AnyNamedTuple
-        (builder: TupleModifier.Builder[tup]) => builder.add[selected](${ AsTerm(PathSelector(path)) })[newField]($value) 
-      } => 
-        val outputStructure = Structure.toplevel[newField].narrow[Structure.Named].getOrElse(report.errorAndAbort("Needs to be a named struct"))
+            type selected <: AnyNamedTuple
+            type newField <: AnyNamedTuple
+            (builder: TupleModifier.Builder[tup]) => builder.add[selected](${ AsTerm(PathSelector(path)) })[newField]($value)
+          } =>
+        val outputStructure =
+          Structure.toplevel[newField].narrow[Structure.Named].getOrElse(report.errorAndAbort("Needs to be a named struct"))
         Modifier.Add(path, outputStructure, value)
 
       // case '{
       //   type selected <: AnyNamedTuple
       //   type newField <: AnyNamedTuple
-      //   (a: TupleModifier.Builder[tup]) => a.compute[selected](${ AsTerm(PathSelector(path)) })[newField]($fn) 
-      // } => 
+      //   (a: TupleModifier.Builder[tup]) => a.compute[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
+      // } =>
       //   val outputStructure = Structure.toplevel[newField].narrow[Structure.Named].getOrElse(report.errorAndAbort("Needs to be a named struct"))
 
       //   Modifier.Compute(path, outputStructure, fn.asInstanceOf) //TODO: get rid of cast MAYBE
 
-      case '{
-        (builder: TupleModifier.Builder[tup]) => builder.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn) 
-      } => 
-        path
-          .stripLast
-          .map(stripped => Modifier.Update(stripped.path, Type.of[newField], stripped.last, fn))
+      case '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
+          } =>
+        Modifier.Update(path, Type.of[newField], fn)
+
+      case '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.remove[selected](${ AsTerm(PathSelector(path)) })
+          } =>
+        path.stripLast.collect { case (path, Path.Segment.Field(tpe, name)) => Modifier.Remove(path, name) }
           .getOrElse(report.errorAndAbort("Needs to point to a field"))
 
-      case '{
-        (builder: TupleModifier.Builder[tup]) => builder.remove[selected](${ AsTerm(PathSelector(path)) })
-      } => 
-        path
-          .stripLast
-          .collect { case (path, Path.Segment.Field(tpe, name)) => Modifier.Remove(path, name) }
-          .getOrElse(report.errorAndAbort("Needs to point to a field"))
-          
       case other => report.errorAndAbort(s"Error parsing modifier: ${other.show}")
     }
   }

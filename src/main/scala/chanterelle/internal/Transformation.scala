@@ -38,28 +38,28 @@ sealed trait Transformation derives Debug {
         case (m: Modifier.Remove, t: Transformation.Named) =>
           t.withoutField(m.fieldToRemove)
 
-        case (m: Modifier.Update, t) =>
-          Transformation.ConfedUp(Configured.Update(m.tpe, fn))
-        case (
-              Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Field(_, name), function = fn),
-              t: Transformation.Named
-            ) =>
-          t.withModifiedField(name, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
+        case (m: Modifier.Update, _) =>
+          Transformation.ConfedUp(Transformation.Configured.Update(m.tpe, m.function))
+        // case (
+        //       Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Field(_, name), function = fn),
+        //       t: Transformation.Named
+        //     ) =>
+        //   t.withModifiedField(name, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
 
-        case (
-              Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.TupleElement(_, idx), function = fn),
-              t: Transformation.Tuple
-            ) =>
-          t.withModifiedElement(idx, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
+        // case (
+        //       Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.TupleElement(_, idx), function = fn),
+        //       t: Transformation.Tuple
+        //     ) =>
+        //   t.withModifiedElement(idx, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
 
-        case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Optional) =>
-          ??? // TODO
+        // case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Optional) =>
+        //   ??? // TODO
 
-        case (
-              Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn),
-              t: Transformation.Collection
-            ) =>
-          ??? // TODO
+        // case (
+        //       Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn),
+        //       t: Transformation.Collection
+        //     ) =>
+        //   ??? // TODO
 
       }
     }
@@ -185,7 +185,11 @@ object Transformation {
   }
 
   case class Leaf(output: Structure.Leaf) extends Transformation {
-    def calculateTpe(using Quotes): Type[? <: AnyKind] = output.tpe
+    def calculateTpe(using Quotes): Type[?] = output.tpe
+  }
+
+  case class ConfedUp(config: Configured) extends Transformation {
+    def calculateTpe(using Quotes): Type[?] = config.tpe
   }
 
   enum OfField[+Idx <: Int | String] derives Debug {
@@ -204,7 +208,7 @@ object Transformation {
     )
   }
 
-  enum Configured {
+  enum Configured derives Debug {
     def tpe: Type[?]
 
     case Update(

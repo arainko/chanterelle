@@ -20,8 +20,8 @@ object test extends App {
     // EntryPoint.run(easy)
     // CodePrinter.code(
       a.transform(
-        _.add(_.other.element.tup._2)((newField123 = 123, aaa = 333)),
-        _.update(_.other.element.tup._1)(a => (iHaveANameNow = a)),
+        _.add(_.other.element.tup._2)((newField123 = 123, name123 = 333)),
+        _.update(_.other.element)(a => (iHaveANameNow = a)),
       )
 
     // )
