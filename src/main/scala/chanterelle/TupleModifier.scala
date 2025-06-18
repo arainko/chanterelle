@@ -1,7 +1,6 @@
 package chanterelle
 
 import scala.NamedTuple.*
-import scala.language.dynamics
 
 /*
   Highlevel syntax:
@@ -15,16 +14,20 @@ import scala.language.dynamics
       .modifyNames(_.toUpperCase)
     )
   )
-   */
+ */
 
 opaque type TupleModifier[Tup] = Unit
 
 object TupleModifier {
 
   sealed trait Builder[Tup] {
-    def add[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField <: AnyNamedTuple](value: NewField): TupleModifier[Tup]
+    def add[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewFieldName <: String, NewField](
+      value: NamedTuple[Tuple1[NewFieldName], Tuple1[NewField]]
+    ): TupleModifier[Tup]
 
-    def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewField <: AnyNamedTuple](f: Selected => NewField): TupleModifier[Tup]
+    def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[NewFieldName <: String, NewField](
+      f: Selected => NamedTuple[Tuple1[NewFieldName], Tuple1[NewField]]
+    ): TupleModifier[Tup]
 
     def update[Selected](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup]
 

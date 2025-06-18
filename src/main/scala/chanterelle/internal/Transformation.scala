@@ -26,14 +26,10 @@ sealed trait Transformation derives Debug {
     }
 
     def apply(modifier: Modifier, transformation: Transformation)(using Quotes): Transformation = {
+      import quotes.reflect.*
       (modifier, transformation) match {
         case (mod: Modifier.Add, t: Transformation.Named) =>
-          val modifiedFields =
-            mod.outputStructure.fields
-              .map((name, struct) =>
-                name -> Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(name, struct.tpe, mod.outputStructure, mod.value))
-              )
-          t.withModifiedFields(modifiedFields)
+          t.withModifiedField(mod.fieldName, Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(mod.fieldName, mod.value.asTerm.tpe.asType, mod.value)))
         // case (m: Modifier.Compute, t: Transformation.Named) => ???
         case (m: Modifier.Remove, t: Transformation.Named) =>
           t.withoutField(m.fieldToRemove)
@@ -203,8 +199,7 @@ object Transformation {
     case Add(
       fieldName: String,
       tpe: Type[?],
-      valueStructure: Structure.Named,
-      value: Expr[? <: NamedTuple.AnyNamedTuple]
+      value: Expr[?]
     )
   }
 

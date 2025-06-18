@@ -28,31 +28,42 @@ private[chanterelle] object Structure {
       Tuple(valuesTpe, path, fields.values.toVector, fields.size < 23)
   }
 
+  object Named {
+    def fromNameAndType(name: String, tpe: Type[?])(using Quotes): Named = {
+      import quotes.reflect.*
+      val nameTpe = ConstantType(StringConstant(name)).asType
+      (nameTpe, tpe) match {
+        case ('[nameTpe], '[tpe]) =>
+          Named(
+            Type.of[NamedTuple.NamedTuple[Tuple1[nameTpe], Tuple1[tpe]]],
+            Type.of[Tuple1[nameTpe]],
+            Type.of[Tuple1[tpe]],
+            
+            )
+      }
+      }
+  }
+
   case class Tuple(
     tpe: Type[? <: scala.Tuple],
     path: Path,
     elements: Vector[Structure],
     isPlain: Boolean
-  ) extends Structure {
-  }
+  ) extends Structure {}
 
   case class Optional(
     tpe: Type[? <: Option[?]],
     path: Path,
     paramStruct: Structure
-  ) extends Structure {
-    
-  }
+  ) extends Structure {}
 
-  //TODO: This is broken, pretty please revisit it later
+  // TODO: This is broken, pretty please revisit it later
   case class Collection(
     tpe: Type[? <: Iterable[?]],
     collectionTpe: Type[? <: Iterable],
     path: Path,
     paramStruct: Structure
-  ) extends Structure {
-  
-  }
+  ) extends Structure {}
 
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
     def calculateTpe(using Quotes): Type[?] = tpe
@@ -76,25 +87,24 @@ private[chanterelle] object Structure {
             )
           )
 
-        //TODO: This is broken, pretty please revisit it later
+        // TODO: This is broken, pretty please revisit it later
         case tpe @ '[Iterable[param]] =>
           import quotes.reflect.*
-            tpe.repr match {
-              case AppliedType(tycon, _) =>
-                tycon.asType match {
-                  case '[f] => 
-                    Structure.Collection(
-                      tpe,
-                      Type.of[f].asInstanceOf,
-                      // tpe match { case '[type coll[a]; coll[a]] => Type.of[coll] },
-                      path,
-                      Structure.of[param](
-                        path.appended(Path.Segment.Element(Type.of[param]))
+          tpe.repr match {
+            case AppliedType(tycon, _) =>
+              tycon.asType match {
+                case '[f] =>
+                  Structure.Collection(
+                    tpe,
+                    Type.of[f].asInstanceOf,
+                    // tpe match { case '[type coll[a]; coll[a]] => Type.of[coll] },
+                    path,
+                    Structure.of[param](
+                      path.appended(Path.Segment.Element(Type.of[param]))
                     )
-          )
-                }
-            }
-          
+                  )
+              }
+          }
 
         case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
           val valuesTpe = Type.of[NamedTuple.DropNames[t]]
@@ -145,7 +155,7 @@ private[chanterelle] object Structure {
 
         case tpe @ '[tpe] =>
           import quotes.reflect.*
-          println(s"${Type.show[tpe]} -> ${ tpe.repr <:< TypeRepr.of[Iterable[?]] }")
+          println(s"${Type.show[tpe]} -> ${tpe.repr <:< TypeRepr.of[Iterable[?]]}")
           Structure.Leaf(Type.of[A], path)
       }
   }

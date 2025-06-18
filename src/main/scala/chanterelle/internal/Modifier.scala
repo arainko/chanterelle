@@ -8,9 +8,7 @@ import chanterelle.internal.Path.Segment
 enum Modifier derives Debug {
   def path: Path
 
-  case Add(path: Path, outputStructure: Structure.Named, value: Expr[? <: AnyNamedTuple])
-  // case Compute(path: Path, outputStructure: Structure.Named, function: Expr[? <: AnyNamedTuple => ? <: AnyNamedTuple])
-  // this should actually just accept a `segment: Path.Segment` in place of `fieldToUpdate` since we should be able to update anything, be it an option elem, a classic tuple field, a named tuple field etc.
+  case Add(path: Path, fieldName: String, value: Expr[?])
   case Update(path: Path, tpe: Type[?], function: Expr[? => ?])
   case Remove(path: Path, fieldToRemove: String)
 }
@@ -21,12 +19,11 @@ object Modifier {
     mods.map {
       case '{
             type selected <: AnyNamedTuple
-            type newField <: AnyNamedTuple
-            (builder: TupleModifier.Builder[tup]) => builder.add[selected](${ AsTerm(PathSelector(path)) })[newField]($value)
+            type newField
+            type newFieldName <: String
+            (builder: TupleModifier.Builder[tup]) => builder.add[selected](${ AsTerm(PathSelector(path)) })[newFieldName, newField]($value)
           } =>
-        val outputStructure =
-          Structure.toplevel[newField].narrow[Structure.Named].getOrElse(report.errorAndAbort("Needs to be a named struct"))
-        Modifier.Add(path, outputStructure, value)
+        Modifier.Add(path, Type.valueOfConstant[newFieldName].getOrElse(report.errorAndAbort("name of field needs to be known")), value)
 
       // case '{
       //   type selected <: AnyNamedTuple

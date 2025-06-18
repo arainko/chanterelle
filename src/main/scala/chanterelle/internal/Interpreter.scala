@@ -25,6 +25,7 @@ private[chanterelle] object Interpreter {
                       Transformation.NamedSpecificConfigured.Add(valueStructure = struct, value = value)
                     )
                   ) =>
+
                 StructuredValue.of(struct, value).fieldValue(name)
 
               case (_, Transformation.OfField.FromSource(idx, transformation)) =>
