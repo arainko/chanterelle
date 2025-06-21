@@ -19,14 +19,22 @@ private[chanterelle] object Interpreter {
         ((t.calculateNamesTpe, t.calculateValuesTpe): @unchecked) match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map {
-              case (
-                    name,
-                    Transformation.OfField.FromModifier(
-                      Transformation.NamedSpecificConfigured.Add(valueStructure = struct, value = value)
-                    )
-                  ) =>
-
-                StructuredValue.of(struct, value).fieldValue(name)
+              case (name, Transformation.OfField.FromModifier(modifier)) =>
+                modifier match {
+                  case Transformation.NamedSpecificConfigured.Add(valueStructure = struct, value = value) =>
+                    StructuredValue.of(struct, value).fieldValue(struct.fieldName)
+                  case Transformation.NamedSpecificConfigured.Compute(valueStructure = struct, fn = fn) =>
+                    fn match {
+                      case '{ $fn: (src => out) } =>
+                        '{
+                          val computed = $fn(${ value.asExprOf[src] })
+                          ${
+                            val computedValue = 'computed
+                            StructuredValue.of(struct, computedValue).fieldValue(struct.fieldName)
+                          }
+                        }
+                    }
+                }
 
               case (_, Transformation.OfField.FromSource(idx, transformation)) =>
                 runTransformation(StructuredValue.of(source, value).fieldValue(idx), transformation)
@@ -38,13 +46,8 @@ private[chanterelle] object Interpreter {
         (source.tpe, t.calculateTpe): @unchecked match {
           case '[source] -> '[output] =>
             val exprs = fields.zipWithIndex.map {
-              case OfField.FromSource(idx, transformation) -> _ =>
+              case (transformation, idx) =>
                 runTransformation(StructuredValue.of(source, value).elementValue(idx), transformation)
-              case OfField.FromModifier(
-                    Transformation.NamedSpecificConfigured.Add(valueStructure = struct, value = value)
-                  ) -> _ =>
-                ??? // TODO: Come up with a way that woul reject this from the AST at compiletime
-
             }
             Expr.ofTupleFromSeq(exprs).asExprOf[output]
         }

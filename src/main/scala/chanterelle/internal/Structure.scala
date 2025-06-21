@@ -17,31 +17,35 @@ private[chanterelle] object Structure {
 
   def unapply(struct: Structure): Structure = struct
 
-  case class Named(
-    tpe: Type[? <: NamedTuple.AnyNamedTuple],
-    namesTpe: Type[? <: scala.Tuple],
-    valuesTpe: Type[? <: scala.Tuple],
-    path: Path,
-    fields: VectorMap[String, Structure]
-  ) extends Structure {
-    def asTuple: Structure.Tuple =
-      Tuple(valuesTpe, path, fields.values.toVector, fields.size < 23)
+  sealed trait Named extends Structure derives Debug {
+    def tpe: Type[? <: NamedTuple.AnyNamedTuple]
+    def namesTpe: Type[? <: scala.Tuple]
+    def valuesTpe: Type[? <: scala.Tuple]
+    def path: Path
+    def fields: VectorMap[String, Structure]
+    final def asTuple: Structure.Tuple = Tuple(valuesTpe, path, fields.values.toVector, fields.size < 23)
   }
 
   object Named {
-    def fromNameAndType(name: String, tpe: Type[?])(using Quotes): Named = {
-      import quotes.reflect.*
-      val nameTpe = ConstantType(StringConstant(name)).asType
-      (nameTpe, tpe) match {
-        case ('[nameTpe], '[tpe]) =>
-          Named(
-            Type.of[NamedTuple.NamedTuple[Tuple1[nameTpe], Tuple1[tpe]]],
-            Type.of[Tuple1[nameTpe]],
-            Type.of[Tuple1[tpe]],
-            
-            )
-      }
-      }
+    case class Freeform(
+      tpe: Type[? <: NamedTuple.AnyNamedTuple],
+      namesTpe: Type[? <: scala.Tuple],
+      valuesTpe: Type[? <: scala.Tuple],
+      path: Path,
+      fields: VectorMap[String, Structure]
+    ) extends Named
+
+    case class Singular(
+      tpe: Type[? <: NamedTuple.AnyNamedTuple],
+      namesTpe: Type[? <: scala.Tuple],
+      valuesTpe: Type[? <: scala.Tuple],
+      fieldName: String,
+      valueStructure: Structure,
+      path: Path
+    ) extends Named {
+      val fields: VectorMap[String, Structure] = VectorMap(fieldName -> valueStructure)
+    }
+
   }
 
   case class Tuple(
@@ -106,13 +110,14 @@ private[chanterelle] object Structure {
               }
           }
 
+        // TODO: report to dotty: it's not possible to match on a NamedTuple type like this: 'case '[NamedTuple[names, values]] => ...', this match always fails, you need to decompose stuff like the below
         case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
           val valuesTpe = Type.of[NamedTuple.DropNames[t]]
           val namesTpe = Type.of[NamedTuple.Names[t]]
           val transformations =
             tupleTypeElements(valuesTpe)
               .zip(constStringTuple(namesTpe.repr))
-              .map((tpe, name) =>
+              .map((tpe, name) => //TODO: report to metals: no hover info over untupled parameter
                 name -> (tpe.asType match {
                   case '[tpe] =>
                     Structure.of[tpe](
@@ -122,7 +127,10 @@ private[chanterelle] object Structure {
               )
               .to(VectorMap)
 
-          Structure.Named(tpe, namesTpe, valuesTpe, path, transformations)
+          if transformations.size == 1 then
+            val (fieldName, valueStructure) = transformations.head
+            Structure.Named.Singular(tpe, namesTpe, valuesTpe, fieldName, valueStructure, path)
+          else Structure.Named.Freeform(tpe, namesTpe, valuesTpe, path, transformations)
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =
@@ -153,9 +161,7 @@ private[chanterelle] object Structure {
 
           Structure.Tuple(tpe, path, transformations, isPlain = true)
 
-        case tpe @ '[tpe] =>
-          import quotes.reflect.*
-          println(s"${Type.show[tpe]} -> ${tpe.repr <:< TypeRepr.of[Iterable[?]]}")
+        case '[tpe] =>
           Structure.Leaf(Type.of[A], path)
       }
   }

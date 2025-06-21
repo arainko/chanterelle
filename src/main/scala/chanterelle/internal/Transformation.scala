@@ -29,34 +29,13 @@ sealed trait Transformation derives Debug {
       import quotes.reflect.*
       (modifier, transformation) match {
         case (mod: Modifier.Add, t: Transformation.Named) =>
-          t.withModifiedField(mod.fieldName, Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(mod.fieldName, mod.value.asTerm.tpe.asType, mod.value)))
-        // case (m: Modifier.Compute, t: Transformation.Named) => ???
+          t.withModifiedField(mod.valueStructure.fieldName, Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(mod.valueStructure, mod.value)))
+        case (mod: Modifier.Compute, t: Transformation.Named) =>
+          t.withModifiedField(mod.valueStructure.fieldName, Transformation.OfField.FromModifier(NamedSpecificConfigured.Compute(mod.valueStructure, mod.value)))
         case (m: Modifier.Remove, t: Transformation.Named) =>
           t.withoutField(m.fieldToRemove)
-
         case (m: Modifier.Update, _) =>
           Transformation.ConfedUp(Transformation.Configured.Update(m.tpe, m.function))
-        // case (
-        //       Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Field(_, name), function = fn),
-        //       t: Transformation.Named
-        //     ) =>
-        //   t.withModifiedField(name, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
-
-        // case (
-        //       Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.TupleElement(_, idx), function = fn),
-        //       t: Transformation.Tuple
-        //     ) =>
-        //   t.withModifiedElement(idx, Transformation.OfField.FromModifier(NamedSpecificConfigured.Update(tpe, fn)))
-
-        // case (Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn), t: Transformation.Optional) =>
-        //   ??? // TODO
-
-        // case (
-        //       Modifier.Update(tpe = tpe, segmentToUpdate = Path.Segment.Element(_), function = fn),
-        //       t: Transformation.Collection
-        //     ) =>
-        //   ??? // TODO
-
       }
     }
     recurse(modifier.path.segments.toList, this)
@@ -73,7 +52,7 @@ object Transformation {
       case tuple: Structure.Tuple =>
         Tuple(
           tuple,
-          tuple.elements.zipWithIndex.map { (field, idx) => Transformation.OfField.FromSource(idx, fromStructure(field)) }
+          tuple.elements.map(fromStructure)
         )
 
       case optional: Structure.Optional =>
@@ -131,23 +110,17 @@ object Transformation {
 
   case class Tuple(
     source: Structure.Tuple,
-    fields: Vector[Transformation.OfField[Int]]
+    fields: Vector[Transformation]
   ) extends Transformation {
 
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
-      rollupTuple(
-        fields.map {
-          case OfField.FromSource(idx, transformation) => transformation.calculateTpe.repr
-          case OfField.FromModifier(conf)              => conf.tpe.repr
-        }
-      )
+      rollupTuple(fields.map(_.calculateTpe.repr))
 
     def update(index: Int, f: Transformation => Transformation): Tuple = {
-      val t @ Transformation.OfField.FromSource(idx, transformation) = fields(index): @unchecked // TODO: temporary
-      this.copy(fields = fields.updated(index, t.copy(transformation = f(transformation))))
+      this.copy(fields = fields.updated(index, f(fields(index))))
     }
 
-    def withModifiedElement(idx: Int, transformation: Transformation.OfField[Nothing]): Tuple =
+    def withModifiedElement(idx: Int, transformation: Transformation): Tuple =
       this.copy(fields = fields.updated(idx, transformation))
   }
 
@@ -193,16 +166,29 @@ object Transformation {
     case FromModifier(modifier: NamedSpecificConfigured) extends OfField[Nothing]
   }
 
-  enum NamedSpecificConfigured derives Debug {
+  sealed trait NamedSpecificConfigured derives Debug {
     def tpe: Type[?]
-
-    case Add(
-      fieldName: String,
-      tpe: Type[?],
-      value: Expr[?]
-    )
   }
 
+  object NamedSpecificConfigured {
+    case class Add(
+      valueStructure: Structure.Named.Singular,
+      value: Expr[?]
+    ) extends NamedSpecificConfigured {
+      export valueStructure.fieldName
+      export valueStructure.valueStructure.tpe
+    }
+
+    case class Compute(
+      valueStructure: Structure.Named.Singular,
+      fn: Expr[? => ?]
+    ) extends NamedSpecificConfigured {
+      export valueStructure.fieldName
+      export valueStructure.valueStructure.tpe
+    }
+  }
+
+  
   enum Configured derives Debug {
     def tpe: Type[?]
 

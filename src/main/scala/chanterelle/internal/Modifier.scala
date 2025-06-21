@@ -3,12 +3,12 @@ package chanterelle.internal
 import NamedTuple.AnyNamedTuple
 import scala.quoted.*
 import chanterelle.TupleModifier
-import chanterelle.internal.Path.Segment
 
 enum Modifier derives Debug {
   def path: Path
 
-  case Add(path: Path, fieldName: String, value: Expr[?])
+  case Add(path: Path, valueStructure: Structure.Named.Singular, value: Expr[?])
+  case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?])
   case Update(path: Path, tpe: Type[?], function: Expr[? => ?])
   case Remove(path: Path, fieldToRemove: String)
 }
@@ -17,22 +17,30 @@ object Modifier {
   def parse[A](mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes): List[Modifier] = {
     import quotes.reflect.*
     mods.map {
+      //TODO: report an issue to dotty: not able to match with quotes if $value is of type NamedTuple[?, ?]
       case '{
             type selected <: AnyNamedTuple
-            type newField
-            type newFieldName <: String
-            (builder: TupleModifier.Builder[tup]) => builder.add[selected](${ AsTerm(PathSelector(path)) })[newFieldName, newField]($value)
+            type v <: AnyNamedTuple
+            (builder: TupleModifier.Builder[tup]) => builder.put[selected](${ AsTerm(PathSelector(path)) })[v]($value)
           } =>
-        Modifier.Add(path, Type.valueOfConstant[newFieldName].getOrElse(report.errorAndAbort("name of field needs to be known")), value)
+        val valueStructure = 
+          Structure
+            .toplevel[v]
+            .narrow[Structure.Named.Singular]
+            .getOrElse(report.errorAndAbort("Needs to be a named tuple of size 1"))
+        Modifier.Add(path, valueStructure, value)
 
-      // case '{
-      //   type selected <: AnyNamedTuple
-      //   type newField <: AnyNamedTuple
-      //   (a: TupleModifier.Builder[tup]) => a.compute[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
-      // } =>
-      //   val outputStructure = Structure.toplevel[newField].narrow[Structure.Named].getOrElse(report.errorAndAbort("Needs to be a named struct"))
-
-      //   Modifier.Compute(path, outputStructure, fn.asInstanceOf) //TODO: get rid of cast MAYBE
+      case '{
+            type selected <: AnyNamedTuple
+            type v <: AnyNamedTuple
+            (builder: TupleModifier.Builder[tup]) => builder.compute[selected](${ AsTerm(PathSelector(path)) })[v]($value)
+          } =>
+            val valueStructure = 
+              Structure
+                .toplevel[v]
+                .narrow[Structure.Named.Singular]
+                .getOrElse(report.errorAndAbort("Needs to be a named tuple of size 1"))
+            Modifier.Compute(path, valueStructure, value)
 
       case '{ (builder: TupleModifier.Builder[tup]) =>
             builder.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
@@ -45,7 +53,7 @@ object Modifier {
         path.stripLast.collect { case (path, Path.Segment.Field(tpe, name)) => Modifier.Remove(path, name) }
           .getOrElse(report.errorAndAbort("Needs to point to a field"))
 
-      case other => report.errorAndAbort(s"Error parsing modifier: ${other.show}")
+      case other => report.errorAndAbort(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
     }
   }
 
