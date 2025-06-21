@@ -2,6 +2,17 @@ package chanterelle
 
 import scala.NamedTuple.*
 import scala.util.chaining.*
+import chanterelle.internal.EntryPoint
+import scala.collection.Factory
+import scala.collection.SortedSet
+import scala.collection.SortedMap
+import scala.collection.generic.IsSeq
+import scala.collection.generic.IsMap
+import scala.collection.generic.IsIterable
+import scala.collection.BuildFrom
+import scala.collection.mutable.TreeMap
+import scala.collection.immutable.IntMap
+import scala.collection.immutable.HashMap
 
 //TODO: report to metals: presentation compiler crash when referring to named tuple fields inside .update and .compute
 object test extends App {
@@ -13,8 +24,25 @@ object test extends App {
 
   val asd: TupleModifier.Builder[(name: Int, nested: (wow: Int, nah: Int))] = ???
 
+  EntryPoint.struct[SortedMap[Int, Int]]
+
+
 
   asd.compute(_.nested)(a => (newField123 = a.nah + 123))
+
+  // extension [Repr](coll: Repr)(using seq: IsIterable[Repr])
+  //   def intersperse[B >: seq.A, That](sep: B)(using bf: BuildFrom[Repr, B, That]): That =
+  //     val seqOps = seq(coll)
+  //     bf.fromSpecific(coll)(new AbstractView[B]:
+  //       def iterator = new AbstractIterator[B]:
+  //         val it = seqOps.iterator
+  //         var intersperseNext = false
+  //         def hasNext = intersperseNext || it.hasNext
+  //         def next() =
+  //           val elem = if intersperseNext then sep else it.next()
+  //           intersperseNext = !intersperseNext && it.hasNext
+  //           elem
+  //     )
 
   val renamedB =
     a.transform(
