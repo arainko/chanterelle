@@ -13,6 +13,8 @@ import scala.collection.MapOps
 import scala.collection.IterableOps
 import scala.collection.SortedMapOps
 import scala.collection.SetOps
+import scala.collection.immutable.SortedSetOps
+import scala.collection.immutable.SortedSet
 
 trait ExtractableK1[A] {
   type F[a]
@@ -90,21 +92,29 @@ object EntryPoint {
 
   def structMacro[A: Type](using Quotes) = {
     import quotes.reflect.*
+    // scala.collection.immutable.TreeMap.apply()
+    // scala.collection.immutable.SortedMapOps
     Type.of[A] match {
-      // case tpe @ '[type coll[a, b] <: Map[a, b] with SortedMapOps[a, b, ?, ?]; SortedMapOps[key, value, coll, ?]] =>
+      // case tpe @ '[type coll[a, b] <: scala.collection.immutable.Map[a, b] & scala.collection.immutable.SortedMapOps[a, b, ?, ?]; coll] =>
       //   report.errorAndAbort(s"Wow I just matched mapOps ${Type.show[coll]}")
-      case tpe @ '[type coll[a, b] <: IterableOps[_, [a] =>> Any, _]; MapOps[key, value, coll, ?]] =>
-        report.errorAndAbort(s"Wow I just matched mapOps ${Type.show[coll]}")
-      case tpe @ '[type coll[a]; SetOps[elem, coll, ?]] =>
-        report.errorAndAbort(s"Wow I just matched setOps ${Type.show[coll]}")
-      case tpe @ '[type coll[a]; IterableOps[elem, coll, collM]] =>
-        report.errorAndAbort(s"Wow I just matched ${Type.show[coll]}")
-      case tpe @ '[Iterable[a]] => 
-        tpe.repr.typeSymbol.companionModule.typeRef.asType match {
-          case '[type coll[a]; IterableFactory[coll]] => report.errorAndAbort(s"Matched iterable fac ${Type.show[coll]}")
-          case '[type coll[a]; SortedIterableFactory[coll]] => report.errorAndAbort(s"Matched sorted iterable fac ${Type.show[coll]}")
-          case '[type map[k, v]; MapFactory[map]] => report.errorAndAbort(s"Matched map fac. ${Type.show[map]}")
-          case '[type map[k, v]; SortedMapFactory[map]] => report.errorAndAbort(s"Matched sorted map fac ${Type.show[map]}")
+      // case tpe @ '[type coll[a, b] <: IterableOps[_, [a] =>> Any, _]; MapOps[key, value, coll, ?]] =>
+      //   report.errorAndAbort(s"Wow I just matched mapOps ${Type.show[coll]}")
+      // case tpe @ '[type coll[a] <: SortedSet[a]; SortedSetOps[elems, coll, ?]] =>
+      //   report.errorAndAbort(s"Wow I just matched sortedSetOps ${Type.show[coll]}")
+      // case tpe @ '[type coll[a]; SetOps[elem, coll, ?]] =>
+      //   report.errorAndAbort(s"Wow I just matched setOps ${Type.show[coll]}")
+      // case tpe @ '[type coll[a]; IterableOps[elem, coll, collM]] =>
+      //   report.errorAndAbort(s"Wow I just matched ${Type.show[coll]}")
+      case tpe @ '[type param; type collection <: Iterable[param]; collection] => 
+        tpe.repr.simplified.widen match {
+          case AppliedType(tycon, args) => 
+            tycon.asType match {
+              case '[type map[k, v] <: collection.Map[k, v]; map] => 
+                
+                report.errorAndAbort(Expr.summon[Factory[(Int, Int), map[Int, Int]]].get.show)
+              case '[type coll[a] <: Iterable[a]; coll] => report.errorAndAbort(Type.show[coll])
+            }
+          case _ => report.errorAndAbort(Expr.summon[Factory[param, collection]].get.show)
         }
         // Expr.summon[]
         // report.errorAndAbort(s"elem type: ${Type.show[a]}")

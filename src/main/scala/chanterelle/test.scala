@@ -13,6 +13,7 @@ import scala.collection.BuildFrom
 import scala.collection.mutable.TreeMap
 import scala.collection.immutable.IntMap
 import scala.collection.immutable.HashMap
+import scala.collection.immutable.BitSet
 
 //TODO: report to metals: presentation compiler crash when referring to named tuple fields inside .update and .compute
 object test extends App {
@@ -24,7 +25,13 @@ object test extends App {
 
   val asd: TupleModifier.Builder[(name: Int, nested: (wow: Int, nah: Int))] = ???
 
-  EntryPoint.struct[SortedMap[Int, Int]]
+  // EntryPoint.struct[scala.collection.immutable.TreeMap[Int, Int]]
+
+  val asdasdas = BitSet()
+
+  // asdasdas.map()
+
+  // EntryPoint.struct[BitSet]
 
 
 
@@ -44,14 +51,14 @@ object test extends App {
   //           elem
   //     )
 
-  val renamedB =
-    a.transform(
-      _.compute(_.other.element.tup._2) { a => 
-        //TODO: if I uncomment 'val hmm' semantic highlighting dies and I get no autocomplete etc
-        // val hmm = a.name123
-        (newField123 = 231)
-      },
-      // _.update(_.other.element)(a => (iHaveANameNow = a))
-    )
+  val renamedB = ???
+    // a.transform(
+    //   _.compute(_.other.element.tup._2) { a => 
+    //     //TODO: if I uncomment 'val hmm' semantic highlighting dies and I get no autocomplete etc
+    //     // val hmm = a.name123
+    //     (newField123 = 231)
+    //   },
+    //   // _.update(_.other.element)(a => (iHaveANameNow = a))
+    // )
   println(renamedB)
 }

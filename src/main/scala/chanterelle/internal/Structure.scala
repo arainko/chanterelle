@@ -67,7 +67,7 @@ private[chanterelle] object Structure {
     collectionTpe: Type[? <: Iterable],
     path: Path,
     paramStruct: Structure
-  ) extends Structure {}
+  ) extends Structure
 
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
     def calculateTpe(using Quotes): Type[?] = tpe
