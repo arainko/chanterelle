@@ -4,7 +4,6 @@ import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
-import chanterelle.internal.CodePrinter.structure
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -54,13 +53,13 @@ private[chanterelle] object Structure {
     path: Path,
     elements: Vector[Structure],
     isPlain: Boolean
-  ) extends Structure {}
+  ) extends Structure
 
   case class Optional(
     tpe: Type[? <: Option[?]],
     path: Path,
     paramStruct: Structure
-  ) extends Structure {}
+  ) extends Structure
 
   case class Collection(
     tpe: Type[? <: Iterable[?]],
@@ -72,7 +71,7 @@ private[chanterelle] object Structure {
   object Collection {
     enum Repr derives Debug {
       case Map[F[k, v] <: scala.collection.Map[k, v]](tycon: Type[F], key: Structure, value: Structure)
-      case Iterable[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
+      case Iter[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
     }
   }
 
@@ -99,7 +98,7 @@ private[chanterelle] object Structure {
             )
           )
 
-        case tpe @ SupportedCollection(structure) => structure
+        case SupportedCollection(structure) => structure
 
         // TODO: report to dotty: it's not possible to match on a NamedTuple type like this: 'case '[NamedTuple[names, values]] => ...', this match always fails, you need to decompose stuff like the below
         case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
@@ -208,7 +207,7 @@ private[chanterelle] object Structure {
                   )
 
                 // matches on the likes of IntMap and LongMap
-                case '[type map[v] <: collection.Map[?, v]; map] -> args =>
+                case '[type map[v] <: collection.Map[?, v]; map] -> _ =>
                   None // TODO: support later? maybeeeee
 
                 case '[type coll[a] <: Iterable[a]; coll] -> ('[elem] :: Nil) =>
@@ -216,7 +215,7 @@ private[chanterelle] object Structure {
                     Structure.Collection(
                       tpe,
                       path,
-                      Structure.Collection.Repr.Iterable(
+                      Structure.Collection.Repr.Iter(
                         Type.of[coll],
                         Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
                       )

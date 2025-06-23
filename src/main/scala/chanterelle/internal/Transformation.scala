@@ -42,8 +42,11 @@ sealed trait Transformation derives Debug {
             mod.valueStructure.fieldName,
             Transformation.OfField.FromModifier(NamedSpecificConfigured.Compute(mod.valueStructure, mod.value))
           )
-        case (m: Modifier.Remove, t: Transformation.Named) =>
-          t.withoutField(m.fieldToRemove)
+        case (Modifier.Remove(fieldToRemove = name: String), t: Transformation.Named) =>
+          // IMO this should merely mark a field as deleted so we don't need to mess around with indices later on, same for named deletes
+          t.withoutField(name)
+        case (Modifier.Remove(fieldToRemove = idx: Int), t: Transformation.Tuple) =>
+          t.withoutField(idx)
         case (m: Modifier.Update, _) =>
           Transformation.ConfedUp(Transformation.Configured.Update(m.tpe, m.function))
       }
@@ -60,23 +63,17 @@ object Transformation {
         Named(named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
 
       case tuple: Structure.Tuple =>
-        Tuple(
-          tuple,
-          tuple.elements.map(fromStructure)
-        )
+        Tuple(tuple, tuple.elements.map(fromStructure))
 
       case optional: Structure.Optional =>
         Optional(optional, fromStructure(optional.paramStruct))
 
-      case coll: Structure.Collection => 
+      case coll: Structure.Collection =>
         coll.repr match
-          case source @ chanterelle.internal.Structure.Collection.Repr.Map(tycon, key, value) => 
+          case source @ Structure.Collection.Repr.Map(tycon, key, value) =>
             Transformation.Map(source, fromStructure(key), fromStructure(value))
-          case source @ chanterelle.internal.Structure.Collection.Repr.Iterable(tycon, element) =>
+          case source @ Structure.Collection.Repr.Iter(tycon, element) =>
             Transformation.Iter(source, fromStructure(element))
-        
-      // Collection(coll, fromStructure(coll.paramStruct))
-
       case leaf: Structure.Leaf =>
         Leaf(leaf)
     }
@@ -84,7 +81,7 @@ object Transformation {
 
   case class Named(
     source: Structure.Named,
-    fields: VectorMap[String, Transformation.OfField[String]]
+    fields: VectorMap[String, Transformation.OfField]
   ) extends Transformation {
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
@@ -93,8 +90,8 @@ object Transformation {
     def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
-          case _ -> OfField.FromSource(idx, transformation) => transformation.calculateTpe.repr
-          case _ -> OfField.FromModifier(conf)              => conf.tpe.repr
+          case _ -> OfField.FromSource(_, transformation) => transformation.calculateTpe.repr
+          case _ -> OfField.FromModifier(conf)            => conf.tpe.repr
         }.toVector
       )
 
@@ -114,10 +111,10 @@ object Transformation {
       this.copy(fields = this.fields.updated(name, fieldTransformation.copy(transformation = f(transformation))))
     }
 
-    def withModifiedFields(fields: VectorMap[String, Transformation.OfField[Nothing]]): Named =
+    def withModifiedFields(fields: VectorMap[String, Transformation.OfField]): Named =
       this.copy(fields = this.fields ++ fields)
 
-    def withModifiedField(name: String, transformation: Transformation.OfField[Nothing]): Named =
+    def withModifiedField(name: String, transformation: Transformation.OfField): Named =
       this.copy(fields = this.fields.updated(name, transformation)) // this will uhhh... create a new record if it doesn't exist
 
     def withoutField(name: String): Named =
@@ -138,6 +135,11 @@ object Transformation {
 
     def withModifiedElement(idx: Int, transformation: Transformation): Tuple =
       this.copy(fields = fields.updated(idx, transformation))
+
+    def withoutField(index: Int): Tuple = {
+      val (prefix, suffix) = fields.splitAt(index)
+      this.copy(fields = prefix ++ suffix.drop(1))
+    }
   }
 
   case class Optional(
@@ -173,12 +175,12 @@ object Transformation {
   }
 
   case class Iter[F[elem] <: Iterable[elem]](
-    source: Structure.Collection.Repr.Iterable[F],
+    source: Structure.Collection.Repr.Iter[F],
     elem: Transformation
   ) extends Transformation {
     def calculateTpe(using Quotes): Type[?] = {
       ((source.tycon, elem.calculateTpe): @unchecked) match {
-        case ('[type coll[a]; coll], '[elem]) => 
+        case ('[type coll[a]; coll], '[elem]) =>
           Type.of[coll[elem]]
       }
     }
@@ -195,9 +197,9 @@ object Transformation {
     def calculateTpe(using Quotes): Type[?] = config.tpe
   }
 
-  enum OfField[+Idx <: Int | String] derives Debug {
-    case FromSource(idx: Idx, transformation: Transformation)
-    case FromModifier(modifier: NamedSpecificConfigured) extends OfField[Nothing]
+  enum OfField derives Debug {
+    case FromSource(name: String, transformation: Transformation)
+    case FromModifier(modifier: NamedSpecificConfigured)
   }
 
   sealed trait NamedSpecificConfigured derives Debug {

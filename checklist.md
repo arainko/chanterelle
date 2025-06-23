@@ -4,19 +4,20 @@ MVP of the library:
     [X] named tuples
     [X] tuples
     [X] options
-    [] collections
+    [X] collections
 
   Modifiers:
-    [] single-element .add
-    [] single-element .compute
+    [X] single-element .add
+    [X] single-element .compute
     [X] update
     [] remove (both named and positional tuples)
     field renames:
-      [] locale
+      [] local
       [] regional
 
   Other:
     [] sane errors
+    [] optimized interpreter - turn non-modified branches into Leaves that just take the source value
 
 Further ideas:
   * deep merging

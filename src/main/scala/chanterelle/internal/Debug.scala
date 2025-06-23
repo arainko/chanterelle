@@ -5,6 +5,7 @@ import scala.compiletime.*
 import scala.deriving.Mirror
 import scala.quoted.*
 import scala.reflect.ClassTag
+import scala.reflect.TypeTest
 
 private[chanterelle] trait Debug[-A] {
   def astify(self: A)(using Quotes): Debug.AST
@@ -215,4 +216,11 @@ private[chanterelle] object Debug extends LowPriorityDebug {
 
 private[chanterelle] transparent trait LowPriorityDebug {
   given Debug[Nothing => Any] = Debug.nonShowable
+
+  given intOrString: Debug[Int | String] with {
+    def astify(self: Int | String)(using Quotes): Debug.AST = 
+      self match
+        case str: String => summon[Debug[String]].astify(str) 
+        case int: Int => summon[Debug[Int]].astify(int) 
+  }
 }
