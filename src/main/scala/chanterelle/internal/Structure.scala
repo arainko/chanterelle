@@ -62,7 +62,6 @@ private[chanterelle] object Structure {
     paramStruct: Structure
   ) extends Structure {}
 
-  // TODO: This is broken, pretty please revisit it later
   case class Collection(
     tpe: Type[? <: Iterable[?]],
     path: Path,
@@ -76,13 +75,6 @@ private[chanterelle] object Structure {
       case Iterable[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
     }
   }
-
-  case class Map(
-    tpe: Type[? <: Iterable[?]],
-    collectionTpe: Type[? <: Iterable],
-    path: Path,
-    paramStruct: Structure
-  ) extends Structure
 
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
     def calculateTpe(using Quotes): Type[?] = tpe

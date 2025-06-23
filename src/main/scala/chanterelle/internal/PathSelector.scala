@@ -82,9 +82,11 @@ private[chanterelle] object PathSelector {
           )
           recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
 
+          // Apply(Apply(TypeApply(Select(Ident("NamedTuple"), "apply"), List(Inferred(), Inferred())), List(Ident("_$2"))), List(Literal(IntConstant(2)))
+
         case Apply(
               Apply(
-                TypeApply(Ident("apply"), List(_, _)),
+                TypeApply(Ident("apply") | Select(Ident("NamedTuple"), "apply"), List(_, _)),
                 tree :: Nil
               ),
               Literal(IntConstant(idx)) :: Nil

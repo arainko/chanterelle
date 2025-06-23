@@ -19,8 +19,11 @@ sealed trait Transformation derives Debug {
         case (Path.Segment.Element(tpe) :: next, t: Transformation.Optional) =>
           t.update(recurse(next, _))
         case (Path.Segment.Element(tpe) :: next, t: Transformation.Iter[coll]) =>
-          ???
-        // t.update(recurse(next, _))
+          t.update(recurse(next, _))
+        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next, t: Transformation.Map[map]) =>
+          t.updateKey(recurse(next, _))
+        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next, t: Transformation.Map[map]) =>
+          t.updateValue(recurse(next, _))
         case (Nil, t) => apply(modifier, t)
         case (p, t)   => report.errorAndAbort(s"Illegal path segment and transformation combo: ${Debug.show(t)}")
       }
@@ -67,8 +70,8 @@ object Transformation {
 
       case coll: Structure.Collection => 
         coll.repr match
-          case chanterelle.internal.Structure.Collection.Repr.Map(tycon, key, value) => 
-            ???
+          case source @ chanterelle.internal.Structure.Collection.Repr.Map(tycon, key, value) => 
+            Transformation.Map(source, fromStructure(key), fromStructure(value))
           case source @ chanterelle.internal.Structure.Collection.Repr.Iterable(tycon, element) =>
             Transformation.Iter(source, fromStructure(element))
         
@@ -156,12 +159,17 @@ object Transformation {
     key: Transformation,
     value: Transformation
   ) extends Transformation {
-    def calculateTpe(using Quotes): Type[? <: collection.Map[?, ?]] = {
-      given Type[F] = source.tycon
-      ((key.calculateTpe, value.calculateTpe): @unchecked) match {
-        case ('[key], '[value]) => Type.of[F[key, value]]
+    def calculateTpe(using Quotes): Type[?] = {
+      ((source.tycon, key.calculateTpe, value.calculateTpe): @unchecked) match {
+        case ('[type map[k, v]; map], '[key], '[value]) => Type.of[map[key, value]]
       }
     }
+
+    def updateKey(f: Transformation => Transformation): Map[F] =
+      this.copy(key = f(key))
+
+    def updateValue(f: Transformation => Transformation): Map[F] =
+      this.copy(value = f(value))
   }
 
   case class Iter[F[elem] <: Iterable[elem]](
@@ -169,12 +177,14 @@ object Transformation {
     elem: Transformation
   ) extends Transformation {
     def calculateTpe(using Quotes): Type[?] = {
-      // given Type[F] = source.tycon
       ((source.tycon, elem.calculateTpe): @unchecked) match {
         case ('[type coll[a]; coll], '[elem]) => 
           Type.of[coll[elem]]
       }
     }
+
+    def update(f: Transformation => Transformation): Iter[F] =
+      this.copy(elem = f(elem))
   }
 
   case class Leaf(output: Structure.Leaf) extends Transformation {

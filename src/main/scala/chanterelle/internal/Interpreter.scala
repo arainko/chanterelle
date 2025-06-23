@@ -66,7 +66,7 @@ private[chanterelle] object Interpreter {
                 '{ $fn(${ value.asExprOf[src] }) }
             }
 
-      case t @ Transformation.Iter(source, paramTransformation) =>
+      case Transformation.Iter(source, paramTransformation) =>
         paramTransformation.calculateTpe match {
           case '[elem] =>
             value match {
@@ -74,16 +74,29 @@ private[chanterelle] object Interpreter {
                 source.tycon match {
                   case '[type coll[a]; coll] =>
                     val factory = Expr.summon[Factory[elem, coll[elem]]].getOrElse(report.errorAndAbort("No factory found"))
-                    factory match {
-                      case '{ $fac: Factory[el, targetColl] } =>
                         '{
                           $srcValue
-                            .map[el](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[el] })
-                            .to[targetColl]($fac)
+                            .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
+                            .to[coll[elem]]($factory)
                         }
 
-                    }
                 }
+            }
+        }
+
+      case Transformation.Map(source, keyTransformation, valueTransformation) =>
+        (source.tycon, keyTransformation.calculateTpe, valueTransformation.calculateTpe, value): @unchecked match {
+          case ('[type map[k, v]; map], '[key], '[value], '{ $srcValue: collection.Map[k, v] }) =>
+            val factory = Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(report.errorAndAbort("No factory found"))
+            '{
+              $srcValue
+                .map[key, value]((k, v) =>
+                  (
+                    ${ runTransformation('k, keyTransformation).asExprOf[key] },
+                    ${ runTransformation('v, valueTransformation).asExprOf[value] }
+                  )
+                )
+                .to[map[key, value]]($factory)
             }
         }
       case Transformation.Leaf(_) => value
