@@ -66,22 +66,25 @@ private[chanterelle] object Interpreter {
                 '{ $fn(${ value.asExprOf[src] }) }
             }
 
-      case t @ Transformation.Collection(source, paramTransformation) =>
-        value match {
-          case '{
-                type a
-                type srcColl <: Iterable[a]
-                $coll: srcColl
-              } =>
-            report.errorAndAbort(
-              s"God damn this thing why is this not decomposing into the type constructor ffs ${Type.show[srcColl]}"
-            )
+      case t @ Transformation.Iter(source, paramTransformation) =>
+        paramTransformation.calculateTpe match {
+          case '[elem] =>
+            value match {
+              case '{ $srcValue: Iterable[srcElem] } =>
+                source.tycon match {
+                  case '[type coll[a]; coll] =>
+                    val factory = Expr.summon[Factory[elem, coll[elem]]].getOrElse(report.errorAndAbort("No factory found"))
+                    factory match {
+                      case '{ $fac: Factory[el, targetColl] } =>
+                        '{
+                          $srcValue
+                            .map[el](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[el] })
+                            .to[targetColl]($fac)
+                        }
 
-          // (source.tpe, t.calculateTpe): @unchecked match {
-          //   case '[type ccSource <: Iterable[a]; ccSource] -> '[outParam] =>
-          //     val optValue = value.asExprOf[ccSource]
-          //     val factory = Expr.summon[Factory[out, ccOut[out]]].get
-          //     '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }).to($factory) }
+                    }
+                }
+            }
         }
       case Transformation.Leaf(_) => value
   }

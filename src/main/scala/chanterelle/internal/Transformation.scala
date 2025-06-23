@@ -18,8 +18,9 @@ sealed trait Transformation derives Debug {
           t.update(index, recurse(next, _))
         case (Path.Segment.Element(tpe) :: next, t: Transformation.Optional) =>
           t.update(recurse(next, _))
-        case (Path.Segment.Element(tpe) :: next, t: Transformation.Collection) =>
-          t.update(recurse(next, _))
+        case (Path.Segment.Element(tpe) :: next, t: Transformation.Iter[coll]) =>
+          ???
+        // t.update(recurse(next, _))
         case (Nil, t) => apply(modifier, t)
         case (p, t)   => report.errorAndAbort(s"Illegal path segment and transformation combo: ${Debug.show(t)}")
       }
@@ -29,9 +30,15 @@ sealed trait Transformation derives Debug {
       import quotes.reflect.*
       (modifier, transformation) match {
         case (mod: Modifier.Add, t: Transformation.Named) =>
-          t.withModifiedField(mod.valueStructure.fieldName, Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(mod.valueStructure, mod.value)))
+          t.withModifiedField(
+            mod.valueStructure.fieldName,
+            Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(mod.valueStructure, mod.value))
+          )
         case (mod: Modifier.Compute, t: Transformation.Named) =>
-          t.withModifiedField(mod.valueStructure.fieldName, Transformation.OfField.FromModifier(NamedSpecificConfigured.Compute(mod.valueStructure, mod.value)))
+          t.withModifiedField(
+            mod.valueStructure.fieldName,
+            Transformation.OfField.FromModifier(NamedSpecificConfigured.Compute(mod.valueStructure, mod.value))
+          )
         case (m: Modifier.Remove, t: Transformation.Named) =>
           t.withoutField(m.fieldToRemove)
         case (m: Modifier.Update, _) =>
@@ -58,8 +65,14 @@ object Transformation {
       case optional: Structure.Optional =>
         Optional(optional, fromStructure(optional.paramStruct))
 
-      case coll: Structure.Collection =>
-        Collection(coll, fromStructure(coll.paramStruct))
+      case coll: Structure.Collection => 
+        coll.repr match
+          case chanterelle.internal.Structure.Collection.Repr.Map(tycon, key, value) => 
+            ???
+          case source @ chanterelle.internal.Structure.Collection.Repr.Iterable(tycon, element) =>
+            Transformation.Iter(source, fromStructure(element))
+        
+      // Collection(coll, fromStructure(coll.paramStruct))
 
       case leaf: Structure.Leaf =>
         Leaf(leaf)
@@ -138,19 +151,30 @@ object Transformation {
 
   }
 
-  case class Collection(
-    source: Structure.Collection,
-    paramTransformation: Transformation
+  case class Map[F[k, v] <: collection.Map[k, v]](
+    source: Structure.Collection.Repr.Map[F],
+    key: Transformation,
+    value: Transformation
   ) extends Transformation {
-    def calculateTpe(using Quotes): Type[? <: Iterable[?]] =
-      paramTransformation.calculateTpe match {
-        case '[tpe] =>
-          import quotes.reflect.*
-          AppliedType(source.collectionTpe.repr, TypeRepr.of[tpe] :: Nil).asType.asInstanceOf[Type[? <: Iterable[?]]]
+    def calculateTpe(using Quotes): Type[? <: collection.Map[?, ?]] = {
+      given Type[F] = source.tycon
+      ((key.calculateTpe, value.calculateTpe): @unchecked) match {
+        case ('[key], '[value]) => Type.of[F[key, value]]
       }
+    }
+  }
 
-    def update(f: Transformation => Transformation): Collection =
-      this.copy(paramTransformation = f(paramTransformation))
+  case class Iter[F[elem] <: Iterable[elem]](
+    source: Structure.Collection.Repr.Iterable[F],
+    elem: Transformation
+  ) extends Transformation {
+    def calculateTpe(using Quotes): Type[?] = {
+      // given Type[F] = source.tycon
+      ((source.tycon, elem.calculateTpe): @unchecked) match {
+        case ('[type coll[a]; coll], '[elem]) => 
+          Type.of[coll[elem]]
+      }
+    }
   }
 
   case class Leaf(output: Structure.Leaf) extends Transformation {
@@ -188,7 +212,6 @@ object Transformation {
     }
   }
 
-  
   enum Configured derives Debug {
     def tpe: Type[?]
 

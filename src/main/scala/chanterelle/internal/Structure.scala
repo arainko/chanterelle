@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
+import chanterelle.internal.CodePrinter.structure
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -64,6 +65,20 @@ private[chanterelle] object Structure {
   // TODO: This is broken, pretty please revisit it later
   case class Collection(
     tpe: Type[? <: Iterable[?]],
+    path: Path,
+    repr: Collection.Repr
+    // paramStruct: Structure
+  ) extends Structure
+
+  object Collection {
+    enum Repr derives Debug {
+      case Map[F[k, v] <: scala.collection.Map[k, v]](tycon: Type[F], key: Structure, value: Structure)
+      case Iterable[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
+    }
+  }
+
+  case class Map(
+    tpe: Type[? <: Iterable[?]],
     collectionTpe: Type[? <: Iterable],
     path: Path,
     paramStruct: Structure
@@ -77,6 +92,7 @@ private[chanterelle] object Structure {
     Structure.of[A](Path.empty(Type.of[A]))
 
   def of[A: Type](path: Path)(using Quotes): Structure = {
+    given Path = path // just for SupportedCollection, maybe come up with something nicer?
     Logger.loggedInfo("Structure"):
       Type.of[A] match {
         case tpe @ '[Nothing] =>
@@ -91,24 +107,7 @@ private[chanterelle] object Structure {
             )
           )
 
-        // TODO: This is broken, pretty please revisit it later
-        case tpe @ '[Iterable[param]] =>
-          import quotes.reflect.*
-          tpe.repr match {
-            case AppliedType(tycon, _) =>
-              tycon.asType match {
-                case '[f] =>
-                  Structure.Collection(
-                    tpe,
-                    Type.of[f].asInstanceOf,
-                    // tpe match { case '[type coll[a]; coll[a]] => Type.of[coll] },
-                    path,
-                    Structure.of[param](
-                      path.appended(Path.Segment.Element(Type.of[param]))
-                    )
-                  )
-              }
-          }
+        case tpe @ SupportedCollection(structure) => structure
 
         // TODO: report to dotty: it's not possible to match on a NamedTuple type like this: 'case '[NamedTuple[names, values]] => ...', this match always fails, you need to decompose stuff like the below
         case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
@@ -117,7 +116,7 @@ private[chanterelle] object Structure {
           val transformations =
             tupleTypeElements(valuesTpe)
               .zip(constStringTuple(namesTpe.repr))
-              .map((tpe, name) => //TODO: report to metals: no hover info over untupled parameter
+              .map((tpe, name) => // TODO: report to metals: no hover info over untupled parameter
                 name -> (tpe.asType match {
                   case '[tpe] =>
                     Structure.of[tpe](
@@ -193,5 +192,50 @@ private[chanterelle] object Structure {
   private def constStringTuple(using Quotes)(tp: quotes.reflect.TypeRepr): List[String] = {
     import quotes.reflect.*
     tupleTypeElements(tp.asType).map { case ConstantType(StringConstant(l)) => l }
+  }
+
+  private object SupportedCollection {
+    def unapply(tpe: Type[?])(using q: Quotes, path: Path): Option[Structure.Collection] = {
+      import quotes.reflect.*
+      tpe match {
+        case tpe @ '[Iterable[param]] =>
+          tpe.repr.simplified.widen match {
+            case AppliedType(tycon, args) =>
+              (tycon.asType -> args.map(_.asType)) match {
+                case '[type map[k, v] <: collection.Map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
+                  Some(
+                    Structure.Collection(
+                      tpe,
+                      path,
+                      Structure.Collection.Repr.Map(
+                        Type.of[map],
+                        Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
+                        Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
+                      )
+                    )
+                  )
+
+                // matches on the likes of IntMap and LongMap
+                case '[type map[v] <: collection.Map[?, v]; map] -> args =>
+                  None // TODO: support later? maybeeeee
+
+                case '[type coll[a] <: Iterable[a]; coll] -> ('[elem] :: Nil) =>
+                  Some(
+                    Structure.Collection(
+                      tpe,
+                      path,
+                      Structure.Collection.Repr.Iterable(
+                        Type.of[coll],
+                        Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
+                      )
+                    )
+                  )
+                case _ => None
+              }
+            case _ => None
+          }
+        case _ => None
+      }
+    }
   }
 }
