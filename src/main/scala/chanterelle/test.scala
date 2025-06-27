@@ -4,6 +4,7 @@ import chanterelle.internal.EntryPoint
 
 // import scala.NamedTuple.
 import scala.collection.immutable.TreeMap
+import scala.quoted.Type
 
 //TODO: report to metals: presentation compiler crash when referring to named tuple fields inside .update and .compute
 object test extends App {

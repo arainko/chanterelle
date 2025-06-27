@@ -2,65 +2,65 @@ package chanterelle.internal
 
 import scala.quoted.*
 import scala.collection.immutable.VectorMap
-import chanterelle.internal.Transformation.NamedSpecificConfigured
+import scala.collection.mutable.ArrayBuffer
 
-sealed trait Transformation derives Debug {
+sealed trait ModifiableTransformation derives Debug {
 
   def calculateTpe(using Quotes): Type[?]
 
-  final def applyModifier(modifier: Modifier)(using Quotes): Transformation = {
-    def recurse(segments: List[Path.Segment], curr: Transformation)(using Quotes): Transformation = {
+  final def applyModifier(modifier: Modifier)(using Quotes): ModifiableTransformation = {
+    def recurse(segments: List[Path.Segment], curr: ModifiableTransformation)(using Quotes): ModifiableTransformation = {
       import quotes.reflect.*
       (segments, curr) match {
-        case (Path.Segment.Field(name = name) :: next, t: Transformation.Named) =>
+        case (Path.Segment.Field(name = name) :: next, t: ModifiableTransformation.Named) =>
           t.update(name, recurse(next, _))
-        case (Path.Segment.TupleElement(index = index) :: next, t: Transformation.Tuple) =>
+        case (Path.Segment.TupleElement(index = index) :: next, t: ModifiableTransformation.Tuple) =>
           t.update(index, recurse(next, _))
-        case (Path.Segment.Element(tpe) :: next, t: Transformation.Optional) =>
+        case (Path.Segment.Element(tpe) :: next, t: ModifiableTransformation.Optional) =>
           t.update(recurse(next, _))
-        case (Path.Segment.Element(tpe) :: next, t: Transformation.Iter[coll]) =>
+        case (Path.Segment.Element(tpe) :: next, t: ModifiableTransformation.Iter[coll]) =>
           t.update(recurse(next, _))
-        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next, t: Transformation.Map[map]) =>
+        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next, t: ModifiableTransformation.Map[map]) =>
           t.updateKey(recurse(next, _))
-        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next, t: Transformation.Map[map]) =>
+        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next, t: ModifiableTransformation.Map[map]) =>
           t.updateValue(recurse(next, _))
         case (Nil, t) => apply(modifier, t)
         case (p, t)   => report.errorAndAbort(s"Illegal path segment and transformation combo: ${Debug.show(t)}")
       }
     }
 
-    def apply(modifier: Modifier, transformation: Transformation)(using Quotes): Transformation = {
+    def apply(modifier: Modifier, transformation: ModifiableTransformation)(using Quotes): ModifiableTransformation = {
       import quotes.reflect.*
       (modifier, transformation) match {
-        case (mod: Modifier.Add, t: Transformation.Named) =>
+        case (mod: Modifier.Add, t: ModifiableTransformation.Named) =>
           t.withModifiedField(
             mod.valueStructure.fieldName,
-            Transformation.OfField.FromModifier(NamedSpecificConfigured.Add(mod.valueStructure, mod.value))
+            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Add(mod.valueStructure, mod.value))
           )
-        case (mod: Modifier.Compute, t: Transformation.Named) =>
+        case (mod: Modifier.Compute, t: ModifiableTransformation.Named) =>
           t.withModifiedField(
             mod.valueStructure.fieldName,
-            Transformation.OfField.FromModifier(NamedSpecificConfigured.Compute(mod.valueStructure, mod.value))
+            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Compute(mod.valueStructure, mod.value))
           )
-        case (Modifier.Remove(fieldToRemove = name: String), t: Transformation.Named) =>
+        case (Modifier.Remove(fieldToRemove = name: String), t: ModifiableTransformation.Named) =>
           // IMO this should merely mark a field as deleted so we don't need to mess around with indices later on, same for named deletes
           t.withoutField(name)
-        case (Modifier.Remove(fieldToRemove = idx: Int), t: Transformation.Tuple) =>
+        case (Modifier.Remove(fieldToRemove = idx: Int), t: ModifiableTransformation.Tuple) =>
           t.withoutField(idx)
         case (m: Modifier.Update, _) =>
-          Transformation.ConfedUp(Transformation.Configured.Update(m.tpe, m.function))
+          ModifiableTransformation.ConfedUp(Configured.Update(m.tpe, m.function))
       }
     }
     recurse(modifier.path.segments.toList, this)
   }
 }
 
-object Transformation {
+object ModifiableTransformation {
 
-  def fromStructure(structure: Structure): Transformation = {
+  def fromStructure(structure: Structure): ModifiableTransformation = {
     structure match {
       case named: Structure.Named =>
-        Named(named, named.fields.map { (name, field) => name -> Transformation.OfField.FromSource(name, fromStructure(field)) })
+        Named(named, named.fields.map { (name, field) => name -> ModifiableTransformation.OfField.FromSource(name, fromStructure(field), false) })
 
       case tuple: Structure.Tuple =>
         Tuple(tuple, tuple.elements.map(fromStructure))
@@ -71,9 +71,9 @@ object Transformation {
       case coll: Structure.Collection =>
         coll.repr match
           case source @ Structure.Collection.Repr.Map(tycon, key, value) =>
-            Transformation.Map(source, fromStructure(key), fromStructure(value))
+            ModifiableTransformation.Map(source, fromStructure(key), fromStructure(value))
           case source @ Structure.Collection.Repr.Iter(tycon, element) =>
-            Transformation.Iter(source, fromStructure(element))
+            ModifiableTransformation.Iter(source, fromStructure(element))
       case leaf: Structure.Leaf =>
         Leaf(leaf)
     }
@@ -81,8 +81,8 @@ object Transformation {
 
   case class Named(
     source: Structure.Named,
-    fields: VectorMap[String, Transformation.OfField]
-  ) extends Transformation {
+    fields: VectorMap[String, ModifiableTransformation.OfField]
+  ) extends ModifiableTransformation {
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
@@ -90,7 +90,7 @@ object Transformation {
     def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
-          case _ -> OfField.FromSource(_, transformation) => transformation.calculateTpe.repr
+          case _ -> OfField.FromSource(_, transformation, _) => transformation.calculateTpe.repr
           case _ -> OfField.FromModifier(conf)            => conf.tpe.repr
         }.toVector
       )
@@ -104,17 +104,17 @@ object Transformation {
       }
     }
 
-    def update(name: String, f: Transformation => Transformation)(using Quotes): Named = {
+    def update(name: String, f: ModifiableTransformation => ModifiableTransformation)(using Quotes): Named = {
       import quotes.reflect.*
-      val fieldTransformation @ Transformation.OfField.FromSource(idx, transformation) =
+      val fieldTransformation @ ModifiableTransformation.OfField.FromSource(idx, transformation, _) =
         this.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
-      this.copy(fields = this.fields.updated(name, fieldTransformation.copy(transformation = f(transformation))))
+      this.copy(fields = this.fields.updated(name, fieldTransformation.copy(transformation = f(transformation), removed = false)))
     }
 
-    def withModifiedFields(fields: VectorMap[String, Transformation.OfField]): Named =
+    def withModifiedFields(fields: VectorMap[String, ModifiableTransformation.OfField]): Named =
       this.copy(fields = this.fields ++ fields)
 
-    def withModifiedField(name: String, transformation: Transformation.OfField): Named =
+    def withModifiedField(name: String, transformation: ModifiableTransformation.OfField): Named =
       this.copy(fields = this.fields.updated(name, transformation)) // this will uhhh... create a new record if it doesn't exist
 
     def withoutField(name: String): Named =
@@ -123,61 +123,62 @@ object Transformation {
 
   case class Tuple(
     source: Structure.Tuple,
-    fields: Vector[Transformation]
-  ) extends Transformation {
+    fields: Vector[ModifiableTransformation]
+  ) extends ModifiableTransformation {
 
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.map(_.calculateTpe.repr))
 
-    def update(index: Int, f: Transformation => Transformation): Tuple = {
+    def update(index: Int, f: ModifiableTransformation => ModifiableTransformation): Tuple = {
       this.copy(fields = fields.updated(index, f(fields(index))))
     }
 
-    def withModifiedElement(idx: Int, transformation: Transformation): Tuple =
+    def withModifiedElement(idx: Int, transformation: ModifiableTransformation): Tuple =
       this.copy(fields = fields.updated(idx, transformation))
 
     def withoutField(index: Int): Tuple = {
       val (prefix, suffix) = fields.splitAt(index)
       this.copy(fields = prefix ++ suffix.drop(1))
     }
+
   }
 
   case class Optional(
     source: Structure.Optional,
-    paramTransformation: Transformation
-  ) extends Transformation {
+    paramTransformation: ModifiableTransformation
+  ) extends ModifiableTransformation {
     def calculateTpe(using Quotes): Type[? <: Option[?]] =
       paramTransformation.calculateTpe match {
         case '[tpe] => Type.of[Option[tpe]]
       }
 
-    def update(f: Transformation => Transformation): Optional =
+    def update(f: ModifiableTransformation => ModifiableTransformation): Optional =
       this.copy(paramTransformation = f(paramTransformation))
 
   }
 
   case class Map[F[k, v] <: collection.Map[k, v]](
     source: Structure.Collection.Repr.Map[F],
-    key: Transformation,
-    value: Transformation
-  ) extends Transformation {
+    key: ModifiableTransformation,
+    value: ModifiableTransformation
+  ) extends ModifiableTransformation {
     def calculateTpe(using Quotes): Type[?] = {
       ((source.tycon, key.calculateTpe, value.calculateTpe): @unchecked) match {
         case ('[type map[k, v]; map], '[key], '[value]) => Type.of[map[key, value]]
       }
     }
 
-    def updateKey(f: Transformation => Transformation): Map[F] =
+    def updateKey(f: ModifiableTransformation => ModifiableTransformation): Map[F] =
       this.copy(key = f(key))
 
-    def updateValue(f: Transformation => Transformation): Map[F] =
+    def updateValue(f: ModifiableTransformation => ModifiableTransformation): Map[F] =
       this.copy(value = f(value))
   }
 
   case class Iter[F[elem] <: Iterable[elem]](
     source: Structure.Collection.Repr.Iter[F],
-    elem: Transformation
-  ) extends Transformation {
+    elem: ModifiableTransformation
+  ) extends ModifiableTransformation {
     def calculateTpe(using Quotes): Type[?] = {
       ((source.tycon, elem.calculateTpe): @unchecked) match {
         case ('[type coll[a]; coll], '[elem]) =>
@@ -185,52 +186,21 @@ object Transformation {
       }
     }
 
-    def update(f: Transformation => Transformation): Iter[F] =
+    def update(f: ModifiableTransformation => ModifiableTransformation): Iter[F] =
       this.copy(elem = f(elem))
   }
 
-  case class Leaf(output: Structure.Leaf) extends Transformation {
+  case class Leaf(output: Structure.Leaf) extends ModifiableTransformation {
     def calculateTpe(using Quotes): Type[?] = output.tpe
   }
 
-  case class ConfedUp(config: Configured) extends Transformation {
+  case class ConfedUp(config: Configured) extends ModifiableTransformation {
     def calculateTpe(using Quotes): Type[?] = config.tpe
   }
 
   enum OfField derives Debug {
-    case FromSource(name: String, transformation: Transformation)
-    case FromModifier(modifier: NamedSpecificConfigured)
-  }
-
-  sealed trait NamedSpecificConfigured derives Debug {
-    def tpe: Type[?]
-  }
-
-  object NamedSpecificConfigured {
-    case class Add(
-      valueStructure: Structure.Named.Singular,
-      value: Expr[?]
-    ) extends NamedSpecificConfigured {
-      export valueStructure.fieldName
-      export valueStructure.valueStructure.tpe
-    }
-
-    case class Compute(
-      valueStructure: Structure.Named.Singular,
-      fn: Expr[? => ?]
-    ) extends NamedSpecificConfigured {
-      export valueStructure.fieldName
-      export valueStructure.valueStructure.tpe
-    }
-  }
-
-  enum Configured derives Debug {
-    def tpe: Type[?]
-
-    case Update(
-      tpe: Type[?],
-      fn: Expr[? => ?]
-    )
+    case FromSource(name: String, transformation: ModifiableTransformation, removed: Boolean)
+    case FromModifier(modifier: Configured.NamedSpecific)
   }
 
   private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
