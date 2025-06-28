@@ -17,7 +17,7 @@ private[chanterelle] object Interpreter {
         ((t.calculateNamesTpe, t.calculateValuesTpe): @unchecked) match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map {
-              case (name, ModifiableTransformation.OfField.FromModifier(modifier)) =>
+              case (name, ModifiableTransformation.OfField.FromModifier(modifier, _)) =>
                 modifier match {
                   case Configured.NamedSpecific.Add(valueStructure = struct, value = value) =>
                     StructuredValue.of(struct, value).fieldValue(struct.fieldName)

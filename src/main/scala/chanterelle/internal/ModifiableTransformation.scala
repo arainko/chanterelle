@@ -35,12 +35,12 @@ sealed trait ModifiableTransformation derives Debug {
         case (mod: Modifier.Add, t: ModifiableTransformation.Named) =>
           t.withModifiedField(
             mod.valueStructure.fieldName,
-            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Add(mod.valueStructure, mod.value))
+            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Add(mod.valueStructure, mod.value), false)
           )
         case (mod: Modifier.Compute, t: ModifiableTransformation.Named) =>
           t.withModifiedField(
             mod.valueStructure.fieldName,
-            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Compute(mod.valueStructure, mod.value))
+            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Compute(mod.valueStructure, mod.value), false)
           )
         case (Modifier.Remove(fieldToRemove = name: String), t: ModifiableTransformation.Named) =>
           // IMO this should merely mark a field as deleted so we don't need to mess around with indices later on, same for named deletes
@@ -60,7 +60,12 @@ object ModifiableTransformation {
   def fromStructure(structure: Structure): ModifiableTransformation = {
     structure match {
       case named: Structure.Named =>
-        Named(named, named.fields.map { (name, field) => name -> ModifiableTransformation.OfField.FromSource(name, fromStructure(field), false) })
+        Named(
+          named,
+          named.fields.map { (name, field) =>
+            name -> ModifiableTransformation.OfField.FromSource(name, fromStructure(field), false)
+          }
+        )
 
       case tuple: Structure.Tuple =>
         Tuple(tuple, tuple.elements.map(fromStructure))
@@ -91,7 +96,7 @@ object ModifiableTransformation {
       rollupTuple(
         fields.map {
           case _ -> OfField.FromSource(_, transformation, _) => transformation.calculateTpe.repr
-          case _ -> OfField.FromModifier(conf)            => conf.tpe.repr
+          case _ -> OfField.FromModifier(conf, _)               => conf.tpe.repr
         }.toVector
       )
 
@@ -118,7 +123,11 @@ object ModifiableTransformation {
       this.copy(fields = this.fields.updated(name, transformation)) // this will uhhh... create a new record if it doesn't exist
 
     def withoutField(name: String): Named =
-      this.copy(fields = this.fields - name)
+      this.copy(fields = this.fields.updatedWith(name) {
+        case Some(src: ModifiableTransformation.OfField.FromSource)   => Some(src.copy(removed = true))
+        case Some(mod: ModifiableTransformation.OfField.FromModifier) => Some(mod.copy(removed = true))
+        case None                                                     => throw new RuntimeException(s"no field named ${name}")
+      })
   }
 
   case class Tuple(
@@ -199,8 +208,10 @@ object ModifiableTransformation {
   }
 
   enum OfField derives Debug {
+    def removed: Boolean
+
     case FromSource(name: String, transformation: ModifiableTransformation, removed: Boolean)
-    case FromModifier(modifier: Configured.NamedSpecific)
+    case FromModifier(modifier: Configured.NamedSpecific, removed: Boolean)
   }
 
   private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
