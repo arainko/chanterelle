@@ -1,8 +1,8 @@
 package chanterelle.internal
 
-import scala.quoted.*
+import scala.collection.immutable.SortedMap
 import scala.collection.immutable.VectorMap
-import scala.collection.mutable.ArrayBuffer
+import scala.quoted.*
 
 sealed trait ModifiableTransformation derives Debug {
 
@@ -30,7 +30,6 @@ sealed trait ModifiableTransformation derives Debug {
     }
 
     def apply(modifier: Modifier, transformation: ModifiableTransformation)(using Quotes): ModifiableTransformation = {
-      import quotes.reflect.*
       (modifier, transformation) match {
         case (mod: Modifier.Add, t: ModifiableTransformation.Named) =>
           t.withModifiedField(
@@ -43,7 +42,6 @@ sealed trait ModifiableTransformation derives Debug {
             ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Compute(mod.valueStructure, mod.value), false)
           )
         case (Modifier.Remove(fieldToRemove = name: String), t: ModifiableTransformation.Named) =>
-          // IMO this should merely mark a field as deleted so we don't need to mess around with indices later on, same for named deletes
           t.withoutField(name)
         case (Modifier.Remove(fieldToRemove = idx: Int), t: ModifiableTransformation.Tuple) =>
           t.withoutField(idx)
@@ -57,28 +55,28 @@ sealed trait ModifiableTransformation derives Debug {
 
 object ModifiableTransformation {
 
-  def fromStructure(structure: Structure): ModifiableTransformation = {
+  def create(structure: Structure): ModifiableTransformation = {
     structure match {
       case named: Structure.Named =>
         Named(
           named,
           named.fields.map { (name, field) =>
-            name -> ModifiableTransformation.OfField.FromSource(name, fromStructure(field), false)
+            name -> ModifiableTransformation.OfField.FromSource(name, create(field), false)
           }
         )
 
       case tuple: Structure.Tuple =>
-        Tuple(tuple, tuple.elements.map(fromStructure))
+        Tuple(tuple, tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = create(t), removed = false)).to(SortedMap))
 
       case optional: Structure.Optional =>
-        Optional(optional, fromStructure(optional.paramStruct))
+        Optional(optional, create(optional.paramStruct))
 
       case coll: Structure.Collection =>
         coll.repr match
           case source @ Structure.Collection.Repr.Map(tycon, key, value) =>
-            ModifiableTransformation.Map(source, fromStructure(key), fromStructure(value))
+            ModifiableTransformation.Map(source, create(key), create(value))
           case source @ Structure.Collection.Repr.Iter(tycon, element) =>
-            ModifiableTransformation.Iter(source, fromStructure(element))
+            ModifiableTransformation.Iter(source, create(element))
       case leaf: Structure.Leaf =>
         Leaf(leaf)
     }
@@ -86,8 +84,10 @@ object ModifiableTransformation {
 
   case class Named(
     source: Structure.Named,
-    fields: VectorMap[String, ModifiableTransformation.OfField]
+    private val allFields: VectorMap[String, OfField]
   ) extends ModifiableTransformation {
+    final def _2 = fields
+    val fields: VectorMap[String, OfField] = allFields.filter((_, t) => !t.removed)
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
@@ -95,8 +95,8 @@ object ModifiableTransformation {
     def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
-          case _ -> OfField.FromSource(_, transformation, _) => transformation.calculateTpe.repr
-          case _ -> OfField.FromModifier(conf, _)               => conf.tpe.repr
+          case _ -> OfField.FromSource(transformation = t) => t.calculateTpe.repr
+          case _ -> OfField.FromModifier(modifier = conf)  => conf.tpe.repr
         }.toVector
       )
 
@@ -112,44 +112,54 @@ object ModifiableTransformation {
     def update(name: String, f: ModifiableTransformation => ModifiableTransformation)(using Quotes): Named = {
       import quotes.reflect.*
       val fieldTransformation @ ModifiableTransformation.OfField.FromSource(idx, transformation, _) =
-        this.fields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
-      this.copy(fields = this.fields.updated(name, fieldTransformation.copy(transformation = f(transformation), removed = false)))
+        this.allFields.getOrElse(name, report.errorAndAbort(s"No field ${name}")): @unchecked // TODO: temporary
+      this.copy(allFields =
+        this.allFields.updated(name, fieldTransformation.copy(transformation = f(transformation), removed = false))
+      )
     }
 
     def withModifiedFields(fields: VectorMap[String, ModifiableTransformation.OfField]): Named =
-      this.copy(fields = this.fields ++ fields)
+      this.copy(allFields = this.allFields ++ fields)
 
     def withModifiedField(name: String, transformation: ModifiableTransformation.OfField): Named =
-      this.copy(fields = this.fields.updated(name, transformation)) // this will uhhh... create a new record if it doesn't exist
+      this.copy(allFields =
+        this.allFields.updated(name, transformation)
+      ) // this will uhhh... create a new record if it doesn't exist
 
-    def withoutField(name: String): Named =
-      this.copy(fields = this.fields.updatedWith(name) {
+    def withoutField(name: String)(using Quotes): Named =
+      this.copy(allFields = this.allFields.updatedWith(name) {
         case Some(src: ModifiableTransformation.OfField.FromSource)   => Some(src.copy(removed = true))
         case Some(mod: ModifiableTransformation.OfField.FromModifier) => Some(mod.copy(removed = true))
-        case None                                                     => throw new RuntimeException(s"no field named ${name}")
+        case None => quotes.reflect.report.errorAndAbort(s"no field named ${name}")
       })
   }
 
   case class Tuple(
     source: Structure.Tuple,
-    fields: Vector[ModifiableTransformation]
+    private val allFields: SortedMap[Int, (transformation: ModifiableTransformation, removed: Boolean)]
   ) extends ModifiableTransformation {
+    final def _2 = fields
+    val fields = allFields.collect { case (idx, (transformation = t, removed = false)) => idx -> t }
 
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
-      rollupTuple(fields.map(_.calculateTpe.repr))
+      rollupTuple(fields.map { case (_, value) => value.calculateTpe.repr }.toVector)
 
-    def update(index: Int, f: ModifiableTransformation => ModifiableTransformation): Tuple = {
-      this.copy(fields = fields.updated(index, f(fields(index))))
+    def update(index: Int, f: ModifiableTransformation => ModifiableTransformation)(using Quotes): Tuple = {
+      val (transformation, _) =
+        allFields.applyOrElse(index, idx => quotes.reflect.report.errorAndAbort(s"No field defined at index ${idx}"))
+      this.copy(allFields = allFields + (index -> (transformation = f(transformation), removed = false)))
     }
 
-    def withModifiedElement(idx: Int, transformation: ModifiableTransformation): Tuple =
-      this.copy(fields = fields.updated(idx, transformation))
-
-    def withoutField(index: Int): Tuple = {
-      val (prefix, suffix) = fields.splitAt(index)
-      this.copy(fields = prefix ++ suffix.drop(1))
+    //TODO: check for availability under that index
+    def withModifiedElement(idx: Int, transformation: ModifiableTransformation)(using Quotes): Tuple = {
+      update(idx, _ => transformation)
     }
 
+    def withoutField(index: Int)(using Quotes): Tuple = {
+      val (transformation, _) =
+        allFields.applyOrElse(index, idx => quotes.reflect.report.errorAndAbort(s"No field defined at index ${idx}"))
+      this.copy(allFields = allFields + (index -> (transformation = transformation, removed = true)))
+    }
   }
 
   case class Optional(

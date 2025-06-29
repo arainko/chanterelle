@@ -16,7 +16,8 @@ Modifiers:
 * :heavy_check_mark: single-element .put
 * :heavy_check_mark: single-element .compute
 * :heavy_check_mark: update
-* 🔜 remove (both named and positional tuples)
+* :heavy_check_mark: remove (both named and positional tuples)
+  
   field renames:
     * 🔜 local
     * 🔜 regional

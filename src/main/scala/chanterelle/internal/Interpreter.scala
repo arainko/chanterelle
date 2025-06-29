@@ -10,14 +10,15 @@ object Tuples {
 }
 
 private[chanterelle] object Interpreter {
-  def runTransformation(value: Expr[Any], transformation: ModifiableTransformation)(using Quotes): Expr[?] = {
+
+  def runTransformation(value: Expr[Any], transformation: InterpretableTransformation)(using Quotes): Expr[?] = {
     import quotes.reflect.*
     transformation match
-      case t @ ModifiableTransformation.Named(source, fields) =>
-        ((t.calculateNamesTpe, t.calculateValuesTpe): @unchecked) match {
+      case InterpretableTransformation.Named(source, fields, namesTpe, valuesTpe) =>
+        ((namesTpe, valuesTpe): @unchecked) match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map {
-              case (name, ModifiableTransformation.OfField.FromModifier(modifier, _)) =>
+              case (_, InterpretableTransformation.OfField.FromModifier(modifier)) =>
                 modifier match {
                   case Configured.NamedSpecific.Add(valueStructure = struct, value = value) =>
                     StructuredValue.of(struct, value).fieldValue(struct.fieldName)
@@ -34,29 +35,29 @@ private[chanterelle] object Interpreter {
                     }
                 }
 
-              case (_, ModifiableTransformation.OfField.FromSource(idx, transformation, _)) =>
+              case (_, InterpretableTransformation.OfField.FromSource(idx, transformation)) =>
                 runTransformation(StructuredValue.of(source, value).fieldValue(idx), transformation)
             }
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
             '{ $recreated: NamedTuple[names, values] }
         }
-      case t @ ModifiableTransformation.Tuple(source, fields) =>
-        (source.tpe, t.calculateTpe): @unchecked match {
+      case InterpretableTransformation.Tuple(source, fields, outputTpe) =>
+        (source.tpe, outputTpe): @unchecked match {
           case '[source] -> '[output] =>
-            val exprs = fields.zipWithIndex.map {
-              case (transformation, idx) =>
+            val exprs = fields.map {
+              case (idx, transformation) =>
                 runTransformation(StructuredValue.of(source, value).elementValue(idx), transformation)
             }
-            Expr.ofTupleFromSeq(exprs).asExprOf[output]
+            Expr.ofTupleFromSeq(exprs.toVector).asExprOf[output]
         }
-      case t @ ModifiableTransformation.Optional(source, paramTransformation) =>
-        (source.tpe, t.calculateTpe): @unchecked match {
+      case InterpretableTransformation.Optional(source, paramTransformation, outputTpe) =>
+        (source.tpe, outputTpe): @unchecked match {
           case ('[Option[a]], '[Option[out]]) =>
             val optValue = value.asExprOf[Option[a]]
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
 
-      case ModifiableTransformation.ConfedUp(config) =>
+      case InterpretableTransformation.ConfedUp(config) =>
         config match
           case update: Configured.Update =>
             update.fn match {
@@ -64,9 +65,9 @@ private[chanterelle] object Interpreter {
                 '{ $fn(${ value.asExprOf[src] }) }
             }
 
-      case ModifiableTransformation.Iter(source, paramTransformation) =>
-        paramTransformation.calculateTpe match {
-          case '[elem] =>
+      case InterpretableTransformation.Iter(source, paramTransformation, outputTpe) =>
+        outputTpe match {
+          case '[Iterable[elem]] =>
             value match {
               case '{ $srcValue: Iterable[srcElem] } =>
                 source.tycon match {
@@ -77,26 +78,25 @@ private[chanterelle] object Interpreter {
                             .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
                             .to[coll[elem]]($factory)
                         }
-
                 }
             }
         }
 
-      case ModifiableTransformation.Map(source, keyTransformation, valueTransformation) =>
-        (source.tycon, keyTransformation.calculateTpe, valueTransformation.calculateTpe, value): @unchecked match {
-          case ('[type map[k, v]; map], '[key], '[value], '{ $srcValue: collection.Map[k, v] }) =>
-            val factory = Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(report.errorAndAbort("No factory found"))
+      case InterpretableTransformation.Map(source, keyTransformation, valueTransformation, outputTpe) =>
+        (source.tycon, outputTpe, value): @unchecked match {
+          case ('[type outMap[k, v]; outMap], '[collection.Map[outKey, outValue]], '{ $srcValue: collection.Map[srcKey, srcValue] }) =>
+            val factory = Expr.summon[Factory[(outKey, outValue), outMap[outKey, outValue]]].getOrElse(report.errorAndAbort("No factory found"))
             '{
               $srcValue
-                .map[key, value]((k, v) =>
+                .map[outKey, outValue]((k, v) =>
                   (
-                    ${ runTransformation('k, keyTransformation).asExprOf[key] },
-                    ${ runTransformation('v, valueTransformation).asExprOf[value] }
+                    ${ runTransformation('k, keyTransformation).asExprOf[outKey] },
+                    ${ runTransformation('v, valueTransformation).asExprOf[outValue] }
                   )
                 )
-                .to[map[key, value]]($factory)
+                .to[outMap[outKey, outValue]]($factory)
             }
         }
-      case ModifiableTransformation.Leaf(_) => value
+      case InterpretableTransformation.Leaf(_) => value
   }
 }

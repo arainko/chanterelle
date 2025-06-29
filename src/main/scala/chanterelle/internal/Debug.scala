@@ -5,7 +5,6 @@ import scala.compiletime.*
 import scala.deriving.Mirror
 import scala.quoted.*
 import scala.reflect.ClassTag
-import scala.reflect.TypeTest
 
 private[chanterelle] trait Debug[-A] {
   def astify(self: A)(using Quotes): Debug.AST

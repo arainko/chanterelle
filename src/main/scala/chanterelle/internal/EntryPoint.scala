@@ -1,91 +1,8 @@
 package chanterelle.internal
 
-import scala.quoted.*
 import chanterelle.TupleModifier
-import scala.collection.BuildFrom
-import scala.collection.Factory
-import scala.collection.MapFactory
-import scala.collection.SortedMap
-import scala.collection.SortedIterableFactory
-import scala.collection.IterableFactory
-import scala.collection.SortedMapFactory
-import scala.collection.MapOps
-import scala.collection.IterableOps
-import scala.collection.SortedMapOps
-import scala.collection.SetOps
-import scala.collection.immutable.SortedSetOps
-import scala.collection.immutable.SortedSet
 
-trait ExtractableK1[A] {
-  type F[a]
-
-  type Element
-
-  // def map[A, B](fa: F[A])(f: A => B): F[B]
-}
-
-trait ExtractableK2[A] {
-  type F[a, b]
-
-  type LeftElement
-
-  type RightElement
-
-  // def map[A, B](fa: F[A])(f: A => B): F[B]
-}
-
-object ExtractableK2 {
-  given map[MapColl[k, v] <: Map[k, v], Key, Value]: ExtractableK2[Map[Key, Value]] with {
-    type F[a, b] = Map[a, b]
-
-    type LeftElement = Key
-
-    type RightElement = Value
-  }
-}
-
-object ExtractableK1 {
-
-  
-  IterableOps
-
-  MapOps
-
-  SortedMapOps
-
-  given iterable[Coll[a] <: Iterable[a], Elem]: ExtractableK1[Coll[Elem]] with {
-    type F[a] = Coll[a]
-    type Element = Elem
-  }
-
-  // given map[MapColl[k, v] <: Map[k, v], Key, Value]: ExtractableK1[Map[Key, Value]] with {
-  //   type F[a] = Iterable[a]
-
-  //   type Element = (Key, Value)
-  // }
-
-  val dd = summon[ExtractableK2[Map[Int, Int]]]
-
-
-
-  // summon[dd.F[Int] =:= List[Int]]
-
-  // MapFactory
-
-  // SortedMap()
-
-  SortedIterableFactory
-
-  CodePrinter.structure {
-    Map(1 -> 1, 2 -> 2).map((a, b) => a -> b)
-  }
-
-  def a[K, V](using DummyImplicit)(using f: Factory[(K, V), ?]): f.type = ???
-
-  val d = a[Int, Int]
-
-  val a = implicitly[Factory[(Int, Int), Map[Int, Int]]]
-}
+import scala.quoted.*
 
 object EntryPoint {
   inline def struct[A] = ${ structMacro[A] }
@@ -108,11 +25,13 @@ object EntryPoint {
 
     val modifiers = Modifier.parse(mods.toList)
 
-    val transformation = ModifiableTransformation.fromStructure(structure)
+    val transformation = ModifiableTransformation.create(structure)
 
     val modifiedTransformation = modifiers.foldLeft(transformation)((acc, mod) => acc.applyModifier(mod))
 
-    Interpreter.runTransformation(tuple, modifiedTransformation)
+    val interpratableTransformation = InterpretableTransformation.create(modifiedTransformation)
+
+    Interpreter.runTransformation(tuple, interpratableTransformation)
 
   }
 }
