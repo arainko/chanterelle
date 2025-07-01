@@ -3,66 +3,68 @@ package chanterelle.internal
 import scala.collection.immutable.SortedMap
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
-import java.time.ZoneOffset
 
 sealed trait ModifiableTransformation derives Debug {
+
+  final inline def narrow[A <: ModifiableTransformation](using Quotes)[Res](inline fn: A => Res) =
+    narrowAll[Res](_.when[A](fn))
+
+  final inline def narrowAll[Res](
+    inline fns: PartialMatch.type => PartialMatch[ModifiableTransformation, Res]*
+  )(using Quotes) = partialMatch(this)(fns*)(errs => quotes.reflect.report.errorAndAbort(s"dupal :( $errs"))
 
   def calculateTpe(using Quotes): Type[?]
 
   final def applyModifier(modifier: Modifier)(using Quotes): ModifiableTransformation = {
     def recurse(segments: List[Path.Segment])(curr: ModifiableTransformation)(using Quotes): ModifiableTransformation = {
-      import quotes.reflect.*
       segments match {
         case Path.Segment.Field(name = name) :: next =>
-          partialMatch(curr)(_.when[ModifiableTransformation.Named](_.update(name, recurse(next))))(failedCases =>
-            report.errorAndAbort(s"Error case here, didn't match: ${failedCases}")
-          )
-          
+          curr.narrow[ModifiableTransformation.Named](_.update(name, recurse(next)))
+
         case Path.Segment.TupleElement(index = index) :: next =>
-          partialMatch(curr)(_.when[ModifiableTransformation.Tuple](_.update(index, recurse(next))))(_ =>
-            report.errorAndAbort("Error case here")
-          )
+          curr.narrow[ModifiableTransformation.Tuple](_.update(index, recurse(next)))
 
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next =>
-          partialMatch(curr)(_.when[ModifiableTransformation.Map[?]](_.updateKey(recurse(next))))(_ =>
-            report.errorAndAbort("Error case here")
-          )
+          curr.narrow[ModifiableTransformation.Map[?]](_.updateKey(recurse(next)))
+
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next =>
-          curr match {
-            case t: ModifiableTransformation.Map[?] => t.updateValue(recurse(next))
-            case _                                  => report.errorAndAbort("Error case here")
-          }
+          curr.narrow[ModifiableTransformation.Map[?]](_.updateValue(recurse(next)))
 
         case Path.Segment.Element(tpe) :: next =>
-          curr match {
-            case t: ModifiableTransformation.Optional   => t.update(recurse(next))
-            case t: ModifiableTransformation.Iter[coll] =>
-              t.update(recurse(next))
-            case _ => report.errorAndAbort("Error case here")
-          }
+          curr.narrowAll(
+            _.when[ModifiableTransformation.Optional](_.update(recurse(next))),
+            _.when[ModifiableTransformation.Iter[?]](_.update(recurse(next)))
+          )
 
         case Nil => apply(modifier, curr)
-        // case p   => report.errorAndAbort(s"Illegal path segment and transformation combo: ${Debug.show(curr)}")
       }
     }
 
     def apply(modifier: Modifier, transformation: ModifiableTransformation)(using Quotes): ModifiableTransformation = {
-      (modifier, transformation) match {
-        case (mod: Modifier.Add, t: ModifiableTransformation.Named) =>
-          t.withModifiedField(
-            mod.valueStructure.fieldName,
-            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Add(mod.valueStructure, mod.value), false)
+      modifier match {
+        case m: Modifier.Add =>
+          transformation.narrow[ModifiableTransformation.Named](
+            _.withModifiedField(
+              m.valueStructure.fieldName,
+              ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value), false)
+            )
           )
-        case (mod: Modifier.Compute, t: ModifiableTransformation.Named) =>
-          t.withModifiedField(
-            mod.valueStructure.fieldName,
-            ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Compute(mod.valueStructure, mod.value), false)
+
+        case m: Modifier.Compute =>
+          transformation.narrow[ModifiableTransformation.Named](
+            _.withModifiedField(
+              m.valueStructure.fieldName,
+              ModifiableTransformation.OfField.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value), false)
+            )
           )
-        case (Modifier.Remove(fieldToRemove = name: String), t: ModifiableTransformation.Named) =>
-          t.withoutField(name)
-        case (Modifier.Remove(fieldToRemove = idx: Int), t: ModifiableTransformation.Tuple) =>
-          t.withoutField(idx)
-        case (m: Modifier.Update, _) =>
+
+        case Modifier.Remove(fieldToRemove = name: String) =>
+          transformation.narrow[ModifiableTransformation.Named](_.withoutField(name))
+
+        case Modifier.Remove(fieldToRemove = idx: Int) =>
+          transformation.narrow[ModifiableTransformation.Tuple](_.withoutField(idx))
+          
+        case m: Modifier.Update =>
           ModifiableTransformation.ConfedUp(Configured.Update(m.tpe, m.function))
       }
     }
