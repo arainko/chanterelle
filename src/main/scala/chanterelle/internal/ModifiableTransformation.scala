@@ -3,29 +3,46 @@ package chanterelle.internal
 import scala.collection.immutable.SortedMap
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
+import java.time.ZoneOffset
 
 sealed trait ModifiableTransformation derives Debug {
 
   def calculateTpe(using Quotes): Type[?]
 
   final def applyModifier(modifier: Modifier)(using Quotes): ModifiableTransformation = {
-    def recurse(segments: List[Path.Segment], curr: ModifiableTransformation)(using Quotes): ModifiableTransformation = {
+    def recurse(segments: List[Path.Segment])(curr: ModifiableTransformation)(using Quotes): ModifiableTransformation = {
       import quotes.reflect.*
-      (segments, curr) match {
-        case (Path.Segment.Field(name = name) :: next, t: ModifiableTransformation.Named) =>
-          t.update(name, recurse(next, _))
-        case (Path.Segment.TupleElement(index = index) :: next, t: ModifiableTransformation.Tuple) =>
-          t.update(index, recurse(next, _))
-        case (Path.Segment.Element(tpe) :: next, t: ModifiableTransformation.Optional) =>
-          t.update(recurse(next, _))
-        case (Path.Segment.Element(tpe) :: next, t: ModifiableTransformation.Iter[coll]) =>
-          t.update(recurse(next, _))
-        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next, t: ModifiableTransformation.Map[map]) =>
-          t.updateKey(recurse(next, _))
-        case (Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next, t: ModifiableTransformation.Map[map]) =>
-          t.updateValue(recurse(next, _))
-        case (Nil, t) => apply(modifier, t)
-        case (p, t)   => report.errorAndAbort(s"Illegal path segment and transformation combo: ${Debug.show(t)}")
+      segments match {
+        case Path.Segment.Field(name = name) :: next =>
+          partialMatch(curr)(_.when[ModifiableTransformation.Named](_.update(name, recurse(next))))(failedCases =>
+            report.errorAndAbort(s"Error case here, didn't match: ${failedCases}")
+          )
+          
+        case Path.Segment.TupleElement(index = index) :: next =>
+          partialMatch(curr)(_.when[ModifiableTransformation.Tuple](_.update(index, recurse(next))))(_ =>
+            report.errorAndAbort("Error case here")
+          )
+
+        case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next =>
+          partialMatch(curr)(_.when[ModifiableTransformation.Map[?]](_.updateKey(recurse(next))))(_ =>
+            report.errorAndAbort("Error case here")
+          )
+        case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next =>
+          curr match {
+            case t: ModifiableTransformation.Map[?] => t.updateValue(recurse(next))
+            case _                                  => report.errorAndAbort("Error case here")
+          }
+
+        case Path.Segment.Element(tpe) :: next =>
+          curr match {
+            case t: ModifiableTransformation.Optional   => t.update(recurse(next))
+            case t: ModifiableTransformation.Iter[coll] =>
+              t.update(recurse(next))
+            case _ => report.errorAndAbort("Error case here")
+          }
+
+        case Nil => apply(modifier, curr)
+        // case p   => report.errorAndAbort(s"Illegal path segment and transformation combo: ${Debug.show(curr)}")
       }
     }
 
@@ -49,7 +66,7 @@ sealed trait ModifiableTransformation derives Debug {
           ModifiableTransformation.ConfedUp(Configured.Update(m.tpe, m.function))
       }
     }
-    recurse(modifier.path.segments.toList, this)
+    recurse(modifier.path.segments.toList)(this)
   }
 }
 
@@ -66,7 +83,10 @@ object ModifiableTransformation {
         )
 
       case tuple: Structure.Tuple =>
-        Tuple(tuple, tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = create(t), removed = false)).to(SortedMap))
+        Tuple(
+          tuple,
+          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = create(t), removed = false)).to(SortedMap)
+        )
 
       case optional: Structure.Optional =>
         Optional(optional, create(optional.paramStruct))
@@ -150,7 +170,7 @@ object ModifiableTransformation {
       this.copy(allFields = allFields + (index -> (transformation = f(transformation), removed = false)))
     }
 
-    //TODO: check for availability under that index
+    // TODO: check for availability under that index
     def withModifiedElement(idx: Int, transformation: ModifiableTransformation)(using Quotes): Tuple = {
       update(idx, _ => transformation)
     }

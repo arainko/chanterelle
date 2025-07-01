@@ -1,6 +1,7 @@
 package chanterelle.internal
 
 import scala.quoted.*
+import scala.annotation.publicInBinary
 
 extension (tpe: Type[? <: AnyKind]) {
   private[chanterelle] def fullName(using Quotes): String = {
@@ -37,3 +38,41 @@ extension [A](self: Option[A]) {
 }
 
 private[chanterelle] type None = None.type
+
+private[chanterelle] inline def partialMatch[A](value: A)[Res](
+  inline fns: PartialMatch.type => PartialMatch[A, Res]*
+)(inline fallback: List[String] => Res): Res = ${ partialMatchImpl[A, Res]('value, 'fns, 'fallback) }
+
+
+@publicInBinary
+private[internal] def partialMatchImpl[A: Type, Res: Type](
+  value: Expr[A],
+  fns: Expr[Seq[PartialMatch.type => PartialMatch[A, Res]]],
+  fallback: Expr[List[String] => Res]
+)(using Quotes) = {
+  import quotes.reflect.*
+
+  val (tpes, cases) =
+    Varargs
+      .unapply(fns)
+      .getOrElse(report.errorAndAbort("Couldn't decompose fns, are they a known vararg?"))
+      .map {
+        case '{
+              type b
+              type a >: b
+              (a: PartialMatch.type) => a.when[b](using $_)[a, res]($fn)
+            } =>
+          val bindSym = Symbol.newBind(Symbol.spliceOwner, "x", Flags.EmptyFlags, TypeRepr.of[b])
+          val ref = Ref(bindSym).asExprOf[b]
+          val caseDef =
+            CaseDef(Bind(bindSym, Typed(Wildcard(), TypeTree.of[b])), None, Expr.betaReduce('{ $fn.apply($ref) }).asTerm)
+          (Type.show[b], caseDef)
+        case other => report.errorAndAbort(s"Ehh: ${other.show}")
+      }
+      .toList
+      .unzip
+
+  
+
+  Match(value.asTerm, cases ::: CaseDef(Wildcard(), None, '{ $fallback(${ Expr(tpes) }) }.asTerm) :: Nil ).asExprOf[Res]
+}
