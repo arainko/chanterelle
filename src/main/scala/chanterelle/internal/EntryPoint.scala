@@ -29,7 +29,9 @@ object EntryPoint {
 
     val modifiedTransformation = modifiers.foldLeft(transformation)((acc, mod) => acc.applyModifier(mod))
 
-    val interpratableTransformation = InterpretableTransformation.create(modifiedTransformation)
+    val errorlessTransformation = modifiedTransformation.refine.toOption.get
+
+    val interpratableTransformation = InterpretableTransformation.create(errorlessTransformation)
 
     Interpreter.runTransformation(tuple, interpratableTransformation)
 

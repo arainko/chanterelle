@@ -44,7 +44,7 @@ enum InterpretableTransformation derives Debug {
 
 object InterpretableTransformation {
 
-  def create(transformation: ModifiableTransformation)(using Quotes): InterpretableTransformation =
+  def create(transformation: ModifiableTransformation[Nothing])(using Quotes): InterpretableTransformation =
     transformation match
       case t @ ModifiableTransformation.Named(source, fields) =>
         Named(
