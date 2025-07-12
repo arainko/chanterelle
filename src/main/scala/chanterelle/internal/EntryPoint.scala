@@ -25,7 +25,7 @@ object EntryPoint {
 
     val modifiers = Modifier.parse(mods.toList)
 
-    val transformation = ModifiableTransformation.create(structure)
+    val transformation = Transformation.create(structure)
 
     val modifiedTransformation = modifiers.foldLeft(transformation)((acc, mod) => acc.applyModifier(mod))
 

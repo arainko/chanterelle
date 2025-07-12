@@ -44,31 +44,31 @@ enum InterpretableTransformation derives Debug {
 
 object InterpretableTransformation {
 
-  def create(transformation: ModifiableTransformation[Nothing])(using Quotes): InterpretableTransformation =
+  def create(transformation: Transformation[Nothing])(using Quotes): InterpretableTransformation =
     transformation match
-      case t @ ModifiableTransformation.Named(source, fields) =>
+      case t @ Transformation.Named(source, fields) =>
         Named(
           source,
           fields.map {
-            case (name, ModifiableTransformation.OfField.FromSource(_, t, removed)) =>
+            case (name, Transformation.OfField.FromSource(_, t, removed)) =>
               name -> OfField.FromSource(name, create(t))
-            case (name, ModifiableTransformation.OfField.FromModifier(mod, removed)) =>
+            case (name, Transformation.OfField.FromModifier(mod, removed)) =>
               name -> OfField.FromModifier(mod)
           },
           t.calculateNamesTpe,
           t.calculateValuesTpe,
         )
-      case t @ ModifiableTransformation.Tuple(source, fields) =>
+      case t @ Transformation.Tuple(source, fields) =>
         Tuple(source, fields.map((idx, t) => idx -> create(t)), t.calculateTpe)
-      case t @ ModifiableTransformation.Optional(source, paramTransformation) =>
+      case t @ Transformation.Optional(source, paramTransformation) =>
         Optional(source, create(paramTransformation), t.calculateTpe)
-      case t @ ModifiableTransformation.Map(source, key, value) =>
+      case t @ Transformation.Map(source, key, value) =>
         Map(source, create(key), create(value), t.calculateTpe)
-      case t @ ModifiableTransformation.Iter(source, elem) =>
+      case t @ Transformation.Iter(source, elem) =>
         Iter(source, create(elem), t.calculateTpe)
-      case ModifiableTransformation.Leaf(output) =>
+      case Transformation.Leaf(output) =>
         Leaf(output)
-      case ModifiableTransformation.ConfedUp(config) =>
+      case Transformation.ConfedUp(config) =>
         ConfedUp(config)
 
   enum OfField derives Debug {
