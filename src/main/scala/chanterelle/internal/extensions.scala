@@ -1,7 +1,6 @@
 package chanterelle.internal
 
 import scala.quoted.*
-import scala.annotation.publicInBinary
 
 extension (tpe: Type[? <: AnyKind]) {
   private[chanterelle] def fullName(using Quotes): String = {
