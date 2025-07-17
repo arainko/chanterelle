@@ -20,7 +20,7 @@ sealed trait Transformation[+E <: Err] {
     }
 
   @nowarn("msg=Unreachable case except for null")
-  final inline def narrowAll[A <: Transformation[Err], B <: Transformation[Err]](
+  final inline def narrow[A <: Transformation[Err], B <: Transformation[Err]](
     inline fnA: A => Transformation[Err],
     inline fnB: B => Transformation[Err]
   )(inline errorMessage: ErrorMessage): Transformation[Err] =
@@ -50,7 +50,7 @@ sealed trait Transformation[+E <: Err] {
           curr.narrow[Transformation.Map[Err, ?]](_.updateValue(recurse(next)))(ErrorMessage.UnexpectedTransformation("map"))
 
         case Path.Segment.Element(tpe) :: next =>
-          curr.narrowAll(
+          curr.narrow(
             when[Transformation.Optional[Err]](_.update(recurse(next))),
             when[Transformation.Iter[Err, ?]](_.update(recurse(next)))
           )(ErrorMessage.UnexpectedTransformation("option or collection"))
