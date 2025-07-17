@@ -4,7 +4,7 @@ import scala.quoted.*
 import scala.collection.immutable.VectorMap
 import scala.collection.immutable.SortedMap
 
-enum InterpretableTransformation derives Debug {
+private[chanterelle] enum InterpretableTransformation derives Debug {
   case Named(
     source: Structure.Named,
     fields: VectorMap[String, InterpretableTransformation.OfField],

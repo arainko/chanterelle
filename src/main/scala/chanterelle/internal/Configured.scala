@@ -2,7 +2,7 @@ package chanterelle.internal
 
 import scala.quoted.*
 
-enum Configured derives Debug {
+private[chanterelle] enum Configured derives Debug {
   def tpe: Type[?]
 
   case Update(
@@ -11,7 +11,7 @@ enum Configured derives Debug {
   )
 }
 
-object Configured {
+private[chanterelle] object Configured {
   sealed trait NamedSpecific derives Debug {
     def tpe: Type[?]
   }

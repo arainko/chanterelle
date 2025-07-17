@@ -4,7 +4,7 @@ import NamedTuple.AnyNamedTuple
 import scala.quoted.*
 import chanterelle.TupleModifier
 
-enum Modifier derives Debug {
+private[chanterelle] enum Modifier derives Debug {
   def path: Path
 
   case Add(path: Path, valueStructure: Structure.Named.Singular, value: Expr[?])
@@ -13,7 +13,7 @@ enum Modifier derives Debug {
   case Remove(path: Path, fieldToRemove: String | Int)
 }
 
-object Modifier {
+private[chanterelle] object Modifier {
   def parse[A](mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes): Either[List[ErrorMessage], List[Modifier]] = {
     import quotes.reflect.*
     val (errors, modifiers) = mods.partitionMap {

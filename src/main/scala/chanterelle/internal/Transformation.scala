@@ -7,10 +7,10 @@ import scala.collection.immutable.SortedMap
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
-case object Err
-type Err = Err.type
+private[chanterelle] case object Err
+private[chanterelle]type Err = Err.type
 
-sealed trait Transformation[+E <: Err] {
+private[chanterelle] sealed trait Transformation[+E <: Err] {
 
   @nowarn("msg=Unreachable case except for null")
   final inline def narrow[A <: Transformation[Err]](inline fn: A => Transformation[Err])(inline errorMessage: ErrorMessage): Transformation[Err] =
