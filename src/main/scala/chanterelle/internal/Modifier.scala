@@ -14,38 +14,37 @@ enum Modifier derives Debug {
 }
 
 object Modifier {
-  def parse[A](mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes): List[Modifier] = {
+  def parse[A](mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes): Either[List[ErrorMessage], List[Modifier]] = {
     import quotes.reflect.*
-    mods.map {
+    val (errors, modifiers) = mods.partitionMap {
       // TODO: report an issue to dotty: not able to match with quotes if $value is of type NamedTuple[?, ?]
-      case '{
+      case cfg @ '{
             type selected <: AnyNamedTuple
             type v <: AnyNamedTuple
             (builder: TupleModifier.Builder[tup]) => builder.put[selected](${ AsTerm(PathSelector(path)) })[v]($value)
           } =>
-        val valueStructure =
           Structure
             .toplevel[v]
             .narrow[Structure.Named.Singular]
-            .getOrElse(report.errorAndAbort("Needs to be a named tuple of size 1"))
-        Modifier.Add(path, valueStructure, value)
+            .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
+            .map(valueStructure => Modifier.Add(path, valueStructure, value))        
 
-      case '{
+      case cfg @ '{
             type selected <: AnyNamedTuple
             type v <: AnyNamedTuple
             (builder: TupleModifier.Builder[tup]) => builder.compute[selected](${ AsTerm(PathSelector(path)) })[v]($value)
           } =>
-        val valueStructure =
           Structure
             .toplevel[v]
             .narrow[Structure.Named.Singular]
-            .getOrElse(report.errorAndAbort("Needs to be a named tuple of size 1"))
-        Modifier.Compute(path, valueStructure, value)
+            .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
+            .map(valueStructure => Modifier.Compute(path, valueStructure, value)) 
+        
 
       case '{ (builder: TupleModifier.Builder[tup]) =>
             builder.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
           } =>
-        Modifier.Update(path, Type.of[newField], fn)
+        Right(Modifier.Update(path, Type.of[newField], fn))
 
       case '{ (builder: TupleModifier.Builder[tup]) => builder.remove[selected](${ AsTerm(PathSelector(path)) }) } =>
         path.stripLast.collect {
@@ -55,6 +54,8 @@ object Modifier {
 
       case other => report.errorAndAbort(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
     }
+
+    ???
   }
 
   private object AsTerm {
