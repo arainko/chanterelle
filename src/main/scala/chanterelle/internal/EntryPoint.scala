@@ -5,35 +5,26 @@ import chanterelle.TupleModifier
 import scala.quoted.*
 
 object EntryPoint {
-  inline def struct[A] = ${ structMacro[A] }
-
-  def structMacro[A: Type](using Quotes) = {
-    import quotes.reflect.*
-    val struct = Structure.toplevel[A]
-    report.info(Debug.show(struct))
-    '{}
+  transparent inline def run[A](tuple: A, inline mods: TupleModifier.Builder[A] => TupleModifier[A]*): Any = ${
+    runMacro[A]('tuple, 'mods)
   }
 
-  transparent inline def run[A](tuple: A, inline mods: TupleModifier.Builder[A] => TupleModifier[A]*): Any = ${ runMacro[A]('tuple, 'mods) }
-
   def runMacro[A: Type](tuple: Expr[A], modifications: Expr[Seq[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes) = {
-    import quotes.reflect.* 
+    import quotes.reflect.*
 
-    val structure = Structure.toplevel[A]
+    val transformation = for {
+      structure = Structure.toplevel[A]
+      mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
+      transformation = Transformation.create(structure)
+      modifiers <- Modifier.parse(mods.toList)
+      modifiedTransformation = modifiers.foldLeft(transformation)((transformation, mod) => transformation.applyModifier(mod))
+      refinedTransformation <- modifiedTransformation.refine
+      interpretableTransformation = InterpretableTransformation.create(refinedTransformation)
+    } yield Interpreter.runTransformation(tuple, interpretableTransformation)
 
-    val mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
-
-    val modifiers = Modifier.parse(mods.toList)
-
-    val transformation = Transformation.create(structure)
-
-    val modifiedTransformation = modifiers.foldLeft(transformation)((acc, mod) => acc.applyModifier(mod))
-
-    val errorlessTransformation = modifiedTransformation.refine.toOption.get
-
-    val interpratableTransformation = InterpretableTransformation.create(errorlessTransformation)
-
-    Interpreter.runTransformation(tuple, interpratableTransformation)
-
+    transformation match {
+      case Left(errors) => report.errorAndAbort(errors.map(_.toString).mkString(System.lineSeparator()))
+      case Right(transformation) => transformation
+    }
   }
 }

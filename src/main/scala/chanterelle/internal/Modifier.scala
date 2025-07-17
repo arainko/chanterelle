@@ -46,16 +46,18 @@ object Modifier {
           } =>
         Right(Modifier.Update(path, Type.of[newField], fn))
 
-      case '{ (builder: TupleModifier.Builder[tup]) => builder.remove[selected](${ AsTerm(PathSelector(path)) }) } =>
-        path.stripLast.collect {
-          case (path, Path.Segment.Field(tpe, name))         => Modifier.Remove(path, name)
-          case (path, Path.Segment.TupleElement(tpe, index)) => Modifier.Remove(path, index)
-        }.getOrElse(report.errorAndAbort("Needs to point to a field"))
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.remove[selected](${ AsTerm(PathSelector(path)) }) } =>
+        path
+          .stripLast
+          .collect {
+            case (path, Path.Segment.Field(tpe, name))         => Right(Modifier.Remove(path, name))
+            case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index))
+          }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
       case other => report.errorAndAbort(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
     }
 
-    ???
+    if errors.isEmpty then Right(modifiers) else Left(errors)
   }
 
   private object AsTerm {

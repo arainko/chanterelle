@@ -1,15 +1,11 @@
 package chanterelle.internal
 
+import chanterelle.internal.Transformation
+
+import scala.annotation.nowarn
 import scala.collection.immutable.SortedMap
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
-import scala.annotation.nowarn
-import chanterelle.internal.Transformation.Named
-import chanterelle.internal.Transformation.Optional
-import chanterelle.internal.Transformation.Iter
-import chanterelle.internal.Transformation.Leaf
-import chanterelle.internal.Transformation.ConfedUp
-import chanterelle.internal.Transformation.OfField
 
 case object Err
 type Err = Err.type
@@ -17,21 +13,21 @@ type Err = Err.type
 sealed trait Transformation[+E <: Err] {
 
   @nowarn("msg=Unreachable case except for null")
-  final inline def narrow[A <: Transformation[Err]](using Quotes)[Res](inline fn: A => Res) =
+  final inline def narrow[A <: Transformation[Err]](inline fn: A => Transformation[Err])(inline errorMessage: ErrorMessage): Transformation[Err] =
     this match {
       case a: A => fn(a)
-      case _    => quotes.reflect.report.errorAndAbort("ehh :(")
+      case _    => Transformation.Error(errorMessage)
     }
 
   @nowarn("msg=Unreachable case except for null")
-  final inline def narrowedAll[A <: Transformation[Err], B <: Transformation[Err], Res](
-    inline fnA: A => Res,
-    inline fnB: B => Res
-  )(using Quotes): Res =
+  final inline def narrowedAll[A <: Transformation[Err], B <: Transformation[Err]](
+    inline fnA: A => Transformation[Err],
+    inline fnB: B => Transformation[Err]
+  )(inline errorMessage: ErrorMessage): Transformation[Err] =
     this match {
       case a: A => fnA(a)
       case b: B => fnB(b)
-      case _    => quotes.reflect.report.errorAndAbort("ehg")
+      case _    => Transformation.Error(errorMessage)
     }
 
   def calculateTpe(using Quotes): Type[?]
@@ -42,22 +38,22 @@ sealed trait Transformation[+E <: Err] {
     )(curr: Transformation[Err])(using Quotes): Transformation[Err] = {
       segments match {
         case Path.Segment.Field(name = name) :: next =>
-          curr.narrow[Transformation.Named[Err]](_.update(name, recurse(next)))
+          curr.narrow[Transformation.Named[Err]](_.update(name, recurse(next)))(ErrorMessage.UnexpectedTransformation("named tuple"))
 
         case Path.Segment.TupleElement(index = index) :: next =>
-          curr.narrow[Transformation.Tuple[Err]](_.update(index, recurse(next)))
+          curr.narrow[Transformation.Tuple[Err]](_.update(index, recurse(next)))(ErrorMessage.UnexpectedTransformation("tuple"))
 
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateKey(recurse(next)))
+          curr.narrow[Transformation.Map[Err, ?]](_.updateKey(recurse(next)))(ErrorMessage.UnexpectedTransformation("map"))
 
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateValue(recurse(next)))
+          curr.narrow[Transformation.Map[Err, ?]](_.updateValue(recurse(next)))(ErrorMessage.UnexpectedTransformation("map"))
 
         case Path.Segment.Element(tpe) :: next =>
           curr.narrowedAll(
             when[Transformation.Optional[Err]](_.update(recurse(next))),
             when[Transformation.Iter[Err, ?]](_.update(recurse(next)))
-          )
+          )(ErrorMessage.UnexpectedTransformation("option or collection"))
 
         case Nil => apply(modifier, curr)
       }
@@ -71,7 +67,7 @@ sealed trait Transformation[+E <: Err] {
               m.valueStructure.fieldName,
               Transformation.OfField.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value), false)
             )
-          )
+          )(ErrorMessage.UnexpectedTransformation("named tuple"))
 
         case m: Modifier.Compute =>
           transformation.narrow[Transformation.Named[Err]](
@@ -79,13 +75,13 @@ sealed trait Transformation[+E <: Err] {
               m.valueStructure.fieldName,
               Transformation.OfField.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value), false)
             )
-          )
+          )(ErrorMessage.UnexpectedTransformation("named tuple"))
 
         case Modifier.Remove(fieldToRemove = name: String) =>
-          transformation.narrow[Transformation.Named[Err]](_.withoutField(name))
+          transformation.narrow[Transformation.Named[Err]](_.withoutField(name))(ErrorMessage.UnexpectedTransformation("named tuple"))
 
         case Modifier.Remove(fieldToRemove = idx: Int) =>
-          transformation.narrow[Transformation.Tuple[Err]](_.withoutField(idx))
+          transformation.narrow[Transformation.Tuple[Err]](_.withoutField(idx))(ErrorMessage.UnexpectedTransformation("tuple"))
 
         case m: Modifier.Update =>
           Transformation.ConfedUp(Configured.Update(m.tpe, m.function))
@@ -94,17 +90,17 @@ sealed trait Transformation[+E <: Err] {
     recurse(modifier.path.segments.toList)(this)
   }
 
-  def refine: Either[List[Transformation.Error], Transformation[Nothing]] = {
+  def refine: Either[List[ErrorMessage], Transformation[Nothing]] = {
     def recurse(
       stack: List[Transformation[E]],
-      acc: List[Transformation.Error]
-    ): Either[List[Transformation.Error], Transformation[Nothing]] =
+      acc: List[ErrorMessage]
+    ): Either[List[ErrorMessage], Transformation[Nothing]] =
       stack match {
         case head :: tail =>
           head match
             case Transformation.Named(source, allFields) =>
               val transformations =
-                allFields.values.collect { case OfField.FromSource(name, transformation, removed) => transformation }.toList
+                allFields.values.collect { case Transformation.OfField.FromSource(name, transformation, removed) => transformation }.toList
               recurse(transformations ::: tail, acc)
             case Transformation.Tuple(source, allFields) =>
               recurse(allFields.values.toList ::: tail, acc)
@@ -119,7 +115,7 @@ sealed trait Transformation[+E <: Err] {
             case Transformation.ConfedUp(config) =>
               recurse(tail, acc)
             case err @ Transformation.Error(message) =>
-              recurse(tail, err :: acc)
+              recurse(tail, err.message :: acc)
 
         case Nil => if acc.isEmpty then Right(this.asInstanceOf[Transformation[Nothing]]) else Left(acc)
       }

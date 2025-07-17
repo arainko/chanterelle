@@ -1,6 +1,7 @@
 scalaVersion := "3.7.1"
 
 scalacOptions ++= Seq(
+  "-preview",
   "-Wunused:all",
   "-WunstableInlineAccessors",
   "-Xcheck-macros",

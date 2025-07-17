@@ -15,7 +15,7 @@ object test extends App {
     // internal.CodePrinter.code {
     a.transform(
       // _.remove(_.field._4)
-      _.remove(_.other.element.tup._2),
+      // _.remove(_.other.element),
       // _.compute(_.other.element.tup._2) { a => 
       //   //TODO: if I uncomment 'val hmm' semantic highlighting dies and I get no autocomplete etc
       //   // val hmm = a.name123

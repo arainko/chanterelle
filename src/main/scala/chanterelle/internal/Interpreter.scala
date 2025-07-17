@@ -72,6 +72,7 @@ private[chanterelle] object Interpreter {
               case '{ $srcValue: Iterable[srcElem] } =>
                 source.tycon match {
                   case '[type coll[a]; coll] =>
+                    // push this out to .create?
                     val factory = Expr.summon[Factory[elem, coll[elem]]].getOrElse(report.errorAndAbort("No factory found"))
                         '{
                           $srcValue

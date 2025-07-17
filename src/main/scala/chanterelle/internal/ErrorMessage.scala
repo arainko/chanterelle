@@ -24,4 +24,5 @@ object ErrorMessage {
   case class AlreadyConfigured(name: String) extends ErrorMessage
   case class ExpectedSingletonNamedTuple(actual: Type[?], override val span: Span) extends ErrorMessage
   case class SelectorNeedsToPointToAField(path: Path, override val span: Span) extends ErrorMessage
+  case class UnexpectedTransformation(expected: String) extends ErrorMessage
 }
