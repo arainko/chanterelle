@@ -66,28 +66,31 @@ private[chanterelle] object Interpreter {
                 '{ $fn(${ value.asExprOf[src] }) }
             }
 
-      case InterpretableTransformation.Iter(source, paramTransformation, outputTpe) =>
+      case InterpretableTransformation.Iter(source, paramTransformation, factory, outputTpe) =>
         outputTpe match {
           case '[Iterable[elem]] =>
             value match {
               case '{ $srcValue: Iterable[srcElem] } =>
                 source.tycon match {
                   case '[type coll[a]; coll] =>
-                    // push this out to .create?
-                    val factory = Expr.summon[Factory[elem, coll[elem]]].getOrElse(report.errorAndAbort("No factory found"))
-                        '{
-                          $srcValue
-                            .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
-                            .to[coll[elem]]($factory)
-                        }
+                    val f = factory.asExprOf[Factory[elem, coll[elem]]]
+                    '{
+                      $srcValue
+                        .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
+                        .to[coll[elem]]($f)
+                    }
                 }
             }
         }
 
-      case InterpretableTransformation.Map(source, keyTransformation, valueTransformation, outputTpe) =>
+      case InterpretableTransformation.Map(source, keyTransformation, valueTransformation, fac, outputTpe) =>
         (source.tycon, outputTpe, value): @unchecked match {
-          case ('[type outMap[k, v]; outMap], '[collection.Map[outKey, outValue]], '{ $srcValue: collection.Map[srcKey, srcValue] }) =>
-            val factory = Expr.summon[Factory[(outKey, outValue), outMap[outKey, outValue]]].getOrElse(report.errorAndAbort("No factory found"))
+          case (
+                '[type outMap[k, v]; outMap],
+                '[collection.Map[outKey, outValue]],
+                '{ $srcValue: collection.Map[srcKey, srcValue] }
+              ) =>
+            val factory = fac.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
             '{
               $srcValue
                 .map[outKey, outValue]((k, v) =>

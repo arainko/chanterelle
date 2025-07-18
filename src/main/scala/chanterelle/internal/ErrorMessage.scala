@@ -13,4 +13,5 @@ private[chanterelle] object ErrorMessage {
   case class ExpectedSingletonNamedTuple(actual: Type[?], override val span: Span) extends ErrorMessage
   case class SelectorNeedsToPointToAField(path: Path, override val span: Span) extends ErrorMessage
   case class UnexpectedTransformation(expected: String) extends ErrorMessage
+  case class NoFactoryFound(tycon: Type[?], elemTpe: Type[?]) extends ErrorMessage
 }

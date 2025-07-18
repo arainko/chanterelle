@@ -59,7 +59,7 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
       }
     }
 
-    def apply(modifier: Modifier, transformation: Transformation[Err])(using Quotes): Transformation[Err] = {
+    def apply(modifier: Modifier, transformation: Transformation[Err]): Transformation[Err] = {
       modifier match {
         case m: Modifier.Add =>
           transformation.narrow[Transformation.Named[Err]](
@@ -185,7 +185,7 @@ object Transformation {
       }
     }
 
-    def update(name: String, f: Transformation[E] => Transformation[Err])(using Quotes): Named[Err] = {
+    def update(name: String, f: Transformation[E] => Transformation[Err]): Named[Err] = {
       val fieldTransformation =
         this.allFields.andThen {
           case field @ OfField.FromSource(name, transformation, removed) =>
@@ -203,7 +203,7 @@ object Transformation {
       // this will uhhh... create a new record if it doesn't exist
       this.copy(allFields = this.allFields.updated(name, transformation))
 
-    def withoutField(name: String)(using Quotes): Named[Err] =
+    def withoutField(name: String): Named[Err] =
       this.copy(allFields = this.allFields.updatedWith(name) {
         case Some(src: Transformation.OfField.FromSource[E]) => Some(src.copy(removed = true))
         case Some(mod: Transformation.OfField.FromModifier)  => Some(mod.copy(removed = true))
@@ -221,17 +221,17 @@ object Transformation {
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.map { case (_, value) => value.calculateTpe.repr }.toVector)
 
-    def update(index: Int, f: Transformation[E] => Transformation[Err])(using Quotes): Tuple[Err] = {
+    def update(index: Int, f: Transformation[E] => Transformation[Err]): Tuple[Err] = {
       val t =
         allFields.andThen { case (transformation, _) => (transformation = f(transformation), removed = false) }
           .applyOrElse(index, idx => (Transformation.Error(ErrorMessage.NoFieldAtIndexFound(idx)), false))
       this.copy(allFields = allFields + (index -> t))
     }
 
-    def withModifiedElement(idx: Int, transformation: Transformation[Err])(using Quotes): Tuple[Err] =
+    def withModifiedElement(idx: Int, transformation: Transformation[Err]): Tuple[Err] =
       update(idx, _ => transformation)
 
-    def withoutField(index: Int)(using Quotes): Tuple[Err] = {
+    def withoutField(index: Int): Tuple[Err] = {
       val t: (transformation: Transformation[Err], removed: Boolean) =
         allFields.applyOrElse(index, idx => (transformation = Transformation.Error(ErrorMessage.NoFieldAtIndexFound(idx)), removed =  false))
       this.copy(allFields = allFields + (index -> (transformation = t.transformation, removed = true)))

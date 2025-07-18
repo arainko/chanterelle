@@ -19,7 +19,7 @@ object EntryPoint {
       modifiers <- Modifier.parse(mods.toList)
       modifiedTransformation = modifiers.foldLeft(transformation)((transformation, mod) => transformation.applyModifier(mod))
       refinedTransformation <- modifiedTransformation.refine
-      interpretableTransformation = InterpretableTransformation.create(refinedTransformation)
+      interpretableTransformation <- InterpretableTransformation.create(refinedTransformation).left.map(_ :: Nil)
     } yield Interpreter.runTransformation(tuple, interpretableTransformation)
 
     transformation match {

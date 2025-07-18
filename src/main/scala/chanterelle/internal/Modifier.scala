@@ -14,32 +14,33 @@ private[chanterelle] enum Modifier derives Debug {
 }
 
 private[chanterelle] object Modifier {
-  def parse[A](mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes): Either[List[ErrorMessage], List[Modifier]] = {
+  def parse[A](
+    mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]]
+  )(using Quotes): Either[List[ErrorMessage], List[Modifier]] = {
     import quotes.reflect.*
-    val (errors, modifiers) = mods.partitionMap {
+    mods.parTraverse {
       // TODO: report an issue to dotty: not able to match with quotes if $value is of type NamedTuple[?, ?]
       case cfg @ '{
             type selected <: AnyNamedTuple
             type v <: AnyNamedTuple
             (builder: TupleModifier.Builder[tup]) => builder.put[selected](${ AsTerm(PathSelector(path)) })[v]($value)
           } =>
-          Structure
-            .toplevel[v]
-            .narrow[Structure.Named.Singular]
-            .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
-            .map(valueStructure => Modifier.Add(path, valueStructure, value))        
+        Structure
+          .toplevel[v]
+          .narrow[Structure.Named.Singular]
+          .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
+          .map(valueStructure => Modifier.Add(path, valueStructure, value))
 
       case cfg @ '{
             type selected <: AnyNamedTuple
             type v <: AnyNamedTuple
             (builder: TupleModifier.Builder[tup]) => builder.compute[selected](${ AsTerm(PathSelector(path)) })[v]($value)
           } =>
-          Structure
-            .toplevel[v]
-            .narrow[Structure.Named.Singular]
-            .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
-            .map(valueStructure => Modifier.Compute(path, valueStructure, value)) 
-        
+        Structure
+          .toplevel[v]
+          .narrow[Structure.Named.Singular]
+          .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
+          .map(valueStructure => Modifier.Compute(path, valueStructure, value))
 
       case '{ (builder: TupleModifier.Builder[tup]) =>
             builder.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
@@ -47,17 +48,13 @@ private[chanterelle] object Modifier {
         Right(Modifier.Update(path, Type.of[newField], fn))
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.remove[selected](${ AsTerm(PathSelector(path)) }) } =>
-        path
-          .stripLast
-          .collect {
-            case (path, Path.Segment.Field(tpe, name))         => Right(Modifier.Remove(path, name))
-            case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index))
-          }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
+        path.stripLast.collect {
+          case (path, Path.Segment.Field(tpe, name))         => Right(Modifier.Remove(path, name))
+          case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index))
+        }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
       case other => report.errorAndAbort(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
     }
-
-    if errors.isEmpty then Right(modifiers) else Left(errors)
   }
 
   private object AsTerm {

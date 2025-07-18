@@ -1,6 +1,7 @@
 package chanterelle
 
 import scala.collection.immutable.HashMap
+import scala.collection.SortedSet
 
 //TODO: report to metals: presentation compiler crash when referring to named tuple fields inside .update and .compute
 object test extends App {
@@ -9,11 +10,14 @@ object test extends App {
 
   val easy: (name: Int, nested: (wow: Int, nah: Int), map: HashMap[(keyField: Int), (valueField: String)]) = (1, (2, 3), HashMap(Tuple(1) -> Tuple("asd")))
 
-  val vEasy = (field = (1, 2, 3, 4))
+  val vEasy = (field = SortedSet(1, 2, 3))
+
+  class MyType
 
   val renamedB = 
     // internal.CodePrinter.code {
-    a.transform(
+    vEasy.transform(
+      _.update(_.field.element)(_ => 1)
       // _.remove(_.field._4)
       // _.remove(_.other.element),
       // _.compute(_.other.element.tup._2) { a => 
