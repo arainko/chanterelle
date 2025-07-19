@@ -13,7 +13,6 @@ object Tuples {
 private[chanterelle] object Interpreter {
 
   def runTransformation(value: Expr[Any], transformation: InterpretableTransformation)(using Quotes): Expr[?] = {
-    import quotes.reflect.*
     transformation match
       case InterpretableTransformation.Named(source, fields, namesTpe, valuesTpe) =>
         ((namesTpe, valuesTpe): @unchecked) match {

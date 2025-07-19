@@ -17,7 +17,7 @@ MVP of the library:
 
   Other:
     [] sane errors
-    [] optimized interpreter - turn non-modified branches into Leaves that just take the source value
+    [X] optimized interpreter - turn non-modified branches into Leaves that just take the source value
 
 Further ideas:
   * deep merging

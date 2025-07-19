@@ -24,7 +24,7 @@ Modifiers:
 
 Other:
   * 🔜 sane errors
-  * 🔜 optimized interpreter - turn non-modified branches into Leaves that just take the source value
+  * :heavy_check_mark: optimized interpreter - turn non-modified branches into Leaves that just take the source value
 
 Further ideas:
   * deep merging

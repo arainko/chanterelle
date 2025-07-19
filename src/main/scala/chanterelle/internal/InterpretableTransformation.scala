@@ -6,6 +6,7 @@ import scala.collection.immutable.SortedMap
 import scala.collection.Factory
 import scala.util.boundary
 import scala.util.boundary.Label
+import chanterelle.internal.Transformation.IsModified
 
 private[chanterelle] enum InterpretableTransformation derives Debug {
   case Named(
@@ -52,7 +53,12 @@ object InterpretableTransformation {
   def create(transformation: Transformation[Nothing])(using Quotes): Either[ErrorMessage, InterpretableTransformation] = {
     def recurse(transformation: Transformation[Nothing])(using Label[ErrorMessage]): InterpretableTransformation =
       transformation match {
-        case t @ Transformation.Named(source, fields) =>
+        // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
+        case t @ Transformation.IsNotModified() => 
+          val tpe = t.calculateTpe
+          Leaf(Structure.Leaf(tpe, Path.empty(tpe))) //TODO: figure out what to do about the path here
+        //TODO: remove 'removed' from OfField
+        case t @ Transformation.Named(source, fields, _) =>
           Named(
             source,
             fields.map {
@@ -64,23 +70,23 @@ object InterpretableTransformation {
             t.calculateNamesTpe,
             t.calculateValuesTpe
           )
-        case t @ Transformation.Tuple(source, fields) =>
+        case t @ Transformation.Tuple(source, fields, _) =>
           Tuple(source, fields.map((idx, t) => idx -> recurse(t)), t.calculateTpe)
-        case t @ Transformation.Optional(source, paramTransformation) =>
+        case t @ Transformation.Optional(source, paramTransformation, _) =>
           Optional(source, recurse(paramTransformation), t.calculateTpe)
-        case t @ Transformation.Map(source, key, value) =>
+        case t @ Transformation.Map(source, key, value, _) =>
           val tpe = t.calculateTpe
           val factory = ((source.tycon, tpe): @unchecked) match {
             case ('[type map[k, v]; map], '[collection.Map[key, value]]) => 
-              Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(source.tycon, Type.of[(key, value)])))
+              Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
           }
 
           Map(source, recurse(key), recurse(value), factory, tpe)
-        case t @ Transformation.Iter(source, elem) =>
+        case t @ Transformation.Iter(source, elem, _) =>
           val tpe = t.calculateTpe
           val factory = ((source.tycon, tpe): @unchecked) match {
             case ('[type coll[a]; coll], '[Iterable[elem]]) =>
-              Expr.summon[Factory[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(source.tycon, tpe)))
+              Expr.summon[Factory[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
           }
           Iter(source, recurse(elem), factory, tpe)
         case Transformation.Leaf(output) =>

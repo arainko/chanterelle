@@ -23,7 +23,8 @@ object EntryPoint {
     } yield Interpreter.runTransformation(tuple, interpretableTransformation)
 
     transformation match {
-      case Left(errors) => report.errorAndAbort(errors.map(_.toString).mkString(System.lineSeparator()))
+      //TODO: add proper printing under the proper spans, calculating a span for accumulated errors, all that fun stuff...
+      case Left(errors) => report.errorAndAbort(errors.map(_.render).mkString(System.lineSeparator()))
       case Right(transformation) => transformation
     }
   }

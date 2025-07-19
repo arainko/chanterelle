@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
+import chanterelle.internal.Structure.Leaf
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -11,6 +12,8 @@ private[chanterelle] sealed trait Structure extends scala.Product derives Debug 
   def path: Path
 
   final def narrow[A <: Structure](using tt: TypeTest[Structure, A]): Option[A] = tt.unapply(this)
+
+  final def asLeaf(using Quotes): Leaf = Structure.Leaf(tpe, path)
 }
 
 private[chanterelle] object Structure {
@@ -65,7 +68,6 @@ private[chanterelle] object Structure {
     tpe: Type[? <: Iterable[?]],
     path: Path,
     repr: Collection.Repr
-    // paramStruct: Structure
   ) extends Structure
 
   object Collection {
