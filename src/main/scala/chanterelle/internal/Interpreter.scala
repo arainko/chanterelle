@@ -5,11 +5,6 @@ import chanterelle.internal.Structure.*
 import NamedTuple.*
 import scala.collection.Factory
 
-// not sure about this bad boy
-object Tuples {
-  def valuesOf[N <: scala.Tuple, V <: scala.Tuple](tup: NamedTuple[N, V]): V = tup.toTuple
-}
-
 private[chanterelle] object Interpreter {
 
   def runTransformation(value: Expr[Any], transformation: InterpretableTransformation)(using Quotes): Expr[?] = {

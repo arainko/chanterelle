@@ -16,6 +16,8 @@ extension (tpe: Type[? <: AnyKind]) {
 extension [A, B](self: Either[A, B]) {
   private[chanterelle] inline def zipRight[AA >: A, C](inline that: Either[AA, C]): Either[AA, C] =
     self.flatMap(_ => that)
+
+  private[chanterelle] def leftMap[C](f: A => C): Either[C, B] = self.left.map(f)
 }
 
 extension [A](self: A | None.type) {

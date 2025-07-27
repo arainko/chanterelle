@@ -6,7 +6,6 @@ import scala.collection.immutable.SortedMap
 import scala.collection.Factory
 import scala.util.boundary
 import scala.util.boundary.Label
-import chanterelle.internal.Transformation.IsModified
 
 private[chanterelle] enum InterpretableTransformation derives Debug {
   case Named(

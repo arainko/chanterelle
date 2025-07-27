@@ -2,15 +2,16 @@ package chanterelle.internal
 
 import NamedTuple.AnyNamedTuple
 import scala.quoted.*
-import chanterelle.TupleModifier
+import chanterelle.hidden.TupleModifier
 
 private[chanterelle] enum Modifier derives Debug {
   def path: Path
+  def span: Span
 
-  case Add(path: Path, valueStructure: Structure.Named.Singular, value: Expr[?])
-  case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?])
-  case Update(path: Path, tpe: Type[?], function: Expr[? => ?])
-  case Remove(path: Path, fieldToRemove: String | Int)
+  case Add(path: Path, valueStructure: Structure.Named.Singular, value: Expr[?], span: Span)
+  case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?], span: Span)
+  case Update(path: Path, tpe: Type[?], function: Expr[? => ?], span: Span)
+  case Remove(path: Path, fieldToRemove: String | Int, span: Span)
 }
 
 private[chanterelle] object Modifier {
@@ -29,7 +30,7 @@ private[chanterelle] object Modifier {
           .toplevel[v]
           .narrow[Structure.Named.Singular]
           .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
-          .map(valueStructure => Modifier.Add(path, valueStructure, value))
+          .map(valueStructure => Modifier.Add(path, valueStructure, value, Span.fromExpr(cfg)))
 
       case cfg @ '{
             type selected <: AnyNamedTuple
@@ -40,17 +41,17 @@ private[chanterelle] object Modifier {
           .toplevel[v]
           .narrow[Structure.Named.Singular]
           .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
-          .map(valueStructure => Modifier.Compute(path, valueStructure, value))
+          .map(valueStructure => Modifier.Compute(path, valueStructure, value, Span.fromExpr(cfg)))
 
-      case '{ (builder: TupleModifier.Builder[tup]) =>
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
             builder.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
           } =>
-        Right(Modifier.Update(path, Type.of[newField], fn))
+        Right(Modifier.Update(path, Type.of[newField], fn, Span.fromExpr(cfg)))
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.remove[selected](${ AsTerm(PathSelector(path)) }) } =>
         path.stripLast.collect {
-          case (path, Path.Segment.Field(tpe, name))         => Right(Modifier.Remove(path, name))
-          case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index))
+          case (path, Path.Segment.Field(tpe, name))         => Right(Modifier.Remove(path, name, Span.fromExpr(cfg)))
+          case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index, Span.fromExpr(cfg)))
         }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
       case other => report.errorAndAbort(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")

@@ -13,7 +13,7 @@ private[chanterelle] sealed trait Structure extends scala.Product derives Debug 
 
   final def narrow[A <: Structure](using tt: TypeTest[Structure, A]): Option[A] = tt.unapply(this)
 
-  final def asLeaf(using Quotes): Leaf = Structure.Leaf(tpe, path)
+  final def asLeaf: Leaf = Structure.Leaf(tpe, path)
 }
 
 private[chanterelle] object Structure {
@@ -109,7 +109,7 @@ private[chanterelle] object Structure {
           val transformations =
             tupleTypeElements(valuesTpe)
               .zip(constStringTuple(namesTpe.repr))
-              .map((tpe, name) => // TODO: report to metals: no hover info over untupled parameter
+              .map((tpe, name) =>
                 name -> (tpe.asType match {
                   case '[tpe] =>
                     Structure.of[tpe](

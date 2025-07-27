@@ -1,0 +1,128 @@
+package chanterelle
+
+import munit.FunSuite
+import scala.collection.SortedSet
+import scala.collection.immutable.HashMap
+
+class ModifiersSpec extends FunSuite {
+  test(".put puts a new field into a named tuple") {
+    val tup = (anotherField = (field1 = 123))
+    val expected = (anotherField = (field1 = 123, newField = "garmanbozia"))
+    val actual = tup.transform(_.put(_.anotherField)((newField = "garmanbozia")))
+
+    assertEquals(actual, expected)
+  }
+
+  test(".remove removes a field") {
+    val tup = (anotherField = (field1 = 123, field2 = 123))
+    val expected = (anotherField = (field1 = 123))
+    val actual = tup.transform(_.remove(_.anotherField.field2))
+
+    assertEquals(actual, expected)
+  }
+
+  test(".remove leaves an EmptyTuple when all fields have been deleted") {
+    val tup = (anotherField = (field1 = 123))
+    val expected = (anotherField = EmptyTuple)
+    val actual = tup.transform(_.remove(_.anotherField.field1))
+
+    assertEquals(actual, expected)
+  }
+
+  test(".update updates a value under a given path") {
+    val tup = (anotherField = (field1 = 123))
+    val expected = (anotherField = (field1 = 124))
+    val actual = tup.transform(_.update(_.anotherField.field1)(_ + 1))
+
+    assertEquals(actual, expected)
+  }
+
+  test("modifiers can traverse Options") {
+    val tup = (anotherField = Some((field1 = 123)))
+    val expected = (anotherField = Some(field1 = 123, newField = "electricityyyy"))
+    val actual = tup.transform(_.put(_.anotherField.element)((newField = "electricityyyy")))
+
+    assertEquals(actual, expected)
+  }
+
+  test("modifiers can traverse collections (and keep the same collection type)") {
+    val tup = (anotherField = List((field1 = 123), (field1 = 124)))
+    val expected = 
+      (anotherField = List(
+          (field1 = 123, newField = "ashtray wasp"), 
+          (field1 = 124, newField = "ashtray wasp")
+        )
+      )
+    val actual = tup.transform(_.put(_.anotherField.element)((newField = "ashtray wasp")))
+
+    assertEquals(actual, expected)
+  }
+
+  test("modifiers can traverse maps (and keep the same map type)") {
+    val tup = (anotherField = HashMap((key = 1) -> (value = 1), (key = 2) -> (value = 2)))
+    val expected = 
+      (anotherField = HashMap(
+        (key = 1, newField = "the king of limbs is a good album") -> (value = 1, newField = "frfr"),
+        (key = 2, newField = "the king of limbs is a good album") -> (value = 2, newField = "frfr"))
+      )
+
+    val actual = 
+      tup.transform(
+        _.put(_.anotherField.element._1)((newField = "the king of limbs is a good album")),
+        _.put(_.anotherField.element._2)((newField = "frfr")),
+      )
+
+    assertEquals(actual, expected)
+  }
+
+  test("modifiers can traverse sorted collections") {
+    val tup = (anotherField = SortedSet(1, 2, 3))
+    val expected = (anotherField = SortedSet(2, 3, 4))
+    val actual = tup.transform(_.update(_.anotherField.element)(_ + 1))
+
+    assertEquals(actual, expected)
+  }
+
+  test("modifiers can traverse classic tuples (using _N accessors)") {
+    val tup = (anotherField = (1, 2, (nested = 3)))
+    val expected = (anotherField = (1, 2, (nested = 3, newField = "I especially like Separator as the closing track")))
+    val actual = tup.transform(_.put(_.anotherField._3)((newField = "I especially like Separator as the closing track")))
+
+    assertEquals(actual, expected)
+  }
+
+  /* TODO: .apply(N) selectors on field that is a tuple seem to be borked
+  Couldn't parse an unexpected config option: Apply(TypeApply(Select(Apply(Apply(TypeApply(Select(Ident("NamedTuple"), "apply"), List(Inferred(), Inferred())), List(Ident("_$24"))), List(Literal(IntConstant(0)))), "apply"), List(Inferred())), List(Literal(IntConstant(2))))
+   */
+  // test("modifiers can traverse classic tuples (using _.apply(N) accessors)") {
+  //   val tup = (anotherField = (1, 2, (nested = 3)))
+  //   val expected = (anotherField = (1, 2, (nested = 3, newField = "I especially like Separator as the closing track")))
+  //   val actual = tup.transform(_.put(_.anotherField.apply(2))((newField = "I especially like Separator as the closing track")))
+
+  //   assertEquals(actual, expected)
+  // }
+
+  test("multiple modifiers in a single transform call behave correctly") {
+    val tup = (anotherField = List((field1 = 123, field2 = 0), (field1 = 123, field2 = 0)))
+
+    val actual = tup.transform(
+      _.put(_.anotherField.element)((newField1 = 1)),
+      _.put(_.anotherField.element)((newField2 = 2)),
+      _.put(_.anotherField.element)((newField3 = 3)),
+      _.update(_.anotherField.element.field2)(_ + 1),
+      _.remove(_.anotherField.element.field1)
+    )
+
+    val expected = 
+      (anotherField = List(
+          (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3),
+          (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3)
+        )
+      )
+
+    assertEquals(actual, expected)
+  }
+
+
+
+}

@@ -12,7 +12,7 @@ private[chanterelle] object PathSelector {
 
     @tailrec
     def recurse(using
-        Quotes
+      Quotes
     )(acc: List[Path.Segment], term: quotes.reflect.Term): Path = {
       import quotes.reflect.*
 
@@ -82,7 +82,7 @@ private[chanterelle] object PathSelector {
           )
           recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
 
-          // Apply(Apply(TypeApply(Select(Ident("NamedTuple"), "apply"), List(Inferred(), Inferred())), List(Ident("_$2"))), List(Literal(IntConstant(2)))
+        // Apply(Apply(TypeApply(Select(Ident("NamedTuple"), "apply"), List(Inferred(), Inferred())), List(Ident("_$2"))), List(Literal(IntConstant(2)))
 
         case Apply(
               Apply(
@@ -90,14 +90,15 @@ private[chanterelle] object PathSelector {
                 tree :: Nil
               ),
               Literal(IntConstant(idx)) :: Nil
-            ) if tree.tpe <:< TypeRepr.of[NamedTuple.AnyNamedTuple] => 
-              // widen here because we're dealing with a singleton type of the lambda param, eg. '_$4'
-              tree.tpe.widen.asType match {
-                case '[type tpe <: NamedTuple.AnyNamedTuple; tpe] => 
-                  val names = constStringTuple(TypeRepr.of[NamedTuple.Names[tpe]])
-                  //TODO: 'names' is a List and indexed access on a list is... Not the best to say the least
-                  recurse(acc.prepended(Path.Segment.Field(Type.of[tpe], names(idx))), tree)
-              }
+            ) if tree.tpe <:< TypeRepr.of[NamedTuple.AnyNamedTuple] =>
+          // widen here because we're dealing with a singleton type of the lambda param, eg. '_$4'
+          tree.tpe.widen.asType match {
+            case '[type tpe <: NamedTuple.AnyNamedTuple; tpe] =>
+              val names = constStringTuple(TypeRepr.of[NamedTuple.Names[tpe]])
+              // TODO: 'names' is a List and indexed access on a list is... Not the best to say the least
+              recurse(acc.prepended(Path.Segment.Field(Type.of[tpe], names(idx))), tree)
+          }
+
 
         // case Apply(
         //       Apply(
@@ -139,22 +140,23 @@ private[chanterelle] object PathSelector {
   }
 
   private def constStringTuple(using
-      Quotes
+    Quotes
   )(tp: quotes.reflect.TypeRepr): List[String] = {
     import quotes.reflect.*
-    tupleTypeElements(tp.asType).map { case ConstantType(StringConstant(l)) =>
-      l
+    tupleTypeElements(tp.asType).map {
+      case ConstantType(StringConstant(l)) =>
+        l
     }
   }
 
   private def tupleTypeElements(
-      tpe: Type[?]
+    tpe: Type[?]
   )(using Quotes): List[quotes.reflect.TypeRepr] = {
     @tailrec def loop(using
-        Quotes
+      Quotes
     )(
-        curr: Type[?],
-        acc: List[quotes.reflect.TypeRepr]
+      curr: Type[?],
+      acc: List[quotes.reflect.TypeRepr]
     ): List[quotes.reflect.TypeRepr] = {
       import quotes.reflect.*
 
