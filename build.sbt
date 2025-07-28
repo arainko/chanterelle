@@ -10,7 +10,7 @@ ThisBuild / licenses := Seq(License.Apache2)
 ThisBuild / developers := List(tlGitHubDev("arainko", "Aleksander Rainko"))
 
 ThisBuild / mimaBinaryIssueFilters ++= Seq(
-  ProblemFilters.exclude[Problem]("chanterelle.internal.*"),
+  ProblemFilters.exclude[Problem]("chanterelle.internal.*")
 )
 
 ThisBuild / tlCiReleaseBranches := Seq("main")
@@ -35,5 +35,5 @@ lazy val chanterelle =
         "-Xcheck-macros",
         "-Wconf:msg=(infix named):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
-      libraryDependencies += "org.scalameta" %% "munit" % "1.1.1" % Test,
+      libraryDependencies += "org.scalameta" %% "munit" % "1.1.1" % Test
     )
