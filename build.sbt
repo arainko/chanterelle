@@ -1,4 +1,25 @@
+import com.typesafe.tools.mima.core._
+
 ThisBuild / scalaVersion := "3.7.1"
+
+ThisBuild / tlBaseVersion := "0.0"
+ThisBuild / organization := "io.github.arainko"
+ThisBuild / organizationName := "arainko"
+ThisBuild / startYear := Some(2025)
+ThisBuild / licenses := Seq(License.Apache2)
+ThisBuild / developers := List(tlGitHubDev("arainko", "Aleksander Rainko"))
+
+ThisBuild / mimaBinaryIssueFilters ++= Seq(
+  ProblemFilters.exclude[Problem]("chanterelle.internal.*"),
+)
+
+ThisBuild / tlCiReleaseBranches := Seq("main")
+ThisBuild / tlCiScalafixCheck := true
+ThisBuild / tlCiScalafmtCheck := true
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("17"))
+ThisBuild / githubWorkflowUseSbtThinClient := true
+
+ThisBuild / tlVersionIntroduced := Map("3" -> "0.0.0")
 
 lazy val root = project.in(file(".")).aggregate(chanterelle)
 
@@ -12,7 +33,7 @@ lazy val chanterelle =
         "-Wunused:all",
         "-WunstableInlineAccessors",
         "-Xcheck-macros",
-        "-Wconf:msg=(infix named):s" // TODO: report errors reported without this to dotty (when addint stuff with '+' and the -> syntax into a SortedMap)
+        "-Wconf:msg=(infix named):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
-      libraryDependencies += "org.scalameta" %% "munit" % "1.1.1" % Test
+      libraryDependencies += "org.scalameta" %% "munit" % "1.1.1" % Test,
     )
