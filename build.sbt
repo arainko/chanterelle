@@ -18,7 +18,8 @@ ThisBuild / tlCiScalafixCheck := true
 ThisBuild / tlCiScalafmtCheck := true
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("17"))
 ThisBuild / githubWorkflowUseSbtThinClient := true
-
+ThisBuild / semanticdbEnabled := true
+ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 ThisBuild / tlVersionIntroduced := Map("3" -> "0.0.0")
 
 lazy val root = project.in(file(".")).aggregate(chanterelle)
