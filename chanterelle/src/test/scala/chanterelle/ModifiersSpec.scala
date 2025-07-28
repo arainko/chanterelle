@@ -1,6 +1,7 @@
 package chanterelle
 
 import munit.FunSuite
+
 import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
 
@@ -47,12 +48,11 @@ class ModifiersSpec extends FunSuite {
 
   test("modifiers can traverse collections (and keep the same collection type)") {
     val tup = (anotherField = List((field1 = 123), (field1 = 124)))
-    val expected = 
+    val expected =
       (anotherField = List(
-          (field1 = 123, newField = "ashtray wasp"), 
-          (field1 = 124, newField = "ashtray wasp")
-        )
-      )
+        (field1 = 123, newField = "ashtray wasp"),
+        (field1 = 124, newField = "ashtray wasp")
+      ))
     val actual = tup.transform(_.put(_.anotherField.element)((newField = "ashtray wasp")))
 
     assertEquals(actual, expected)
@@ -60,16 +60,16 @@ class ModifiersSpec extends FunSuite {
 
   test("modifiers can traverse maps (and keep the same map type)") {
     val tup = (anotherField = HashMap((key = 1) -> (value = 1), (key = 2) -> (value = 2)))
-    val expected = 
+    val expected =
       (anotherField = HashMap(
         (key = 1, newField = "the king of limbs is a good album") -> (value = 1, newField = "frfr"),
-        (key = 2, newField = "the king of limbs is a good album") -> (value = 2, newField = "frfr"))
-      )
+        (key = 2, newField = "the king of limbs is a good album") -> (value = 2, newField = "frfr")
+      ))
 
-    val actual = 
+    val actual =
       tup.transform(
         _.put(_.anotherField.element._1)((newField = "the king of limbs is a good album")),
-        _.put(_.anotherField.element._2)((newField = "frfr")),
+        _.put(_.anotherField.element._2)((newField = "frfr"))
       )
 
     assertEquals(actual, expected)
@@ -113,16 +113,13 @@ class ModifiersSpec extends FunSuite {
       _.remove(_.anotherField.element.field1)
     )
 
-    val expected = 
+    val expected =
       (anotherField = List(
-          (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3),
-          (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3)
-        )
-      )
+        (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3),
+        (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3)
+      ))
 
     assertEquals(actual, expected)
   }
-
-
 
 }

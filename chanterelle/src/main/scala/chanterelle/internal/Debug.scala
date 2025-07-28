@@ -104,7 +104,7 @@ private[chanterelle] object Debug extends LowPriorityDebug {
   inline def derived[A](using A: Mirror.Of[A]): Debug[A] =
     inline summonInline[Logger.Level] match {
       case Logger.Level.Off => nonShowable
-      case _ =>
+      case _                =>
         inline A match {
           case given Mirror.ProductOf[A] => product
           case given Mirror.SumOf[A]     => coproduct
@@ -179,8 +179,8 @@ private[chanterelle] object Debug extends LowPriorityDebug {
 
       def recurse(ast: AST, depth: Int): String = {
         ast match
-          case Empty       => ""
-          case Text(value) => value
+          case Empty                     => ""
+          case Text(value)               => value
           case p @ Product(name, fields) =>
             if p.length >= 80 then {
               s"$name(".bold + Separator +
@@ -217,9 +217,9 @@ private[chanterelle] transparent trait LowPriorityDebug {
   given Debug[Nothing => Any] = Debug.nonShowable
 
   given intOrString: Debug[Int | String] with {
-    def astify(self: Int | String)(using Quotes): Debug.AST = 
+    def astify(self: Int | String)(using Quotes): Debug.AST =
       self match
-        case str: String => summon[Debug[String]].astify(str) 
-        case int: Int => summon[Debug[Int]].astify(int) 
+        case str: String => summon[Debug[String]].astify(str)
+        case int: Int    => summon[Debug[Int]].astify(int)
   }
 }

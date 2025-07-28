@@ -56,7 +56,7 @@ object TupleModifier {
      * {{{
      * val tup = (anotherField = (field1 = 123, field2 = 123))
      * val expected = (anotherField = (field1 = 123))
-     * 
+     *
      * val actual = tup.transform(_.remove(_.anotherField.field2))
      *
      * assertEquals(actual, expected)

@@ -1,9 +1,8 @@
 package chanterelle.internal
 
-import scala.quoted.*
-import scala.collection.immutable.VectorMap
-import scala.collection.immutable.SortedMap
 import scala.collection.Factory
+import scala.collection.immutable.{ SortedMap, VectorMap }
+import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
 
@@ -53,10 +52,10 @@ object InterpretableTransformation {
     def recurse(transformation: Transformation[Nothing])(using Label[ErrorMessage]): InterpretableTransformation =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
-        case t @ Transformation.IsNotModified() => 
+        case t @ Transformation.IsNotModified() =>
           val tpe = t.calculateTpe
-          Leaf(Structure.Leaf(tpe, Path.empty(tpe))) //TODO: figure out what to do about the path here
-        //TODO: remove 'removed' from OfField
+          Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
+        // TODO: remove 'removed' from OfField
         case t @ Transformation.Named(source, fields, _) =>
           Named(
             source,
@@ -76,7 +75,7 @@ object InterpretableTransformation {
         case t @ Transformation.Map(source, key, value, _) =>
           val tpe = t.calculateTpe
           val factory = ((source.tycon, tpe): @unchecked) match {
-            case ('[type map[k, v]; map], '[collection.Map[key, value]]) => 
+            case ('[type map[k, v]; map], '[collection.Map[key, value]]) =>
               Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
           }
 

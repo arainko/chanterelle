@@ -1,8 +1,10 @@
 package chanterelle.internal
 
-import NamedTuple.AnyNamedTuple
-import scala.quoted.*
 import chanterelle.hidden.TupleModifier
+
+import scala.quoted.*
+
+import NamedTuple.AnyNamedTuple
 
 private[chanterelle] enum Modifier derives Debug {
   def path: Path

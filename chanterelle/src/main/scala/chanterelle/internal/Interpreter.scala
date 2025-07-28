@@ -1,9 +1,11 @@
 package chanterelle.internal
 
-import scala.quoted.*
 import chanterelle.internal.Structure.*
-import NamedTuple.*
+
 import scala.collection.Factory
+import scala.quoted.*
+
+import NamedTuple.*
 
 private[chanterelle] object Interpreter {
 

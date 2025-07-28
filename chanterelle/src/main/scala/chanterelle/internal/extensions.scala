@@ -42,13 +42,12 @@ extension [A](self: List[A]) {
   private[chanterelle] def parTraverse[E, B](f: A => Either[E, B]): Either[::[E], List[B]] = {
     self.partitionMap(f) match {
       case (errs @ ::(_, _), _) => Left(errs)
-      case (_, values) => Right(values)
+      case (_, values)          => Right(values)
     }
 
   }
 }
 
 private[chanterelle] type None = None.type
-
 
 private[chanterelle] inline def when[A](using DummyImplicit)[B](inline f: A => B) = f

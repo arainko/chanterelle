@@ -2,9 +2,9 @@ package chanterelle.internal
 
 import chanterelle.hidden.TupleModifier
 
+import scala.annotation.publicInBinary
 import scala.quoted.*
 import scala.quoted.runtime.StopMacroExpansion
-import scala.annotation.publicInBinary
 
 object EntryPoint {
   transparent inline def run[A](tuple: A, inline mods: TupleModifier.Builder[A] => TupleModifier[A]*): Any = ${
@@ -12,7 +12,10 @@ object EntryPoint {
   }
 
   @publicInBinary
-  private[chanterelle] def runMacro[A: Type](tuple: Expr[A], modifications: Expr[Seq[TupleModifier.Builder[A] => TupleModifier[A]]])(using Quotes) = {
+  private[chanterelle] def runMacro[A: Type](
+    tuple: Expr[A],
+    modifications: Expr[Seq[TupleModifier.Builder[A] => TupleModifier[A]]]
+  )(using Quotes) = {
     import quotes.reflect.*
 
     val transformation = for {
@@ -34,7 +37,7 @@ object EntryPoint {
     }
   }
 
-  //TODO: revisit this, it feels off
+  // TODO: revisit this, it feels off
   private def reportErrorsAndAbort(errors: List[ErrorMessage], accumulatedErrorSpan: Span)(using Quotes) = {
     errors.groupBy {
       _.span match

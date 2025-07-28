@@ -15,7 +15,7 @@ private[chanterelle] object ErrorMessage {
 
   case class NoFieldAtIndexFound(index: Int) extends ErrorMessage {
     def render(using Quotes) = s"No field at index $index"
-    
+
   }
 
   case class AlreadyConfigured(name: String) extends ErrorMessage {
@@ -43,7 +43,7 @@ private[chanterelle] object ErrorMessage {
 
   case class NoFactoryFound(tpe: Type[?]) extends ErrorMessage {
     def render(using Quotes) = {
-      
+
       import quotes.reflect.*
       s"Couldn't find an implicit instance of Factory for ${tpe.repr.show(using Printer.TypeReprCode)}"
     }

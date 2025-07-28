@@ -1,7 +1,8 @@
 package chanterelle.internal
 
-import scala.quoted.*
 import chanterelle.hidden.Tuples
+
+import scala.quoted.*
 
 private[chanterelle] opaque type StructuredValue[S <: Structure, V <: Expr[Any] & Singleton] = S
 

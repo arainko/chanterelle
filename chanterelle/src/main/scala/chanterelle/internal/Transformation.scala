@@ -1,20 +1,20 @@
 package chanterelle.internal
 
-import chanterelle.internal.Transformation
-
-import scala.annotation.nowarn
-import scala.collection.immutable.SortedMap
-import scala.collection.immutable.VectorMap
-import scala.quoted.*
 import chanterelle.internal.Transformation.IsModified
 
+import scala.annotation.nowarn
+import scala.collection.immutable.{ SortedMap, VectorMap }
+import scala.quoted.*
+
 private[chanterelle] case object Err
-private[chanterelle]type Err = Err.type
+private[chanterelle] type Err = Err.type
 
 private[chanterelle] sealed trait Transformation[+E <: Err] {
 
   @nowarn("msg=Unreachable case except for null")
-  final inline def narrow[A <: Transformation[Err]](inline fn: A => Transformation[Err])(inline errorMessage: ErrorMessage): Transformation[Err] =
+  final inline def narrow[A <: Transformation[Err]](
+    inline fn: A => Transformation[Err]
+  )(inline errorMessage: ErrorMessage): Transformation[Err] =
     this match {
       case a: A => fn(a)
       case _    => Transformation.Error(errorMessage)
@@ -41,7 +41,9 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
     )(curr: Transformation[Err])(using Quotes): Transformation[Err] = {
       segments match {
         case Path.Segment.Field(name = name) :: next =>
-          curr.narrow[Transformation.Named[Err]](_.update(name, recurse(next)))(ErrorMessage.UnexpectedTransformation("named tuple"))
+          curr.narrow[Transformation.Named[Err]](_.update(name, recurse(next)))(
+            ErrorMessage.UnexpectedTransformation("named tuple")
+          )
 
         case Path.Segment.TupleElement(index = index) :: next =>
           curr.narrow[Transformation.Tuple[Err]](_.update(index, recurse(next)))(ErrorMessage.UnexpectedTransformation("tuple"))
@@ -81,7 +83,9 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
           )(ErrorMessage.UnexpectedTransformation("named tuple"))
 
         case Modifier.Remove(fieldToRemove = name: String) =>
-          transformation.narrow[Transformation.Named[Err]](_.withoutField(name))(ErrorMessage.UnexpectedTransformation("named tuple"))
+          transformation.narrow[Transformation.Named[Err]](_.withoutField(name))(
+            ErrorMessage.UnexpectedTransformation("named tuple")
+          )
 
         case Modifier.Remove(fieldToRemove = idx: Int) =>
           transformation.narrow[Transformation.Tuple[Err]](_.withoutField(idx))(ErrorMessage.UnexpectedTransformation("tuple"))
@@ -103,7 +107,9 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
           head match
             case Transformation.Named(source, allFields, _) =>
               val transformations =
-                allFields.values.collect { case Transformation.OfField.FromSource(name, transformation, removed) => transformation }.toList
+                allFields.values.collect {
+                  case Transformation.OfField.FromSource(name, transformation, removed) => transformation
+                }.toList
               recurse(transformations ::: tail, acc)
             case Transformation.Tuple(source, allFields, _) =>
               recurse(allFields.values.toList ::: tail, acc)
@@ -166,7 +172,7 @@ object Transformation {
   case class Named[+E <: Err](
     source: Structure.Named,
     private val allFields: VectorMap[String, OfField[E]],
-    isModified: IsModified 
+    isModified: IsModified
   ) extends Transformation[E] {
     final def _2 = fields
     val fields: VectorMap[String, OfField[E]] = allFields.filter((_, t) => !t.removed)
@@ -210,17 +216,20 @@ object Transformation {
       this.copy(allFields = this.allFields.updated(name, transformation), isModified = IsModified.Yes)
 
     def withoutField(name: String): Named[Err] =
-      this.copy(allFields = this.allFields.updatedWith(name) {
-        case Some(src: Transformation.OfField.FromSource[E]) => Some(src.copy(removed = true))
-        case Some(mod: Transformation.OfField.FromModifier)  => Some(mod.copy(removed = true))
-        case None                                            => Some(OfField.error(name, ErrorMessage.NoFieldFound(name)))
-      }, isModified = IsModified.Yes)
+      this.copy(
+        allFields = this.allFields.updatedWith(name) {
+          case Some(src: Transformation.OfField.FromSource[E]) => Some(src.copy(removed = true))
+          case Some(mod: Transformation.OfField.FromModifier)  => Some(mod.copy(removed = true))
+          case None                                            => Some(OfField.error(name, ErrorMessage.NoFieldFound(name)))
+        },
+        isModified = IsModified.Yes
+      )
   }
 
   case class Tuple[+E <: Err](
     source: Structure.Tuple,
     private val allFields: SortedMap[Int, (transformation: Transformation[E], removed: Boolean)],
-    isModified: IsModified 
+    isModified: IsModified
   ) extends Transformation[E] {
     final def _2 = fields
     val fields = allFields.collect { case (idx, (transformation = t, removed = false)) => idx -> t }
@@ -240,16 +249,21 @@ object Transformation {
 
     def withoutField(index: Int): Tuple[Err] = {
       val t: (transformation: Transformation[Err], removed: Boolean) =
-        allFields.applyOrElse(index, idx => (transformation = Transformation.Error(ErrorMessage.NoFieldAtIndexFound(idx)), removed =  false))
-      this.copy(allFields = allFields + (index -> (transformation = t.transformation, removed = true)), isModified = IsModified.Yes)
+        allFields.applyOrElse(
+          index,
+          idx => (transformation = Transformation.Error(ErrorMessage.NoFieldAtIndexFound(idx)), removed = false)
+        )
+      this.copy(
+        allFields = allFields + (index -> (transformation = t.transformation, removed = true)),
+        isModified = IsModified.Yes
+      )
     }
   }
 
   case class Optional[+E <: Err](
     source: Structure.Optional,
     paramTransformation: Transformation[E],
-    isModified: IsModified 
-
+    isModified: IsModified
   ) extends Transformation[E] {
     def calculateTpe(using Quotes): Type[? <: Option[?]] =
       paramTransformation.calculateTpe match {
@@ -265,8 +279,7 @@ object Transformation {
     source: Structure.Collection.Repr.Map[F],
     key: Transformation[E],
     value: Transformation[E],
-    isModified: IsModified 
-
+    isModified: IsModified
   ) extends Transformation[E] {
     def calculateTpe(using Quotes): Type[?] = {
       ((source.tycon, key.calculateTpe, value.calculateTpe): @unchecked) match {
@@ -284,8 +297,7 @@ object Transformation {
   case class Iter[+E <: Err, F[elem] <: Iterable[elem]](
     source: Structure.Collection.Repr.Iter[F],
     elem: Transformation[E],
-    isModified: IsModified 
-
+    isModified: IsModified
   ) extends Transformation[E] {
     def calculateTpe(using Quotes): Type[?] = {
       ((source.tycon, elem.calculateTpe): @unchecked) match {
@@ -349,7 +361,7 @@ object Transformation {
   }
 
   enum IsModified derives Debug {
-      case Yes, No
+    case Yes, No
   }
 
   object IsNotModified {

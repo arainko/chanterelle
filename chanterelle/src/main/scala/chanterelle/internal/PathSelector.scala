@@ -99,7 +99,6 @@ private[chanterelle] object PathSelector {
               recurse(acc.prepended(Path.Segment.Field(Type.of[tpe], names(idx))), tree)
           }
 
-
         // case Apply(
         //       Apply(
         //         TypeApply(Select(Ident(_), "element"), elemTpe :: _ :: Nil),

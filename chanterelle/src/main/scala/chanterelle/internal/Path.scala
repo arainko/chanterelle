@@ -9,7 +9,7 @@ private[chanterelle] final case class Path(root: Type[?], segments: Vector[Path.
   // def prepended(segment: Path.Segment): Path = self.copy(segments = segments.prepended(segment))
 
   // def narrowedCurrentTpe: Type[?] =
-    // segments.lastOption.fold(root)(_.tpe)
+  // segments.lastOption.fold(root)(_.tpe)
 
   // deliberately use something that requires a total function so that when a new Path.Segment is declared
   // it's not forgotten about
@@ -32,7 +32,7 @@ private[chanterelle] final case class Path(root: Type[?], segments: Vector[Path.
   def stripLast: Option[(path: Path, last: Path.Segment)] =
     segments.lastOption match {
       case Some(last) => Some(this.copy(root, segments.dropRight(1)) -> last)
-      case None => None
+      case None       => None
     }
 
   // def isAncestorOrSiblingOf(that: Path)(using Quotes): Boolean = {
@@ -47,9 +47,9 @@ private[chanterelle] final case class Path(root: Type[?], segments: Vector[Path.
     if self.segments.isEmpty then "_"
     else
       self.segments.map {
-        case Path.Segment.Field(_, name)    => name
+        case Path.Segment.Field(_, name)         => name
         case Path.Segment.TupleElement(_, index) => s"apply($index)"
-        case Path.Segment.Element(_)        => "element"
+        case Path.Segment.Element(_)             => "element"
       }.mkString(s"_.", ".", "")
   }
 }
