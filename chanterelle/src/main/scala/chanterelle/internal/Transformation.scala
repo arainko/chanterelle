@@ -9,26 +9,27 @@ import scala.quoted.*
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
 
-private[chanterelle] sealed trait Transformation[+E <: Err] {
+private[chanterelle] sealed abstract class Transformation[+E <: Err](val readableName: String) {
 
   @nowarn("msg=Unreachable case except for null")
   final inline def narrow[A <: Transformation[Err]](
     inline fn: A => Transformation[Err]
-  )(inline errorMessage: ErrorMessage): Transformation[Err] =
+  )(inline errorMessage: Transformation[Err] => ErrorMessage): Transformation[Err] =
     this match {
-      case a: A => fn(a)
-      case _    => Transformation.Error(errorMessage)
+      case a: A  => fn(a)
+      case other => Transformation.Error(errorMessage(other))
     }
 
+  // NOT REALLY COMPILER, SHUT
   @nowarn("msg=Unreachable case except for null")
   final inline def narrow[A <: Transformation[Err], B <: Transformation[Err]](
     inline fnA: A => Transformation[Err],
     inline fnB: B => Transformation[Err]
-  )(inline errorMessage: ErrorMessage): Transformation[Err] =
+  )(inline errorMessage: Transformation[Err] => ErrorMessage): Transformation[Err] =
     this match {
-      case a: A => fnA(a)
-      case b: B => fnB(b)
-      case _    => Transformation.Error(errorMessage)
+      case a: A  => fnA(a)
+      case b: B  => fnB(b)
+      case other => Transformation.Error(errorMessage(other))
     }
 
   def calculateTpe(using Quotes): Type[?]
@@ -41,24 +42,30 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
     )(curr: Transformation[Err])(using Quotes): Transformation[Err] = {
       segments match {
         case Path.Segment.Field(name = name) :: next =>
-          curr.narrow[Transformation.Named[Err]](_.update(name, recurse(next)))(
-            ErrorMessage.UnexpectedTransformation("named tuple")
+          curr.narrow[Transformation.Named[Err]](_.update(name, recurse(next)))(other =>
+            ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span)
           )
 
         case Path.Segment.TupleElement(index = index) :: next =>
-          curr.narrow[Transformation.Tuple[Err]](_.update(index, recurse(next)))(ErrorMessage.UnexpectedTransformation("tuple"))
+          curr.narrow[Transformation.Tuple[Err]](_.update(index, recurse(next)))(other =>
+            ErrorMessage.UnexpectedTransformation("tuple", other, modifier.span)
+          )
 
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateKey(recurse(next)))(ErrorMessage.UnexpectedTransformation("map"))
+          curr.narrow[Transformation.Map[Err, ?]](_.updateKey(recurse(next)))(other =>
+            ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
+          )
 
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateValue(recurse(next)))(ErrorMessage.UnexpectedTransformation("map"))
+          curr.narrow[Transformation.Map[Err, ?]](_.updateValue(recurse(next)))(other =>
+            ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
+          )
 
         case Path.Segment.Element(tpe) :: next =>
           curr.narrow(
             when[Transformation.Optional[Err]](_.update(recurse(next))),
             when[Transformation.Iter[Err, ?]](_.update(recurse(next)))
-          )(ErrorMessage.UnexpectedTransformation("option or collection"))
+          )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, modifier.span))
 
         case Nil => apply(modifier, curr)
       }
@@ -66,13 +73,13 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
 
     def apply(modifier: Modifier, transformation: Transformation[Err]): Transformation[Err] = {
       modifier match {
-        case m: Modifier.Add =>
+        case m: Modifier.Put =>
           transformation.narrow[Transformation.Named[Err]](
             _.withModifiedField(
               m.valueStructure.fieldName,
               Transformation.OfField.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value), false)
             )
-          )(ErrorMessage.UnexpectedTransformation("named tuple"))
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
         case m: Modifier.Compute =>
           transformation.narrow[Transformation.Named[Err]](
@@ -80,18 +87,20 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
               m.valueStructure.fieldName,
               Transformation.OfField.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value), false)
             )
-          )(ErrorMessage.UnexpectedTransformation("named tuple"))
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
         case Modifier.Remove(fieldToRemove = name: String) =>
-          transformation.narrow[Transformation.Named[Err]](_.withoutField(name))(
-            ErrorMessage.UnexpectedTransformation("named tuple")
+          transformation.narrow[Transformation.Named[Err]](_.withoutField(name))(other =>
+            ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span)
           )
 
         case Modifier.Remove(fieldToRemove = idx: Int) =>
-          transformation.narrow[Transformation.Tuple[Err]](_.withoutField(idx))(ErrorMessage.UnexpectedTransformation("tuple"))
+          transformation.narrow[Transformation.Tuple[Err]](_.withoutField(idx))(other =>
+            ErrorMessage.UnexpectedTransformation("tuple", other, modifier.span)
+          )
 
         case m: Modifier.Update =>
-          Transformation.ConfedUp(Configured.Update(m.tpe, m.function))
+          Transformation.ConfedUp(Configured.Update(m.tpe, m.function), m.span)
       }
     }
     recurse(modifier.path.segments.toList)(this)
@@ -121,7 +130,7 @@ private[chanterelle] sealed trait Transformation[+E <: Err] {
               recurse(elem :: tail, acc)
             case Transformation.Leaf(output) =>
               recurse(tail, acc)
-            case Transformation.ConfedUp(config) =>
+            case Transformation.ConfedUp(config, span) =>
               recurse(tail, acc)
             case err @ Transformation.Error(message) =>
               recurse(tail, err.message :: acc)
@@ -173,7 +182,7 @@ object Transformation {
     source: Structure.Named,
     private val allFields: VectorMap[String, OfField[E]],
     isModified: IsModified
-  ) extends Transformation[E] {
+  ) extends Transformation[E]("named tuple") {
     final def _2 = fields
     val fields: VectorMap[String, OfField[E]] = allFields.filter((_, t) => !t.removed)
 
@@ -230,7 +239,7 @@ object Transformation {
     source: Structure.Tuple,
     private val allFields: SortedMap[Int, (transformation: Transformation[E], removed: Boolean)],
     isModified: IsModified
-  ) extends Transformation[E] {
+  ) extends Transformation[E]("tuple") {
     final def _2 = fields
     val fields = allFields.collect { case (idx, (transformation = t, removed = false)) => idx -> t }
 
@@ -264,7 +273,7 @@ object Transformation {
     source: Structure.Optional,
     paramTransformation: Transformation[E],
     isModified: IsModified
-  ) extends Transformation[E] {
+  ) extends Transformation[E]("option") {
     def calculateTpe(using Quotes): Type[? <: Option[?]] =
       paramTransformation.calculateTpe match {
         case '[tpe] => Type.of[Option[tpe]]
@@ -280,7 +289,7 @@ object Transformation {
     key: Transformation[E],
     value: Transformation[E],
     isModified: IsModified
-  ) extends Transformation[E] {
+  ) extends Transformation[E]("map") {
     def calculateTpe(using Quotes): Type[?] = {
       ((source.tycon, key.calculateTpe, value.calculateTpe): @unchecked) match {
         case ('[type map[k, v]; map], '[key], '[value]) => Type.of[map[key, value]]
@@ -298,7 +307,7 @@ object Transformation {
     source: Structure.Collection.Repr.Iter[F],
     elem: Transformation[E],
     isModified: IsModified
-  ) extends Transformation[E] {
+  ) extends Transformation[E]("iterable") {
     def calculateTpe(using Quotes): Type[?] = {
       ((source.tycon, elem.calculateTpe): @unchecked) match {
         case ('[type coll[a]; coll], '[elem]) =>
@@ -310,17 +319,18 @@ object Transformation {
       this.copy(elem = f(elem), isModified = IsModified.Yes)
   }
 
-  case class Leaf(output: Structure.Leaf) extends Transformation[Nothing] {
+  case class Leaf(output: Structure.Leaf) extends Transformation[Nothing]("ordinary value") {
     def calculateTpe(using Quotes): Type[?] = output.tpe
     val isModified = IsModified.No
   }
 
-  case class ConfedUp(config: Configured) extends Transformation[Nothing] {
+  // TODO: change this goofyahh name
+  case class ConfedUp(config: Configured, span: Span) extends Transformation[Nothing]("configured value") {
     def calculateTpe(using Quotes): Type[?] = config.tpe
     val isModified = IsModified.Yes
   }
 
-  case class Error(message: ErrorMessage) extends Transformation[Err] {
+  case class Error(message: ErrorMessage) extends Transformation[Err]("erroneous transformation") {
     // TODO: make calculateTpe an extension on ModifiableTransformation[Nothing]
     def calculateTpe(using Quotes): Type[? <: AnyKind] = Type.of[Nothing]
 

@@ -22,7 +22,11 @@ ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 ThisBuild / tlVersionIntroduced := Map("3" -> "0.0.0")
 
-lazy val root = project.in(file(".")).aggregate(chanterelle)
+lazy val root =
+  project
+    .in(file("."))
+    .enablePlugins(NoPublishPlugin)
+    .aggregate(chanterelle)
 
 lazy val chanterelle =
   project

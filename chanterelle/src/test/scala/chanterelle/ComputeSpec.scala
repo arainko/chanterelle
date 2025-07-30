@@ -3,7 +3,7 @@ package chanterelle
 import munit.FunSuite
 
 // .compute needs its own file because Metals absolutely dies when referring to a value inside the compute lambda FOR SOME REASON
-class ComputeSpec extends FunSuite {
+class ComputeSpec extends ChanterelleSuite {
   test(".compute puts a new field into a named tuple") {
     val tup = (anotherField = (field1 = 123))
     val expected = (anotherField = (field1 = 123, newField = 123 + 23))

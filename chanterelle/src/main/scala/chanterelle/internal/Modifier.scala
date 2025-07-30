@@ -10,7 +10,7 @@ private[chanterelle] enum Modifier derives Debug {
   def path: Path
   def span: Span
 
-  case Add(path: Path, valueStructure: Structure.Named.Singular, value: Expr[?], span: Span)
+  case Put(path: Path, valueStructure: Structure.Named.Singular, value: Expr[?], span: Span)
   case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?], span: Span)
   case Update(path: Path, tpe: Type[?], function: Expr[? => ?], span: Span)
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
@@ -32,7 +32,7 @@ private[chanterelle] object Modifier {
           .toplevel[v]
           .narrow[Structure.Named.Singular]
           .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
-          .map(valueStructure => Modifier.Add(path, valueStructure, value, Span.fromExpr(cfg)))
+          .map(valueStructure => Modifier.Put(path, valueStructure, value, Span.fromExpr(cfg)))
 
       case cfg @ '{
             type selected <: AnyNamedTuple
@@ -56,7 +56,9 @@ private[chanterelle] object Modifier {
           case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index, Span.fromExpr(cfg)))
         }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
-      case other => report.errorAndAbort(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
+      case other =>
+        Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
+        report.errorAndAbort(s"Couldn't parse '${CodePrinter.codeAtSpan(Span.fromExpr(other))}' as a valid modifier", other)
     }
   }
 

@@ -1,5 +1,7 @@
 package chanterelle.internal
 
+import chanterelle.internal.Transformation.ConfedUp
+
 import scala.quoted.*
 
 private[chanterelle] sealed trait ErrorMessage derives Debug {
@@ -36,8 +38,18 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class UnexpectedTransformation(expected: String) extends ErrorMessage {
-    def render(using Quotes) = s"Couldn't traverse transformation plan, expected $expected"
+  case class UnexpectedTransformation(expected: String, actual: Transformation[Err], override val span: Span)
+      extends ErrorMessage {
+    def render(using Quotes) = {
+      val rendered =
+        actual match {
+          case cfg @ ConfedUp(_, span) =>
+            s"${cfg.readableName}: ${CodePrinter.codeAtSpanWithLocation(span)}"
+          case other => other.readableName
+        }
+
+      s"Couldn't traverse transformation plan, expected $expected but encountered $rendered"
+    }
 
   }
 

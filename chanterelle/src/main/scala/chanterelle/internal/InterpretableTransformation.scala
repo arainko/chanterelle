@@ -89,7 +89,7 @@ object InterpretableTransformation {
           Iter(source, recurse(elem), factory, tpe)
         case Transformation.Leaf(output) =>
           Leaf(output)
-        case Transformation.ConfedUp(config) =>
+        case Transformation.ConfedUp(config, _) =>
           ConfedUp(config)
       }
 

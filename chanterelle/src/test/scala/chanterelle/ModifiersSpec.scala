@@ -2,10 +2,11 @@ package chanterelle
 
 import munit.FunSuite
 
+import scala.annotation.nowarn
 import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
 
-class ModifiersSpec extends FunSuite {
+class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
     val tup = (anotherField = (field1 = 123))
     val expected = (anotherField = (field1 = 123, newField = "garmanbozia"))
@@ -121,5 +122,54 @@ class ModifiersSpec extends FunSuite {
 
     assertEquals(actual, expected)
   }
+
+  test("can't modify a subfield of an already modified field") {
+    val tup = (anotherField = (field1 = 123))
+
+    assertFailsToCompileContains {
+      """
+      tup.transform(
+        _.update(_.anotherField)(_ => 1),
+        _.update(_.anotherField.field1)(_ => "huh"),
+      )
+      """
+    }(
+      """Couldn't traverse transformation plan, expected named tuple but encountered configured value"""
+    )
+
+  }: @nowarn
+
+  test(".put doesn't accept non-singleton tuples") {
+    val tup = (anotherField = (field1 = 123))
+
+    assertFailsToCompileWith {
+      """
+      tup.transform(_.put(_.anotherField)((newField = "garmanbozia", anotherField = "THE THREAD WILL BE TORN")))
+      """
+    }(
+      """Expected a named tuple with a single field but got: scala.NamedTuple.NamedTuple[scala.Tuple2["newField", "anotherField"], scala.Tuple2[java.lang.String, java.lang.String]]"""
+    )
+
+  }: @nowarn
+
+  test(".remove doesn't accept non-field selectors") {
+    val tup = (anotherField = (field1 = List(1)))
+
+    assertFailsToCompileWith {
+      """
+      tup.transform(_.remove(_.anotherField.field1.element))
+      """
+    }("The selector '_.anotherField.field1.element' isn't pointing to a field of a named tuple")
+  }: @nowarn
+
+  test("goofy path selectors are reported as such") {
+    val tup = (anotherField = (field1 = List(1)))
+
+    assertFailsToCompileWith {
+      """
+      tup.transform(_.put(_ => (field = "not really"))((wow = 1)))
+      """
+    }("""Couldn't parse '_ => (field = "not really")' as a valid path selector""")
+  }: @nowarn
 
 }

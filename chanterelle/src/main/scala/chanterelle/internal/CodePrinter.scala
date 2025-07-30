@@ -21,4 +21,12 @@ private[chanterelle] object CodePrinter {
     report.info(struct)
     value
   }
+
+  def codeAtSpan(span: Span)(using Quotes) =
+    span.toPosition.sourceCode.mkString
+
+  def codeAtSpanWithLocation(span: Span)(using Quotes) = {
+    val pos = span.toPosition
+    s"'${pos.sourceCode.mkString}' @ ${pos.sourceFile.name}:${pos.endLine + 1}:${pos.endColumn + 1}"
+  }
 }

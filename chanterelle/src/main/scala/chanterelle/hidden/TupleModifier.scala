@@ -1,6 +1,7 @@
 package chanterelle.hidden
 
 import scala.NamedTuple.*
+import scala.annotation.compileTimeOnly
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -19,6 +20,7 @@ object TupleModifier {
      * assertEquals(actual, expected)
      * }}}
      */
+    @compileTimeOnly("Only usable as part of the .transform DSL")
     def put[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[Value <: AnyNamedTuple](
       value: Value
     ): TupleModifier[Tup]
@@ -34,6 +36,7 @@ object TupleModifier {
      * assertEquals(actual, expected)
      * }}}
      */
+    @compileTimeOnly("Only usable as part of the .transform DSL")
     def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[Value <: AnyNamedTuple](
       f: Selected => Value
     ): TupleModifier[Tup]
@@ -49,6 +52,7 @@ object TupleModifier {
      * assertEquals(actual, expected)
      * }}}
      */
+    @compileTimeOnly("Only usable as part of the .transform DSL")
     def update[Selected](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup]
 
     /**
@@ -62,6 +66,7 @@ object TupleModifier {
      * assertEquals(actual, expected)
      * }}}
      */
+    @compileTimeOnly("Only usable as part of the .transform DSL")
     def remove[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
   }
 
