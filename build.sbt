@@ -40,5 +40,8 @@ lazy val chanterelle =
         "-Xcheck-macros",
         "-Wconf:msg=(infix named):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
-      libraryDependencies += "org.scalameta" %% "munit" % "1.1.1" % Test
+      libraryDependencies ++= Seq(
+        "org.scala-lang" %% "scala3-staging" % scalaVersion.value % Test,
+        "org.scalameta" %% "munit" % "1.1.1" % Test
+        )
     )

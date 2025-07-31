@@ -171,5 +171,4 @@ class ModifiersSpec extends ChanterelleSuite {
       """
     }("""Couldn't parse '_ => (field = "not really")' as a valid path selector""")
   }: @nowarn
-
 }

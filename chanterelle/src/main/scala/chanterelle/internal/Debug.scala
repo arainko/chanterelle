@@ -111,11 +111,11 @@ private[chanterelle] object Debug extends LowPriorityDebug {
         }
     }
 
-  private[chanterelle] class ForProduct[A](tpeName: String, _instances: => IArray[Debug[Any]]) extends Debug[A] {
+  private[chanterelle] class ForProduct[A](tpeName: String, fieldNames: List[String], _instances: => IArray[Debug[Any]]) extends Debug[A] {
     private lazy val instances = _instances
     def astify(self: A)(using Quotes): AST = {
       val prod = self.asInstanceOf[scala.Product]
-      val fields = prod.productElementNames
+      val fields = fieldNames
         .zip(instances)
         .zip(prod.productIterator)
         .map {
@@ -129,9 +129,16 @@ private[chanterelle] object Debug extends LowPriorityDebug {
   }
 
   private inline def product[A](using A: Mirror.ProductOf[A]): Debug[A] = {
-    val tpeName = constValue[A.MirroredLabel].toString
+    val tpeName = 
+      inline erasedValue[A] match {
+        case _: NamedTuple.AnyNamedTuple => ""
+        case _ => constValue[A.MirroredLabel].toString
+      }
+    val fieldNames = inline constValueTuple[A.MirroredElemLabels].toList match {
+      case fields: List[String] => fields
+    }
     def instances = summonAll[Tuple.Map[A.MirroredElemTypes, Debug]].toIArray.map(_.asInstanceOf[Debug[Any]])
-    ForProduct(tpeName, instances)
+    ForProduct(tpeName, fieldNames, instances)
   }
 
   private[chanterelle] class ForCoproduct[A](instances: Vector[Debug[Any]])(using A: Mirror.SumOf[A]) extends Debug[A] {
@@ -214,6 +221,9 @@ private[chanterelle] object Debug extends LowPriorityDebug {
 }
 
 private[chanterelle] transparent trait LowPriorityDebug {
+  inline given namedTuple[A <: NamedTuple.AnyNamedTuple](using Mirror.ProductOf[A]): Debug[A] = 
+    Debug.derived[A]
+
   given Debug[Nothing => Any] = Debug.nonShowable
 
   given intOrString: Debug[Int | String] with {
