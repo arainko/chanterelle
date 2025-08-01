@@ -4,7 +4,7 @@
 
 ## Installation
 ```scala
-libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.0.1"
+libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.0"
 ```
 
 ## Documentation
