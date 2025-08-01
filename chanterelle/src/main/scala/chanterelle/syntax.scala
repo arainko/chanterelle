@@ -21,7 +21,7 @@ extension [Tup <: AnyNamedTuple](self: Tup) {
    * // evaluates to: (nestedField = (field = 2, optionalField = Some(4), newField = 4))
    * // and is typed as: (nestedField : (field : Int, optionalField : Option[Int], newField : Int))
    * }}}
-   * 
+   *
    * @see chanterelle.hidden.TupledModifier.Builder
    */
   transparent inline def transform(inline modifications: TupleModifier.Builder[Tup] => TupleModifier[Tup]*) =

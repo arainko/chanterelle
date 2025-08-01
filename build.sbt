@@ -41,7 +41,7 @@ lazy val chanterelle =
       ),
       libraryDependencies ++= Seq(
         "org.scalameta" %% "munit" % "1.1.1" % Test
-        )
+      )
     )
 
 lazy val docs =
