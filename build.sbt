@@ -21,6 +21,7 @@ ThisBuild / githubWorkflowUseSbtThinClient := true
 ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 ThisBuild / tlVersionIntroduced := Map("3" -> "0.0.0")
+ThisBuild / tlCiDependencyGraphJob := false
 
 lazy val root =
   project
