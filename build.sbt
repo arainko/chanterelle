@@ -47,6 +47,13 @@ lazy val chanterelle =
 
 lazy val docs =
   project
-    .in(file("docs"))
-    .enablePlugins(NoPublishPlugin)
+    .in(file("documentation"))
+    .enablePlugins(NoPublishPlugin, MdocPlugin)
     .dependsOn(chanterelle)
+
+lazy val generateReadme = taskKey[Unit]("gen readme")
+
+generateReadme := Def.task {
+  val docOutput = (docs / mdocOut).value
+  IO.copyFile(docOutput / "README.md", file("README.md"))
+}.dependsOn((docs / mdoc).toTask("")).value
