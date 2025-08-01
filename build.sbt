@@ -2,7 +2,7 @@ import com.typesafe.tools.mima.core._
 
 ThisBuild / scalaVersion := "3.7.1"
 
-ThisBuild / tlBaseVersion := "0.0"
+ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / organization := "io.github.arainko"
 ThisBuild / organizationName := "arainko"
 ThisBuild / startYear := Some(2025)
