@@ -43,7 +43,7 @@ val transformed = input.transform(
 val tup = (anotherField = (field1 = 123))
 val transformed = tup.transform(_.put(_.anotherField)((newField = "garmonbozia")))
 ```
-Result:
+
 
 ```scala
 
@@ -56,7 +56,7 @@ Result:
 val tup = (anotherField = (field1 = 123))
 val transformed = tup.transform(_.compute(_.anotherField)(value => (newField = value.field1 + 23)))
 ```
-Result:
+
 
 ```scala
 
@@ -69,7 +69,7 @@ Result:
 val tup = (anotherField = (field1 = 123))
 val transformed = tup.transform(_.update(_.anotherField.field1)(_ + 1))
 ```
-Result:
+
 
 ```scala
 
@@ -82,7 +82,7 @@ Result:
 val tup = (anotherField = (field1 = 123, field2 = 123))
 val transformed = tup.transform(_.remove(_.anotherField.field2))
 ```
-Result:
+
 
 ```scala
 
@@ -101,7 +101,7 @@ val transformed = tup.transform(
   _.put(root => root)((newField = 3)) // the selector arg doesn't need to be named 'root', it just needs to be an identity lambda
 )
 ```
-Result:
+
 
 ```scala
 
@@ -119,7 +119,7 @@ val transformed = tup.transform(
   _.update(_.coll.element)(_ + 1),
 )
 ```
-Result:
+
 
 ```scala
 
@@ -137,7 +137,7 @@ val transformed = tup.transform(
   _.update(_.mapField.element._2)(_ + "-VALUE-UPDATED"),
 )
 ```
-Result:
+
 
 ```scala
 
