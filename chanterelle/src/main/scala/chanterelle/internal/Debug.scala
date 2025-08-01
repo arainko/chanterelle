@@ -9,7 +9,7 @@ import scala.reflect.ClassTag
 private[chanterelle] trait Debug[-A] {
   def astify(self: A)(using Quotes): Debug.AST
 
-  extension (self: A) final def show(using Quotes): String = astify(self).dropEmpty.show
+  extension (self: A) final def show(using Quotes): String = astify(self).dropEmpty.show(using Debug.UseColors.Yes)
 }
 
 @scala.annotation.publicInBinary
@@ -111,7 +111,8 @@ private[chanterelle] object Debug extends LowPriorityDebug {
         }
     }
 
-  private[chanterelle] class ForProduct[A](tpeName: String, fieldNames: List[String], _instances: => IArray[Debug[Any]]) extends Debug[A] {
+  private[chanterelle] class ForProduct[A](tpeName: String, fieldNames: List[String], _instances: => IArray[Debug[Any]])
+      extends Debug[A] {
     private lazy val instances = _instances
     def astify(self: A)(using Quotes): AST = {
       val prod = self.asInstanceOf[scala.Product]
@@ -129,10 +130,10 @@ private[chanterelle] object Debug extends LowPriorityDebug {
   }
 
   private inline def product[A](using A: Mirror.ProductOf[A]): Debug[A] = {
-    val tpeName = 
+    val tpeName =
       inline erasedValue[A] match {
         case _: NamedTuple.AnyNamedTuple => ""
-        case _ => constValue[A.MirroredLabel].toString
+        case _                           => constValue[A.MirroredLabel].toString
       }
     val fieldNames = inline constValueTuple[A.MirroredElemLabels].toList match {
       case fields: List[String] => fields
@@ -178,7 +179,7 @@ private[chanterelle] object Debug extends LowPriorityDebug {
         case Product(name, fields)    => name.length + fields.map((name, ast) => name.length + ast.length).sum
         case Collection(name, values) => name.length + values.map(_.length).sum
 
-    final def show: String = {
+    final def show(using UseColors): String = {
       def ident(n: Int) = "  " * n
 
       // if you think this is over then you're wrong
@@ -213,15 +214,25 @@ private[chanterelle] object Debug extends LowPriorityDebug {
       recurse(this, 0)
     }
 
-    extension (self: String) {
-      private def bold: String = s"${Console.BOLD}$self${Console.RESET}"
-      private def yellow: String = s"${Console.YELLOW}$self${Console.RESET}"
+    extension (self: String)(using useColors: UseColors) {
+      private def bold: String = {
+        if useColors == UseColors.Yes then s"${Console.BOLD}$self${Console.RESET}"
+        else self
+      }
+      private def yellow: String =
+        if useColors == UseColors.Yes then s"${Console.YELLOW}$self${Console.RESET}"
+        else self
     }
+
+  }
+
+  enum UseColors {
+    case Yes, No
   }
 }
 
 private[chanterelle] transparent trait LowPriorityDebug {
-  inline given namedTuple[A <: NamedTuple.AnyNamedTuple](using Mirror.ProductOf[A]): Debug[A] = 
+  inline given namedTuple[A <: NamedTuple.AnyNamedTuple](using Mirror.ProductOf[A]): Debug[A] =
     Debug.derived[A]
 
   given Debug[Nothing => Any] = Debug.nonShowable

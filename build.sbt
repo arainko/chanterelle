@@ -32,7 +32,6 @@ lazy val chanterelle =
   project
     .in(file("chanterelle"))
     .settings(
-      scalaVersion := "3.7.1",
       scalacOptions ++= Seq(
         "-preview",
         "-Wunused:all",
@@ -41,7 +40,12 @@ lazy val chanterelle =
         "-Wconf:msg=(infix named):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
       libraryDependencies ++= Seq(
-        "org.scala-lang" %% "scala3-staging" % scalaVersion.value % Test,
         "org.scalameta" %% "munit" % "1.1.1" % Test
         )
     )
+
+lazy val docs =
+  project
+    .in(file("docs"))
+    .enablePlugins(NoPublishPlugin)
+    .dependsOn(chanterelle)

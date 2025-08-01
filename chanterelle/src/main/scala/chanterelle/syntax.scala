@@ -8,7 +8,7 @@ import scala.NamedTuple.*
 extension [Tup <: AnyNamedTuple](self: Tup) {
 
   /**
-   * Transforms a named tuple with one of the supported modifiers (see [[chanterelle.hidden.TupledModifier.Builder]])
+   * Transforms a named tuple with one of the supported modifiers
    *
    * {{{
    * val value = (field1 = 1, nestedField = (field = 2, optionalField = Some(3)))
@@ -21,6 +21,8 @@ extension [Tup <: AnyNamedTuple](self: Tup) {
    * // evaluates to: (nestedField = (field = 2, optionalField = Some(4), newField = 4))
    * // and is typed as: (nestedField : (field : Int, optionalField : Option[Int], newField : Int))
    * }}}
+   * 
+   * @see chanterelle.hidden.TupledModifier.Builder
    */
   transparent inline def transform(inline modifications: TupleModifier.Builder[Tup] => TupleModifier[Tup]*) =
     EntryPoint.run[Tup](self, modifications*)
