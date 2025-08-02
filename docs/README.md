@@ -12,7 +12,6 @@ libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.0"
 The entry point of *chanterelle* is a single import: 
 
 ```scala mdoc
-
 import chanterelle.*
 ```
 ```scala mdoc:invisible
@@ -27,13 +26,14 @@ val input = (toplevelField = (nestedField = 1, fieldToUpdate = 2, optionalField 
 val transformed = input.transform(
   _.update(_.toplevelField.fieldToUpdate)(_ + 1), // note the value of toplevelField.fieldToUpdate in the output
   _.remove(_.toplevelField.nestedField), // toplevelField.nestedField gets removed from the output value
-  _.put(_.toplevelField.optionalField.element)((newField = 4)) // the element of an Option or a collection can be accessed with `.element`
+  _.put(_.toplevelField.optionalField.element)(
+    (newField = 4)
+  ) // the element of an Option or a collection can be accessed with `.element`
 )
 ```
 ...which, in turn, evaluates to:
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 
 ```
@@ -48,7 +48,6 @@ val transformed = tup.transform(_.put(_.anotherField)((newField = "garmonbozia")
 ```
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 
 ```
@@ -60,7 +59,6 @@ val transformed = tup.transform(_.compute(_.anotherField)(value => (newField = v
 ```
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 ```
 
@@ -71,7 +69,6 @@ val transformed = tup.transform(_.update(_.anotherField.field1)(_ + 1))
 ```
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 ```
 
@@ -82,7 +79,6 @@ val transformed = tup.transform(_.remove(_.anotherField.field2))
 ```
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 ```
 
@@ -99,7 +95,6 @@ val transformed = tup.transform(
 ```
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 ```
 
@@ -110,12 +105,11 @@ The selectors can 'cut through' `Options` and collections alike with the `.eleme
 val tup = (optional = Some(1), coll = Vector(1, 2, 3))
 val transformed = tup.transform(
   _.update(_.optional.element)(_ + 1),
-  _.update(_.coll.element)(_ + 1),
+  _.update(_.coll.element)(_ + 1)
 )
 ```
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 ```
 
@@ -126,11 +120,10 @@ Much like in the case of collections and `Options`, `Maps` can also be modified 
 val tup = (mapField = Map("key1" -> "value1", "key2" -> "value2"))
 val transformed = tup.transform(
   _.update(_.mapField.element._1)(_ + "-KEY-UPDATED"),
-  _.update(_.mapField.element._2)(_ + "-VALUE-UPDATED"),
+  _.update(_.mapField.element._2)(_ + "-VALUE-UPDATED")
 )
 ```
 
 ```scala mdoc:passthrough
-
 Docs.prettyPrint(transformed)
 ```
