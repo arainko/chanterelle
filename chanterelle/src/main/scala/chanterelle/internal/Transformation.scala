@@ -11,7 +11,7 @@ private[chanterelle] type Err = Err.type
 
 private[chanterelle] sealed abstract class Transformation[+E <: Err](val readableName: String) {
 
-  @nowarn("msg=Unreachable case except for null")
+  @nowarn("msg=Unreachable")
   final inline def narrow[A <: Transformation[Err]](
     inline fn: A => Transformation[Err]
   )(inline errorMessage: Transformation[Err] => ErrorMessage): Transformation[Err] =
@@ -20,8 +20,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
       case other => Transformation.Error(errorMessage(other))
     }
 
-  // NOT REALLY COMPILER, SHUT
-  @nowarn("msg=Unreachable case except for null")
+  @nowarn("msg=Unreachable")
   final inline def narrow[A <: Transformation[Err], B <: Transformation[Err]](
     inline fnA: A => Transformation[Err],
     inline fnB: B => Transformation[Err]
@@ -337,6 +336,7 @@ object Transformation {
     val isModified = IsModified.Yes
   }
 
+  @nowarn("msg=unused implicit parameter")
   enum OfField[+E <: Err] derives Debug {
     def removed: Boolean
 

@@ -16,7 +16,8 @@ private[chanterelle] object Logger {
 
   @scala.annotation.publicInBinary
   private[Logger] val output = Output.StdOut
-  @nowarn private def filter(msg: String, loc: String)(using Quotes) = Expr.summon[locally.type].isDefined
+  @nowarn private def filter(msg: String, loc: String)(using Quotes) =
+    Expr.summon[locally.type].isDefined
   enum Level {
     case Off, Debug, Info
   }

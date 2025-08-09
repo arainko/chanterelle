@@ -91,21 +91,19 @@ class ModifiersSpec extends ChanterelleSuite {
   test("modifiers can traverse classic tuples (using _N accessors)") {
     val tup = (anotherField = (1, 2, (nested = 3)))
     val expected = (anotherField = (1, 2, (nested = 3, newField = "I especially like Separator as the closing track")))
-    val actual = tup.transform(_.put(_.anotherField._3)((newField = "I especially like Separator as the closing track")))
 
+    val actual = tup.transform(_.put(_.anotherField._3)((newField = "I especially like Separator as the closing track")))
     assertEquals(actual, expected)
   }
 
-  /* TODO: .apply(N) selectors on field that is a tuple seem to be borked
-  Couldn't parse an unexpected config option: Apply(TypeApply(Select(Apply(Apply(TypeApply(Select(Ident("NamedTuple"), "apply"), List(Inferred(), Inferred())), List(Ident("_$24"))), List(Literal(IntConstant(0)))), "apply"), List(Inferred())), List(Literal(IntConstant(2))))
-   */
-  // test("modifiers can traverse classic tuples (using _.apply(N) accessors)") {
-  //   val tup = (anotherField = (1, 2, (nested = 3)))
-  //   val expected = (anotherField = (1, 2, (nested = 3, newField = "I especially like Separator as the closing track")))
-  //   val actual = tup.transform(_.put(_.anotherField.apply(2))((newField = "I especially like Separator as the closing track")))
+  test("modifiers can traverse classic tuples (using _.apply(N) accessors)") {
+    val tup = (anotherField = (1, 2, (nested = 3)))
+    val expected = (anotherField = (1, 2, (nested = 3, newField = "I especially like Separator as the closing track")))
 
-  //   assertEquals(actual, expected)
-  // }
+    val actual = tup.transform(_.put(_.anotherField.apply(2))((newField = "I especially like Separator as the closing track")))
+
+    assertEquals(actual, expected)
+  }
 
   test("multiple modifiers in a single transform call behave correctly") {
     val tup = (anotherField = List((field1 = 123, field2 = 0), (field1 = 123, field2 = 0)))
@@ -177,4 +175,59 @@ class ModifiersSpec extends ChanterelleSuite {
       """
     }("""Couldn't parse '_ => (field = "not really")' as a valid path selector""")
   }: @nowarn
+
+  test("big named tuples work") {
+    type BigNamedTuple = (
+      field1: Int,
+      field2: Int,
+      field3: Int,
+      field4: Int,
+      field5: Int,
+      field6: Int,
+      field7: Int,
+      field8: Int,
+      field9: Int,
+      field10: Int,
+      field11: Int,
+      field12: Int,
+      field13: Int,
+      field14: Int,
+      field15: Int,
+      field16: Int,
+      field17: Int,
+      field18: Int,
+      field19: Int,
+      field20: Int,
+      field21: Int,
+      field22: Int,
+      field23: Int
+    )
+
+    val input: BigNamedTuple = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+
+    val actual = input.transform(
+      _.update(_.field1)(_ + 1),
+      _.update(_.field12)(_ + 1),
+      _.update(_.field23)(_ + 1)
+    )
+
+    val expected: BigNamedTuple = (2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24)
+
+    assertEquals(actual, expected)
+  }
+
+  test("traversing big tuples works") {
+    val input = (field = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23))
+
+    val actual =
+      input.transform(
+        _.update(_.field.apply(0))(_ + 1),
+        _.update(_.field.apply(11))(_ + 1),
+        _.update(_.field.apply(22))(_ + 1)
+      )
+
+    val expected = (field = (2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24))
+
+    assertEquals(actual, expected)
+  }
 }

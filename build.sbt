@@ -22,6 +22,10 @@ ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 ThisBuild / tlVersionIntroduced := Map("3" -> "0.0.0")
 ThisBuild / tlCiDependencyGraphJob := false
+ThisBuild / githubWorkflowBuild += WorkflowStep.Run(
+  name = Some("Check docs"),
+  commands = "sbt --client docs/mdoc" :: Nil
+)
 
 lazy val root =
   project
@@ -38,7 +42,7 @@ lazy val chanterelle =
         "-Wunused:all",
         "-WunstableInlineAccessors",
         "-Xcheck-macros",
-        "-Wconf:msg=(infix named):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
+        "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
       libraryDependencies ++= Seq(
         "org.scalameta" %% "munit" % "1.1.1" % Test

@@ -76,6 +76,9 @@ jobs:
         if: matrix.java == 'temurin@17' && matrix.os == 'ubuntu-22.04'
         run: sbt --client '++ ${{ matrix.scala }}; doc'
 
+      - name: Check docs
+        run: sbt --client docs/mdoc
+
       - name: Make target directories
         if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
         run: mkdir -p chanterelle/target project/target
