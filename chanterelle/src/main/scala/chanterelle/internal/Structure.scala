@@ -2,7 +2,6 @@ package chanterelle.internal
 
 import chanterelle.internal.Structure.Leaf
 
-import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
@@ -108,8 +107,9 @@ private[chanterelle] object Structure {
           val valuesTpe = Type.of[NamedTuple.DropNames[t]]
           val namesTpe = Type.of[NamedTuple.Names[t]]
           val transformations =
-            tupleTypeElements(valuesTpe)
-              .zip(constStringTuple(namesTpe.repr))
+            TupleTypes
+              .unroll(valuesTpe)
+              .lazyZip(TupleTypes.unrollStrings(namesTpe.repr))
               .map((tpe, name) =>
                 name -> (tpe.asType match {
                   case '[tpe] =>
@@ -117,8 +117,7 @@ private[chanterelle] object Structure {
                       path.appended(Path.Segment.Field(Type.of[tpe], name))
                     )
                 })
-              )
-              .to(VectorMap)
+              )(using VectorMap)
 
           if transformations.size == 1 then
             val (fieldName, valueStructure) = transformations.head
@@ -127,65 +126,35 @@ private[chanterelle] object Structure {
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =
-            tupleTypeElements(tpe).zipWithIndex.map { (tpe, idx) =>
-              tpe.asType match {
-                case '[tpe] =>
-                  Structure.of[tpe](
-                    path.appended(Path.Segment.TupleElement(Type.of[tpe], idx))
-                  )
+            TupleTypes
+              .unrollIndexed(tpe) { (tpe, idx) =>
+                tpe.asType match {
+                  case '[tpe] =>
+                    Structure.of[tpe](
+                      path.appended(Path.Segment.TupleElement(Type.of[tpe], idx))
+                    )
+                }
               }
-            }.toVector
           Structure.Tuple(tpe, path, elements, isPlain = false)
 
         case tpe @ '[types & scala.Tuple] if tpe.repr.isTupleN =>
           val transformations =
-            tupleTypeElements(Type.of[types]).zipWithIndex
-              .map((tpe, idx) =>
-                tpe.asType match {
-                  case '[tpe] =>
-                    Structure.of[tpe](
-                      path.appended(
-                        Path.Segment.TupleElement(Type.of[tpe], idx)
-                      )
+            TupleTypes.unrollIndexed(Type.of[types])((tpe, idx) =>
+              tpe.asType match {
+                case '[tpe] =>
+                  Structure.of[tpe](
+                    path.appended(
+                      Path.Segment.TupleElement(Type.of[tpe], idx)
                     )
-                }
-              )
-              .toVector
+                  )
+              }
+            )
 
           Structure.Tuple(tpe, path, transformations, isPlain = true)
 
         case '[tpe] =>
           Structure.Leaf(Type.of[A], path)
       }
-  }
-
-  private def tupleTypeElements(tpe: Type[?])(using Quotes): List[quotes.reflect.TypeRepr] = {
-    @tailrec def loop(using
-      Quotes
-    )(
-      curr: Type[?],
-      acc: List[quotes.reflect.TypeRepr]
-    ): List[quotes.reflect.TypeRepr] = {
-      import quotes.reflect.*
-
-      curr match {
-        case '[head *: tail] =>
-          loop(Type.of[tail], TypeRepr.of[head] :: acc)
-        case '[EmptyTuple] =>
-          acc
-        case other =>
-          report.errorAndAbort(
-            s"Unexpected type (${other.repr.show}) encountered when extracting tuple type elems. This is a bug in chanterelle."
-          )
-      }
-    }
-
-    loop(tpe, Nil).reverse
-  }
-
-  private def constStringTuple(using Quotes)(tp: quotes.reflect.TypeRepr): List[String] = {
-    import quotes.reflect.*
-    tupleTypeElements(tp.asType).map { case ConstantType(StringConstant(l)) => l }
   }
 
   private object SupportedCollection {
