@@ -31,24 +31,18 @@ lazy val jsSettings = Seq(
   scalacOptions ++= {
     val localSourcesPath = (LocalRootProject / baseDirectory).value.toURI
     val remoteSourcesPath = s"https://raw.githubusercontent.com/arainko/chanterelle/${git.gitHeadCommit.value.get}/"
-    CrossVersion.partialVersion(scalaVersion.value) match {
-      case Some((2, _)) =>
-        Seq(
-          s"-P:scalajs:mapSourceURI:$localSourcesPath->$remoteSourcesPath",
-          "-P:scalajs:genStaticForwardersForNonTopLevelObjects"
-        )
-      case _ =>
-        Seq(
-          s"-scalajs-mapSourceURI:$localSourcesPath->$remoteSourcesPath",
-          "-scalajs-genStaticForwardersForNonTopLevelObjects"
-        )
-    }
+    Seq(
+      s"-scalajs-mapSourceURI:$localSourcesPath->$remoteSourcesPath",
+      "-scalajs-genStaticForwardersForNonTopLevelObjects"
+    )
   },
+  bspEnabled := false,
   mimaPreviousArtifacts := Set()
 )
 
 lazy val nativeSettings = Seq(
   scalacOptions ++= Seq("-P:scalanative:genStaticForwardersForNonTopLevelObjects"),
+  bspEnabled := false,
   mimaPreviousArtifacts := Set()
 )
 
