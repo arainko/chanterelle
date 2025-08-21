@@ -27,14 +27,40 @@ ThisBuild / githubWorkflowBuild += WorkflowStep.Run(
   commands = "sbt --client docs/mdoc" :: Nil
 )
 
+lazy val jsSettings = Seq(
+  scalacOptions ++= {
+    val localSourcesPath = (LocalRootProject / baseDirectory).value.toURI
+    val remoteSourcesPath = s"https://raw.githubusercontent.com/arainko/chanterelle/${git.gitHeadCommit.value.get}/"
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, _)) => Seq(
+        s"-P:scalajs:mapSourceURI:$localSourcesPath->$remoteSourcesPath",
+        "-P:scalajs:genStaticForwardersForNonTopLevelObjects"
+      )
+      case _ => Seq(
+        s"-scalajs-mapSourceURI:$localSourcesPath->$remoteSourcesPath",
+        "-scalajs-genStaticForwardersForNonTopLevelObjects"
+      )
+    }
+  }
+)
+
+lazy val nativeSettings = Seq(
+  scalacOptions ++= Seq("-P:scalanative:genStaticForwardersForNonTopLevelObjects"),
+)
+
 lazy val root =
   project
     .in(file("."))
     .enablePlugins(NoPublishPlugin)
-    .aggregate(chanterelle)
+    .aggregate(
+      chanterelle.jvm,
+      chanterelle.js,
+      chanterelle.native
+    )
 
 lazy val chanterelle =
-  project
+  crossProject(JSPlatform, JVMPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
     .in(file("chanterelle"))
     .settings(
       scalacOptions ++= Seq(
@@ -45,15 +71,17 @@ lazy val chanterelle =
         "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
       libraryDependencies ++= Seq(
-        "org.scalameta" %% "munit" % "1.1.1" % Test
+        "org.scalameta" %%% "munit" % "1.1.1" % Test
       )
     )
+    .jsSettings(jsSettings)
+    .nativeSettings(nativeSettings)
 
 lazy val docs =
   project
     .in(file("documentation"))
     .enablePlugins(NoPublishPlugin, MdocPlugin)
-    .dependsOn(chanterelle)
+    .dependsOn(chanterelle.jvm)
 
 lazy val generateReadme = taskKey[Unit]("gen readme")
 
