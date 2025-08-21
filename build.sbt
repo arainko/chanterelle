@@ -46,15 +46,9 @@ lazy val nativeSettings = Seq(
   mimaPreviousArtifacts := Set()
 )
 
-lazy val root =
-  project
-    .in(file("."))
-    .enablePlugins(NoPublishPlugin)
-    .aggregate(
-      chanterelleJVM,
-      chanterelleJS,
-      chanterelleNative
-    )
+lazy val root = tlCrossRootProject
+  .aggregate(chanterelleJVM, chanterelleJS, chanterelleNative)
+  .enablePlugins(NoPublishPlugin)
 
 lazy val chanterelle =
   crossProject(JSPlatform, JVMPlatform, NativePlatform)
