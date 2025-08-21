@@ -27,14 +27,32 @@ ThisBuild / githubWorkflowBuild += WorkflowStep.Run(
   commands = "sbt --client docs/mdoc" :: Nil
 )
 
-lazy val root =
-  project
-    .in(file("."))
-    .enablePlugins(NoPublishPlugin)
-    .aggregate(chanterelle)
+lazy val jsSettings = Seq(
+  scalacOptions ++= {
+    val localSourcesPath = (LocalRootProject / baseDirectory).value.toURI
+    val remoteSourcesPath = s"https://raw.githubusercontent.com/arainko/chanterelle/${git.gitHeadCommit.value.get}/"
+    Seq(
+      s"-scalajs-mapSourceURI:$localSourcesPath->$remoteSourcesPath",
+      "-scalajs-genStaticForwardersForNonTopLevelObjects"
+    )
+  },
+  bspEnabled := false,
+  mimaPreviousArtifacts := Set()
+)
+
+lazy val nativeSettings = Seq(
+  scalacOptions ++= Seq("-P:scalanative:genStaticForwardersForNonTopLevelObjects"),
+  bspEnabled := false,
+  mimaPreviousArtifacts := Set()
+)
+
+lazy val root = tlCrossRootProject
+  .aggregate(chanterelleJVM, chanterelleJS, chanterelleNative)
+  .enablePlugins(NoPublishPlugin)
 
 lazy val chanterelle =
-  project
+  crossProject(JSPlatform, JVMPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
     .in(file("chanterelle"))
     .settings(
       scalacOptions ++= Seq(
@@ -45,15 +63,26 @@ lazy val chanterelle =
         "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
       libraryDependencies ++= Seq(
-        "org.scalameta" %% "munit" % "1.1.1" % Test
+        "org.scalameta" %%% "munit" % "1.1.1" % Test
       )
     )
+
+lazy val chanterelleJVM =
+  chanterelle.jvm
+
+lazy val chanterelleJS =
+  chanterelle.js
+    .settings(jsSettings)
+
+lazy val chanterelleNative =
+  chanterelle.native
+    .settings(nativeSettings)
 
 lazy val docs =
   project
     .in(file("documentation"))
     .enablePlugins(NoPublishPlugin, MdocPlugin)
-    .dependsOn(chanterelle)
+    .dependsOn(chanterelleJVM)
 
 lazy val generateReadme = taskKey[Unit]("gen readme")
 
