@@ -43,11 +43,13 @@ lazy val jsSettings = Seq(
           "-scalajs-genStaticForwardersForNonTopLevelObjects"
         )
     }
-  }
+  },
+  mimaPreviousArtifacts := Set()
 )
 
 lazy val nativeSettings = Seq(
-  scalacOptions ++= Seq("-P:scalanative:genStaticForwardersForNonTopLevelObjects")
+  scalacOptions ++= Seq("-P:scalanative:genStaticForwardersForNonTopLevelObjects"),
+  mimaPreviousArtifacts := Set()
 )
 
 lazy val root =
@@ -55,9 +57,9 @@ lazy val root =
     .in(file("."))
     .enablePlugins(NoPublishPlugin)
     .aggregate(
-      chanterelle.jvm,
-      chanterelle.js,
-      chanterelle.native
+      chanterelleJVM,
+      chanterelleJS,
+      chanterelleNative
     )
 
 lazy val chanterelle =
@@ -76,14 +78,23 @@ lazy val chanterelle =
         "org.scalameta" %%% "munit" % "1.1.1" % Test
       )
     )
-    .jsSettings(jsSettings)
-    .nativeSettings(nativeSettings)
+
+lazy val chanterelleJVM =
+  chanterelle.jvm
+
+lazy val chanterelleJS =
+  chanterelle.js
+    .settings(jsSettings)
+
+lazy val chanterelleNative =
+  chanterelle.native
+    .settings(nativeSettings)
 
 lazy val docs =
   project
     .in(file("documentation"))
     .enablePlugins(NoPublishPlugin, MdocPlugin)
-    .dependsOn(chanterelle.jvm)
+    .dependsOn(chanterelleJVM)
 
 lazy val generateReadme = taskKey[Unit]("gen readme")
 
