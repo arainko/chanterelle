@@ -45,6 +45,26 @@ private[chanterelle] object PathSelector {
           recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
 
         case Apply(
+              TypeApply(Select(Ident(_), "leftElement"), leftTpe :: _:: Nil),
+              tree :: Nil
+            ) =>
+          Logger.debug(
+            s"Matched 'Apply(TypeApply(...)) (matching .leftElement)'",
+            leftTpe.tpe.asType
+          )
+          recurse(acc.prepended(Path.Segment.LeftElement(leftTpe.tpe.asType)), tree)
+
+        case Apply(
+              TypeApply(Select(Ident(_), "rightElement"), _ :: rightTpe :: Nil),
+              tree :: Nil
+            ) =>
+          Logger.debug(
+            s"Matched 'Apply(TypeApply(...)) (matching .rightElement)'",
+            rightTpe.tpe.asType
+          )
+          recurse(acc.prepended(Path.Segment.RightElement(rightTpe.tpe.asType)), tree)
+
+        case Apply(
               Apply(
                 TypeApply(Select(Ident("NamedTuple"), "apply"), List(namesTpe, _)),
                 tree :: Nil

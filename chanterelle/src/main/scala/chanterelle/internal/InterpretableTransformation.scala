@@ -26,6 +26,13 @@ private[chanterelle] enum InterpretableTransformation derives Debug {
     outputTpe: Type[? <: Option[?]]
   )
 
+  case Either(
+    source: Structure.Either,
+    left: InterpretableTransformation,
+    right: InterpretableTransformation,
+    outputTpe: Type[? <: scala.Either[?, ?]]
+  )
+
   case Map[F[k, v] <: collection.Map[k, v]](
     source: Structure.Collection.Repr.Map[F],
     key: InterpretableTransformation,
@@ -48,7 +55,7 @@ private[chanterelle] enum InterpretableTransformation derives Debug {
 
 object InterpretableTransformation {
 
-  def create(transformation: Transformation[Nothing])(using Quotes): Either[ErrorMessage, InterpretableTransformation] = {
+  def create(transformation: Transformation[Nothing])(using Quotes): scala.Either[ErrorMessage, InterpretableTransformation] = {
     def recurse(transformation: Transformation[Nothing])(using Label[ErrorMessage]): InterpretableTransformation =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
@@ -72,6 +79,9 @@ object InterpretableTransformation {
           Tuple(source, fields.map((idx, t) => idx -> recurse(t)), t.calculateTpe)
         case t @ Transformation.Optional(source, paramTransformation, _) =>
           Optional(source, recurse(paramTransformation), t.calculateTpe)
+        case t @ Transformation.Either(source, left, right, _) =>
+          Either(source, recurse(left), recurse(right), t.calculateTpe)
+
         case t @ Transformation.Map(source, key, value, _) =>
           val tpe = t.calculateTpe
           val factory = ((source.tycon, tpe): @unchecked) match {

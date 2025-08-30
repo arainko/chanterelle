@@ -54,6 +54,17 @@ private[chanterelle] object Interpreter {
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
 
+      case InterpretableTransformation.Either(source, left, right, outputTpe) =>
+        (source.tpe, outputTpe): @unchecked match {
+          case ('[scala.Either[e, a]],'[scala.Either[outE, outA]]) =>
+            val eitherValue = value.asExprOf[scala.Either[e, a]]
+            '{
+              $eitherValue match
+                case Left(value) => Left(${ runTransformation('value, left).asExprOf[outE] })
+                case Right(value) => Right(${ runTransformation('value, right).asExprOf[outA] })
+            }
+        }
+
       case InterpretableTransformation.ConfedUp(config) =>
         config match
           case update: Configured.Update =>
