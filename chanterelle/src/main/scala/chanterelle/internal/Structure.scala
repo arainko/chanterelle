@@ -64,6 +64,13 @@ private[chanterelle] object Structure {
     paramStruct: Structure
   ) extends Structure
 
+  case class Either(
+    tpe: Type[? <: scala.Either[?, ?]],
+    path: Path,
+    left: Structure,
+    right: Structure
+  ) extends Structure
+
   case class Collection(
     tpe: Type[? <: Iterable[?]],
     path: Path,
@@ -97,6 +104,18 @@ private[chanterelle] object Structure {
             path,
             Structure.of[param](
               path.appended(Path.Segment.Element(Type.of[param]))
+            )
+          )
+
+        case tpe @ '[scala.Either[e, a]] =>
+          Structure.Either(
+            tpe,
+            path,
+            Structure.of[e](
+              path.appended(Path.Segment.LeftElement(Type.of[e]))
+            ),
+            Structure.of[a](
+              path.appended(Path.Segment.RightElement(Type.of[a]))
             )
           )
 

@@ -66,6 +66,16 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
             when[Transformation.Iter[Err, ?]](_.update(recurse(next)))
           )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, modifier.span))
 
+        case Path.Segment.LeftElement(tpe) :: next =>
+          curr.narrow[Transformation.Either[Err]](_.updateLeft(recurse(next)))(other =>
+            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
+          )
+
+        case Path.Segment.RightElement(tpe) :: next =>
+          curr.narrow[Transformation.Either[Err]](_.updateRight(recurse(next)))(other =>
+            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
+          )
+
         case Nil => apply(modifier, curr)
       }
     }
@@ -123,6 +133,8 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
               recurse(allFields.values.toList ::: tail, acc)
             case Transformation.Optional(source, paramTransformation, _) =>
               recurse(paramTransformation :: tail, acc)
+            case Transformation.Either(source, left, right, _) =>
+              recurse(left :: right :: tail, acc)
             case Transformation.Map(source, key, value, _) =>
               recurse(value :: tail, acc)
             case Transformation.Iter(source, elem, _) =>
@@ -165,6 +177,9 @@ object Transformation {
 
       case optional: Structure.Optional =>
         Optional(optional, create(optional.paramStruct), IsModified.No)
+
+      case either: Structure.Either =>
+        Either(either, create(either.left), create(either.right), IsModified.No)
 
       case coll: Structure.Collection =>
         coll.repr match
@@ -281,6 +296,24 @@ object Transformation {
     def update(f: Transformation[E] => Transformation[Err]): Optional[Err] =
       this.copy(paramTransformation = f(paramTransformation), isModified = IsModified.Yes)
 
+  }
+
+  case class Either[+E <: Err](
+    source: Structure.Either,
+    left: Transformation[E],
+    right: Transformation[E],
+    isModified: IsModified
+  ) extends Transformation[E]("either") {
+    def calculateTpe(using Quotes): Type[? <: scala.Either[?, ?]] =
+      (left.calculateTpe, right.calculateTpe): @unchecked match {
+        case '[left] -> '[right] => Type.of[scala.Either[left, right]]
+      }
+
+    def updateLeft(f: Transformation[E] => Transformation[Err]): Either[Err] =
+      this.copy(left = f(left), isModified = IsModified.Yes)
+
+    def updateRight(f: Transformation[E] => Transformation[Err]): Either[Err] =
+      this.copy(right = f(right), isModified = IsModified.Yes)
   }
 
   case class Map[+E <: Err, F[k, v] <: collection.Map[k, v]](

@@ -10,7 +10,9 @@ ThisBuild / licenses := Seq(License.Apache2)
 ThisBuild / developers := List(tlGitHubDev("arainko", "Aleksander Rainko"))
 
 ThisBuild / mimaBinaryIssueFilters ++= Seq(
-  ProblemFilters.exclude[Problem]("chanterelle.internal.*")
+  ProblemFilters.exclude[Problem]("chanterelle.internal.*"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.leftElement"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.rightElement")
 )
 
 ThisBuild / tlCiReleaseBranches := Seq("main")

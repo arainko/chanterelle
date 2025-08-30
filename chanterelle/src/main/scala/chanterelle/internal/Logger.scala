@@ -97,17 +97,3 @@ private[chanterelle] object Logger {
   ): Unit =
     debug(s"$msg: ${Debug.show(value)}")
 }
-
-extension (ctx: StringContext) {
-  private[chanterelle] def ds(args: Any*): String = {
-    val pi = ctx.parts.iterator
-    val ai = args.iterator
-    val bldr = new StringBuilder(pi.next())
-    while ai.hasNext do {
-      bldr.append(ai.next().getClass().getSimpleName())
-      bldr.append(pi.next())
-    }
-    bldr.toString
-  }
-
-}

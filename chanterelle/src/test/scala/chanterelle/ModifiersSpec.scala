@@ -230,4 +230,30 @@ class ModifiersSpec extends ChanterelleSuite {
 
     assertEquals(actual, expected)
   }
+
+  test("either fields work (left side)") {
+    val input = (either = Left((inner = 1)))
+
+    val actual =
+      input.transform(
+        _.update(_.either.leftElement.inner)(_ + 1)
+      )
+
+    val expected = (either = Left((inner = 2)))
+
+    assertEquals(actual, expected)
+  }
+
+  test("either fields work (right side)") {
+    val input = (either = Right((inner = 1)))
+
+    val actual =
+      input.transform(
+        _.update(_.either.rightElement.inner)(_ + 1)
+      )
+
+    val expected = (either = Right((inner = 2)))
+
+    assertEquals(actual, expected)
+  }
 }
