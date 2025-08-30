@@ -127,3 +127,18 @@ val transformed = tup.transform(
 ```scala mdoc:passthrough
 Docs.prettyPrint(transformed)
 ```
+
+* accessing both sides of an `Either`
+
+`Either` also gets special treatment via `.leftElement` to access the left side of an `Either` and `.rightElement` to access the right one:
+```scala mdoc:silent:nest
+val tup = (left = Left(1), right = Right("2"))
+val transformed = tup.transform(
+  _.update(_.left.leftElement)(_ + 1),
+  _.update(_.right.rightElement)(_ + "-SUFFIXED")
+)
+```
+
+```scala mdoc:passthrough
+Docs.prettyPrint(transformed)
+```

@@ -23,7 +23,9 @@ val input = (toplevelField = (nestedField = 1, fieldToUpdate = 2, optionalField 
 val transformed = input.transform(
   _.update(_.toplevelField.fieldToUpdate)(_ + 1), // note the value of toplevelField.fieldToUpdate in the output
   _.remove(_.toplevelField.nestedField), // toplevelField.nestedField gets removed from the output value
-  _.put(_.toplevelField.optionalField.element)((newField = 4)) // the element of an Option or a collection can be accessed with `.element`
+  _.put(_.toplevelField.optionalField.element)(
+    (newField = 4)
+  ) // the element of an Option or a collection can be accessed with `.element`
 )
 ```
 ...which, in turn, evaluates to:
@@ -116,7 +118,7 @@ The selectors can 'cut through' `Options` and collections alike with the `.eleme
 val tup = (optional = Some(1), coll = Vector(1, 2, 3))
 val transformed = tup.transform(
   _.update(_.optional.element)(_ + 1),
-  _.update(_.coll.element)(_ + 1),
+  _.update(_.coll.element)(_ + 1)
 )
 ```
 
@@ -134,7 +136,7 @@ Much like in the case of collections and `Options`, `Maps` can also be modified 
 val tup = (mapField = Map("key1" -> "value1", "key2" -> "value2"))
 val transformed = tup.transform(
   _.update(_.mapField.element._1)(_ + "-KEY-UPDATED"),
-  _.update(_.mapField.element._2)(_ + "-VALUE-UPDATED"),
+  _.update(_.mapField.element._2)(_ + "-VALUE-UPDATED")
 )
 ```
 
@@ -147,5 +149,23 @@ val transformed = tup.transform(
     Entry(key = "key2-KEY-UPDATED", value = "value2-VALUE-UPDATED")
   )
 )
+```
+
+
+* accessing both sides of an `Either`
+
+`Either` also gets special treatment via `.leftElement` to access the left side of an `Either` and `.rightElement` to access the right one:
+```scala
+val tup = (left = Left(1), right = Right("2"))
+val transformed = tup.transform(
+  _.update(_.left.leftElement)(_ + 1),
+  _.update(_.right.rightElement)(_ + "-SUFFIXED")
+)
+```
+
+
+```scala
+
+(left = Left(2), right = Right("2-SUFFIXED"))
 ```
 

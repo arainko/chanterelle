@@ -5,6 +5,7 @@ import scala.compiletime.*
 import scala.deriving.Mirror
 import scala.quoted.*
 import scala.reflect.ClassTag
+import chanterelle.internal.Debug.AST
 
 trait Show[-A] {
   def astify(self: A): Debug.AST
@@ -20,6 +21,10 @@ object Show extends LowPriorityShow {
 
   inline given namedTuple[A <: NamedTuple.AnyNamedTuple](using Mirror.ProductOf[A]): Show[A] =
     Show.derived[A]
+
+  given nothing: Show[Nothing] with {
+    def astify(self: Nothing): AST = throw RuntimeException("That's just silly, trying to show a Nothing?")
+  }
 
   given string: Show[String] with {
     override def astify(self: String): AST = Text(s""""${self}"""")
@@ -57,6 +62,13 @@ object Show extends LowPriorityShow {
       self match
         case None        => Text("None")
         case Some(value) => Collection("Some", Vector(A.astify(value)))
+  }
+
+  given either[E: Show as E, A: Show as A]: Show[Either[E, A]] with {
+    def astify(self: Either[E, A]): AST = 
+      self match
+        case Left(value) => Collection("Left", Vector(E.astify(value)))
+        case Right(value) => Collection("Right", Vector(A.astify(value)))
   }
 
   inline def derived[A: Mirror.Of as A]: Show[A] =
