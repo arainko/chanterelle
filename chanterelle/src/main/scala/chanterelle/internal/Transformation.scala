@@ -68,12 +68,12 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
 
         case Path.Segment.LeftElement(tpe) :: next =>
           curr.narrow[Transformation.Either[Err]](_.updateLeft(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)  
+            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
           )
 
         case Path.Segment.RightElement(tpe) :: next =>
           curr.narrow[Transformation.Either[Err]](_.updateRight(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)  
+            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
           )
 
         case Nil => apply(modifier, curr)
@@ -304,7 +304,7 @@ object Transformation {
     right: Transformation[E],
     isModified: IsModified
   ) extends Transformation[E]("either") {
-    def calculateTpe(using Quotes): Type[? <: scala.Either[?, ?]] = 
+    def calculateTpe(using Quotes): Type[? <: scala.Either[?, ?]] =
       (left.calculateTpe, right.calculateTpe): @unchecked match {
         case '[left] -> '[right] => Type.of[scala.Either[left, right]]
       }
