@@ -27,31 +27,11 @@ ThisBuild / githubWorkflowBuild += WorkflowStep.Run(
   commands = "sbt --client docs/mdoc" :: Nil
 )
 
-lazy val jsSettings = Seq(
-  scalacOptions ++= {
-    val localSourcesPath = (LocalRootProject / baseDirectory).value.toURI
-    val remoteSourcesPath = s"https://raw.githubusercontent.com/arainko/chanterelle/${git.gitHeadCommit.value.get}/"
-    Seq(
-      s"-scalajs-mapSourceURI:$localSourcesPath->$remoteSourcesPath",
-      "-scalajs-genStaticForwardersForNonTopLevelObjects"
-    )
-  },
-  bspEnabled := false,
-  mimaPreviousArtifacts := Set()
-)
-
-lazy val nativeSettings = Seq(
-  scalacOptions ++= Seq("-P:scalanative:genStaticForwardersForNonTopLevelObjects"),
-  bspEnabled := false,
-  mimaPreviousArtifacts := Set()
-)
-
-lazy val root = tlCrossRootProject
-  .aggregate(chanterelleJVM, chanterelleJS, chanterelleNative)
-  .enablePlugins(NoPublishPlugin)
+lazy val root = tlCrossRootProject.aggregate(chanterelle)
 
 lazy val chanterelle =
   crossProject(JSPlatform, JVMPlatform, NativePlatform)
+    .withoutSuffixFor(JVMPlatform)
     .crossType(CrossType.Pure)
     .in(file("chanterelle"))
     .settings(
@@ -66,23 +46,20 @@ lazy val chanterelle =
         "org.scalameta" %%% "munit" % "1.1.1" % Test
       )
     )
-
-lazy val chanterelleJVM =
-  chanterelle.jvm
-
-lazy val chanterelleJS =
-  chanterelle.js
-    .settings(jsSettings)
-
-lazy val chanterelleNative =
-  chanterelle.native
-    .settings(nativeSettings)
+    .jsSettings(
+      bspEnabled := false,
+      mimaPreviousArtifacts := Set.empty
+    )
+    .nativeSettings(
+      bspEnabled := false,
+      mimaPreviousArtifacts := Set.empty
+    )
 
 lazy val docs =
   project
     .in(file("documentation"))
     .enablePlugins(NoPublishPlugin, MdocPlugin)
-    .dependsOn(chanterelleJVM)
+    .dependsOn(chanterelle.jvm)
 
 lazy val generateReadme = taskKey[Unit]("gen readme")
 
