@@ -4,7 +4,10 @@
 
 ## Installation
 ```scala
-libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.0"
+libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.1"
+
+// or if you're using Scala.js or Scala Native
+libraryDependencies += "io.github.arainko" %%% "chanterelle" % "0.1.1"
 ```
 
 ## Documentation
