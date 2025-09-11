@@ -1,6 +1,6 @@
 import com.typesafe.tools.mima.core._
 
-ThisBuild / scalaVersion := "3.7.2"
+ThisBuild / scalaVersion := "3.7.3"
 
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / organization := "io.github.arainko"
