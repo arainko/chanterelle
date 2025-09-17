@@ -65,9 +65,9 @@ object Show extends LowPriorityShow {
   }
 
   given either[E: Show as E, A: Show as A]: Show[Either[E, A]] with {
-    def astify(self: Either[E, A]): AST = 
+    def astify(self: Either[E, A]): AST =
       self match
-        case Left(value) => Collection("Left", Vector(E.astify(value)))
+        case Left(value)  => Collection("Left", Vector(E.astify(value)))
         case Right(value) => Collection("Right", Vector(A.astify(value)))
   }
 
