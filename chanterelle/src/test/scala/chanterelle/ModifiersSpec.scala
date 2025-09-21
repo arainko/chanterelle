@@ -39,6 +39,14 @@ class ModifiersSpec extends ChanterelleSuite {
     assertEquals(actual, expected)
   }
 
+  test(".compute puts a new field into a named tuple") {
+    val tup = (anotherField = (field1 = 123))
+    val expected = (anotherField = (field1 = 123, newField = 123 + 23))
+    val actual = tup.transform(_.compute(_.anotherField)(value => (newField = value.field1 + 23)))
+
+    assertEquals(actual, expected)
+  }
+
   test("modifiers can traverse Options") {
     val tup = (anotherField = Some((field1 = 123)))
     val expected = (anotherField = Some(field1 = 123, newField = "electricityyyy"))

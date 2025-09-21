@@ -86,7 +86,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           transformation.narrow[Transformation.Named[Err]](
             _.withModifiedField(
               m.valueStructure.fieldName,
-              Transformation.OfField.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value), false)
+              Transformation.OfField.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value))
             )
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
@@ -94,7 +94,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           transformation.narrow[Transformation.Named[Err]](
             _.withModifiedField(
               m.valueStructure.fieldName,
-              Transformation.OfField.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value), false)
+              Transformation.OfField.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value))
             )
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
@@ -126,7 +126,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
             case Transformation.Named(source, allFields, _) =>
               val transformations =
                 allFields.values.collect {
-                  case Transformation.OfField.FromSource(name, transformation, removed) => transformation
+                  case Transformation.OfField.FromSource(name, transformation) => transformation
                 }.toList
               recurse(transformations ::: tail, acc)
             case Transformation.Tuple(source, allFields, _) =>
@@ -163,7 +163,7 @@ object Transformation {
         Named(
           named,
           named.fields.map { (name, field) =>
-            name -> Transformation.OfField.FromSource(name, create(field), false)
+            name -> (field = Transformation.OfField.FromSource(name, create(field)), removed = false)
           },
           IsModified.No
         )
@@ -194,11 +194,11 @@ object Transformation {
 
   case class Named[+E <: Err](
     source: Structure.Named,
-    private val allFields: VectorMap[String, OfField[E]],
+    private val allFields: VectorMap[String, (field: OfField[E], removed: Boolean)],
     isModified: IsModified
   ) extends Transformation[E]("named tuple") {
     final def _2 = fields
-    val fields: VectorMap[String, OfField[E]] = allFields.filter((_, t) => !t.removed)
+    val fields: VectorMap[String, OfField[E]] = allFields.collect { case (key, (field = value, removed = false)) => key -> value }
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
@@ -223,27 +223,36 @@ object Transformation {
     def update(name: String, f: Transformation[E] => Transformation[Err]): Named[Err] = {
       val fieldTransformation =
         this.allFields.andThen {
-          case field @ OfField.FromSource(name, transformation, removed) =>
-            field.copy(transformation = f(transformation), removed = false)
-          case OfField.FromModifier(_, _) => OfField.error(name, ErrorMessage.AlreadyConfigured(name))
+          case (field = field @ OfField.FromSource(name, transformation)) =>
+            (field = field.copy(transformation = f(transformation)), removed = false)
+          case (field = OfField.FromModifier(_)) =>
+            (field = OfField.error(name, ErrorMessage.AlreadyConfigured(name)), removed = false)
         }
-          .applyOrElse(name, name => OfField.error(name, ErrorMessage.NoFieldFound(name)))
-      this.copy(allFields = this.allFields.updated(name, fieldTransformation), isModified = IsModified.Yes)
+          .applyOrElse(name, name => (field = OfField.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
+      this.copy(
+        allFields = this.allFields.updated(name, fieldTransformation),
+        isModified = IsModified.Yes
+      )
     }
 
     def withModifiedFields(fields: VectorMap[String, Transformation.OfField[Err]]): Named[Err] =
-      this.copy(allFields = this.allFields ++ fields, isModified = IsModified.Yes)
+      this.copy(
+        allFields = this.allFields ++ fields.transform((_, v) => (field = v, removed = false)),
+        isModified = IsModified.Yes
+      )
 
     def withModifiedField(name: String, transformation: Transformation.OfField[Err]): Named[Err] =
       // this will uhhh... create a new record if it doesn't exist
-      this.copy(allFields = this.allFields.updated(name, transformation), isModified = IsModified.Yes)
+      this.copy(
+        allFields = this.allFields.updated(name, (field = transformation, removed = false)),
+        isModified = IsModified.Yes
+      )
 
     def withoutField(name: String): Named[Err] =
       this.copy(
         allFields = this.allFields.updatedWith(name) {
-          case Some(src: Transformation.OfField.FromSource[E]) => Some(src.copy(removed = true))
-          case Some(mod: Transformation.OfField.FromModifier)  => Some(mod.copy(removed = true))
-          case None                                            => Some(OfField.error(name, ErrorMessage.NoFieldFound(name)))
+          case Some((field = src)) => Some((field = src, removed = true))
+          case None                => Some((field = OfField.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
         },
         isModified = IsModified.Yes
       )
@@ -371,15 +380,13 @@ object Transformation {
 
   @nowarn("msg=unused implicit parameter")
   enum OfField[+E <: Err] derives Debug {
-    def removed: Boolean
-
-    case FromSource(name: String, transformation: Transformation[E], removed: Boolean) extends OfField[E]
-    case FromModifier(modifier: Configured.NamedSpecific, removed: Boolean) extends OfField[Nothing]
+    case FromSource(name: String, transformation: Transformation[E]) extends OfField[E]
+    case FromModifier(modifier: Configured.NamedSpecific) extends OfField[Nothing]
   }
 
   object OfField {
     def error(name: String, message: ErrorMessage): OfField[Err] =
-      OfField.FromSource(name, Transformation.Error(message), false)
+      OfField.FromSource(name, Transformation.Error(message))
   }
 
   private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
@@ -405,9 +412,5 @@ object Transformation {
 
   enum IsModified derives Debug {
     case Yes, No
-  }
-
-  object IsNotModified {
-    def unapply(transformation: Transformation[Nothing]): Boolean = transformation.isModified == IsModified.No
   }
 }
