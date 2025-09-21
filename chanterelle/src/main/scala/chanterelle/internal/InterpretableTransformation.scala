@@ -1,5 +1,7 @@
 package chanterelle.internal
 
+import chanterelle.internal.Transformation.IsModified
+
 import scala.collection.Factory
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
@@ -59,17 +61,16 @@ object InterpretableTransformation {
     def recurse(transformation: Transformation[Nothing])(using Label[ErrorMessage]): InterpretableTransformation =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
-        case t @ Transformation.IsNotModified() =>
+        case t if t.isModified == IsModified.No =>
           val tpe = t.calculateTpe
           Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
-        // TODO: remove 'removed' from OfField
         case t @ Transformation.Named(source, fields, _) =>
           Named(
             source,
             fields.map {
-              case (name, Transformation.OfField.FromSource(_, t, removed)) =>
+              case (name, Transformation.OfField.FromSource(_, t)) =>
                 name -> OfField.FromSource(name, recurse(t))
-              case (name, Transformation.OfField.FromModifier(mod, removed)) =>
+              case (name, Transformation.OfField.FromModifier(mod)) =>
                 name -> OfField.FromModifier(mod)
             },
             t.calculateNamesTpe,
