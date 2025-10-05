@@ -78,7 +78,7 @@ object TupleModifier {
   object Local {
     extension [Tup] (self: TupleModifier[Tup] & Local[Tup]) {
       @compileTimeOnly("Only usable as part of the .transform DSL")
-      def locally[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+      def local[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
     }
   }
 
@@ -87,7 +87,7 @@ object TupleModifier {
   object Regional {
     extension [Tup] (self: TupleModifier[Tup] & Regional[Tup]) {
       @compileTimeOnly("Only usable as part of the .transform DSL")
-      def regionally[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+      def regional[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
     }
   }
 

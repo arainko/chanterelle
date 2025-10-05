@@ -61,12 +61,12 @@ private[chanterelle] object Modifier {
         val parsedRenames = ParseRenamer.parse(renamer)
         Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
-      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).locally(${ AsTerm(PathSelector(path)) }) } =>
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).local(${ AsTerm(PathSelector(path)) }) } =>
         val parsedRenames = ParseRenamer.parse(renamer)
         Right(Modifier.Rename(path, parsedRenames, Kind.Local, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
       
-      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).regionally(${ AsTerm(PathSelector(path)) }) } =>
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).regional(${ AsTerm(PathSelector(path)) }) } =>
         val parsedRenames = ParseRenamer.parse(renamer)
         Right(Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
