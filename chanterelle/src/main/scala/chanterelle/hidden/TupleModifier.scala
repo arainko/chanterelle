@@ -70,9 +70,25 @@ object TupleModifier {
     def remove[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
 
     @compileTimeOnly("Only usable as part of the .transform DSL")
-    def rename(renamer: Renamer => Renamer): TupleModifier[Tup]
+    def rename(renamer: Renamer => Renamer): TupleModifier[Tup] & Local[Tup] & Regional[Tup]
   }
 
+  type Local[Tup]
 
+  object Local {
+    extension [Tup] (self: TupleModifier[Tup] & Local[Tup]) {
+      @compileTimeOnly("Only usable as part of the .transform DSL")
+      def locally[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+    }
+  }
+
+  type Regional[Tup]
+
+  object Regional {
+    extension [Tup] (self: TupleModifier[Tup] & Regional[Tup]) {
+      @compileTimeOnly("Only usable as part of the .transform DSL")
+      def regionally[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+    }
+  }
 
 }

@@ -112,7 +112,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           Transformation.ConfedUp(Configured.Update(m.tpe, m.function), m.span)
 
         case m: Modifier.Rename =>
-          Transformation.renameNamedNodes(transformation, m.renamer)
+          Transformation.renameNamedNodes(transformation, m.renamer, m.kind)
       }
     }
     recurse(modifier.path.segments.toList)(this)
@@ -405,6 +405,15 @@ object Transformation {
   }
 
   object OfField {
+
+    extension [E <: Err] (self: OfField[E]) {
+      def update(f: Transformation[E] => Transformation[Err]): OfField[Err] =
+        self match {
+          case src @ FromSource(transformation = t) => src.copy(transformation = f(t))
+          case mod: FromModifier => mod
+        }
+    }
+
     def error(name: String, message: ErrorMessage): OfField[Err] =
       OfField.FromSource(name, Transformation.Error(message))
   }
@@ -434,18 +443,10 @@ object Transformation {
     case Yes, No
   }
 
-  private def renameNamedNodes(transformation: Transformation[Err], rename: String => String): Transformation[Err] = {
+  private def renameNamedNodes(transformation: Transformation[Err], rename: String => String, kind: Modifier.Kind): Transformation[Err] = {
     def recurse(curr: Transformation[Err]): Transformation[Err] = curr match {
       case named: Transformation.Named[Err] => 
-        named.updateAll((name, field) => 
-          val updatedField = 
-            field match {
-              case src: OfField.FromSource[Err] => 
-                src.copy(name = src.name, transformation = recurse(src.transformation))
-              case confed: OfField.FromModifier => confed
-            }  
-          rename(name) -> updatedField
-        )
+        named.updateAll((name, field) => rename(name) -> field.update(recurse))
       case tup: Transformation.Tuple[Err] => 
         tup.updateAll(recurse)
       case opt: Transformation.Optional[Err] => 
@@ -464,6 +465,12 @@ object Transformation {
         err
     }
 
-    recurse(transformation)
+    def locally(curr: Transformation[Err]): Transformation[Err] = curr match {
+      case named: Transformation.Named[Err] => 
+        named.updateAll((name, field) => rename(name) -> field)
+      case other => other
+    }
+
+    if kind.isLocal then locally(transformation) else recurse(transformation)
   }
 }

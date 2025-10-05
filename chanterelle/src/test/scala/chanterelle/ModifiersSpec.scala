@@ -268,6 +268,6 @@ class ModifiersSpec extends ChanterelleSuite {
   test("rename works") {
     val tup = (anotherField = (field1 = 123))
 
-    tup.transform(_.rename(_.rename("field1", "field2"))).str
+    tup.transform(_.rename(_.rename("field1", "field2")).locally(_.anotherField)).s
   }
 }

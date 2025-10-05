@@ -57,10 +57,18 @@ private[chanterelle] object Modifier {
           case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index, Span.fromExpr(cfg)))
         }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
-      //TODO: Add .local and .regional modifiers
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer) } =>
         val parsedRenames = ParseRenamer.parse(renamer)
         Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
+
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).locally(${ AsTerm(PathSelector(path)) }) } =>
+        val parsedRenames = ParseRenamer.parse(renamer)
+        Right(Modifier.Rename(path, parsedRenames, Kind.Local, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
+
+      
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).regionally(${ AsTerm(PathSelector(path)) }) } =>
+        val parsedRenames = ParseRenamer.parse(renamer)
+        Right(Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
@@ -70,6 +78,8 @@ private[chanterelle] object Modifier {
 
   enum Kind derives Debug {
     case Regional, Local
+
+    def isLocal: Boolean = this.isInstanceOf[Local.type]
   }
 
   private object AsTerm {
