@@ -68,8 +68,8 @@ object InterpretableTransformation {
           Named(
             source,
             fields.map {
-              case (name, Transformation.OfField.FromSource(_, t)) =>
-                name -> OfField.FromSource(name, recurse(t))
+              case (name, Transformation.OfField.FromSource(srcName, t)) =>
+                name -> OfField.FromSource(srcName, recurse(t))
               case (name, Transformation.OfField.FromModifier(mod)) =>
                 name -> OfField.FromModifier(mod)
             },

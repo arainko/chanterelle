@@ -110,6 +110,9 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
 
         case m: Modifier.Update =>
           Transformation.ConfedUp(Configured.Update(m.tpe, m.function), m.span)
+
+        case m: Modifier.Rename =>
+          Transformation.renameNamedNodes(transformation, m.renamer)
       }
     }
     recurse(modifier.path.segments.toList)(this)
@@ -220,6 +223,17 @@ object Transformation {
       }
     }
 
+    def updateAll(fn: (String, OfField[E]) => (String, OfField[Err]), keepRemovals: Boolean = true): Named[Err] = {
+      val updatedFields = 
+        this.allFields.map {
+          case name -> (field, removed) =>
+            val (updatedName, updatedField) = fn(name, field)
+            updatedName -> (updatedField, if keepRemovals then removed else false)
+        }
+
+      this.copy(allFields = updatedFields, isModified = IsModified.Yes)
+    }
+
     def update(name: String, f: Transformation[E] => Transformation[Err]): Named[Err] = {
       val fieldTransformation =
         this.allFields.andThen {
@@ -268,6 +282,12 @@ object Transformation {
 
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.map { case (_, value) => value.calculateTpe.repr }.toVector)
+
+    def updateAll(f: Transformation[E] => Transformation[Err], keepRemovals: Boolean = true): Tuple[Err] = 
+      this.copy(
+        allFields = allFields.transform{ case (idx, (t, removed)) => (f(t), if keepRemovals then removed else false) },
+        isModified = IsModified.Yes
+      )
 
     def update(index: Int, f: Transformation[E] => Transformation[Err]): Tuple[Err] = {
       val t =
@@ -412,5 +432,38 @@ object Transformation {
 
   enum IsModified derives Debug {
     case Yes, No
+  }
+
+  private def renameNamedNodes(transformation: Transformation[Err], rename: String => String): Transformation[Err] = {
+    def recurse(curr: Transformation[Err]): Transformation[Err] = curr match {
+      case named: Transformation.Named[Err] => 
+        named.updateAll((name, field) => 
+          val updatedField = 
+            field match {
+              case src: OfField.FromSource[Err] => 
+                src.copy(name = src.name, transformation = recurse(src.transformation))
+              case confed: OfField.FromModifier => confed
+            }  
+          rename(name) -> updatedField
+        )
+      case tup: Transformation.Tuple[Err] => 
+        tup.updateAll(recurse)
+      case opt: Transformation.Optional[Err] => 
+        opt.update(recurse)
+      case either: Transformation.Either[Err] => 
+        either.updateLeft(recurse).updateRight(recurse)
+      case map: Transformation.Map[Err, scala.collection.Map] => 
+        map.updateKey(recurse).updateValue(recurse)
+      case iter: Transformation.Iter[Err, Iterable]=> 
+        iter.update(recurse)
+      case leaf: Transformation.Leaf =>
+        leaf
+      case confed: Transformation.ConfedUp => 
+        confed
+      case err: Transformation.Error => 
+        err
+    }
+
+    recurse(transformation)
   }
 }

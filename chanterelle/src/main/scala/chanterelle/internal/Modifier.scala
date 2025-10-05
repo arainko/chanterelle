@@ -14,6 +14,7 @@ private[chanterelle] enum Modifier derives Debug {
   case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?], span: Span)
   case Update(path: Path, tpe: Type[?], function: Expr[? => ?], span: Span)
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
+  case Rename(path: Path, renamer: String => String, kind: Modifier.Kind, span: Span)
 }
 
 private[chanterelle] object Modifier {
@@ -56,10 +57,19 @@ private[chanterelle] object Modifier {
           case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index, Span.fromExpr(cfg)))
         }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
+      //TODO: Add .local and .regional modifiers
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer) } =>
+        val parsedRenames = ParseRenamer.parse(renamer)
+        Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
+
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
         report.errorAndAbort(s"Couldn't parse '${CodePrinter.codeAtSpan(Span.fromExpr(other))}' as a valid modifier", other)
     }
+  }
+
+  enum Kind derives Debug {
+    case Regional, Local
   }
 
   private object AsTerm {

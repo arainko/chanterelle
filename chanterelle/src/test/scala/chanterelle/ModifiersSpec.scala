@@ -264,4 +264,10 @@ class ModifiersSpec extends ChanterelleSuite {
 
     assertEquals(actual, expected)
   }
+
+  test("rename works") {
+    val tup = (anotherField = (field1 = 123))
+
+    tup.transform(_.rename(_.rename("field1", "field2"))).str
+  }
 }

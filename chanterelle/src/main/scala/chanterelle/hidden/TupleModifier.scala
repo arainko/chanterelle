@@ -68,6 +68,11 @@ object TupleModifier {
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def remove[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
+
+    @compileTimeOnly("Only usable as part of the .transform DSL")
+    def rename(renamer: Renamer => Renamer): TupleModifier[Tup]
   }
+
+
 
 }
