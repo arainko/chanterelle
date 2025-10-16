@@ -40,9 +40,14 @@ sealed trait Renamer {
   def replace(target: String, replacement: String): Renamer
 
   /**
-   * Equivalent to the function `(str: String) => Pattern.compile(pattern).matcher(str).replaceAll(replacement)`
+   * Equivalent to the function `(str: String) => Pattern.compile(pattern).matcher(str).replaceAll(replacement: String)`
    */
   def regexReplace(pattern: String, replacement: String): Renamer
+
+  /**
+   * Equivalent to the function `(str: String) => Pattern.compile(pattern).matcher(str).replaceAll(replacement: MatchGroup => String)`
+   */
+  def regexReplace(pattern: String, replacement: Renamer => Renamer): Renamer
 
   /**
    * Equivalent to `String#stripPrefix(prefix)`

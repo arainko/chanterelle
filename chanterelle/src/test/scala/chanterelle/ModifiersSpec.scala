@@ -5,6 +5,7 @@ import munit.FunSuite
 import scala.annotation.nowarn
 import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
+import java.util.regex.Pattern
 
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
@@ -274,20 +275,38 @@ class ModifiersSpec extends ChanterelleSuite {
       iterField = Vector((field = (lowerDown = 1)))
     )
 
-    val b: (
-      ANOTHERFIELD: (FIELD1: Int, NEWFIELD: Int),
-      EITHERFIELD: Either[(LEFTFIELD: (FIELD: Int)), (RIGHTFIELD: (FIELD: Int))],
-      OPTFIELD: Option[(FIELD: (LOWERDOWN: Int))],
-      MAPFIELD: Map[(KEY: (K: Int)), (VALUE: (V: Int))],
-      ITERFIELD: Vector[(FIELD: (LOWERDOWN: Int))]
-    ) = tup.transform(
+    val b = tup.transform(
       _.put(_.anotherField)((newField = 3)),
       _.rename(_.toUpperCase)
-
-
-
     )
+  }
+
+  test("snake case transformation") {
+    val camel = (dupalDupal = 1)
+    val snaked = (snake_cased_1to_hell = 1)
+
+    val d =
+      camel
+        .transform(
+          _.rename(
+            _.regexReplace("([A-Z]+)([A-Z][a-z])", "$1_$2")
+              .regexReplace("([a-z\\d])([A-Z])", "$1_$2")
+              .toLowerCase
+          )
+        )
+
+
+    val e = 
+      snaked
+        .transform(_.rename(_.regexReplace("_([a-z\\d])", _.replace("_", "").toUpperCase)))
+
   }
 }
 
-//Block(List(DefDef("$anonfun", List(TermParamClause(List(ValDef("_$64", Inferred(), None)))), Inferred(), Some(Apply(Select(Ident("_$64"), "rename"), List(Block(List(DefDef("$anonfun", List(TermParamClause(List(ValDef("_$65", Inferred(), None)))), Inferred(), Some(Select(Ident("_$65"), "toUpperCase")))), Closure(Ident("$anonfun"), None))))))), Closure(Ident("$anonfun"), None))
+@main def main = {
+  val a = "snake_cased_to_hell"
+
+  val reg = Pattern.compile("([a-z])_([a-z])")
+
+  // reg.matcher(a).replaceAll()
+}
