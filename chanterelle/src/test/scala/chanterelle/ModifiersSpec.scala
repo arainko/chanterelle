@@ -265,9 +265,29 @@ class ModifiersSpec extends ChanterelleSuite {
     assertEquals(actual, expected)
   }
 
-  test("rename works") {
-    val tup = (anotherField = (field1 = 123))
+  test("renames work") {
+    val tup = (
+      anotherField = (field1 = 123),
+      eitherField = Either.cond("asd".startsWith("a"), (rightField = (field = 1)), (leftField = (field = 1))),
+      optField = Some((field = (lowerDown = 1))),
+      mapField = Map((key = (k = 1)) -> (value = (v = 1))),
+      iterField = Vector((field = (lowerDown = 1)))
+    )
 
-    val b = tup.transform(_.rename(_.toUpperCase).local(_.anotherField))
+    val b: (
+      ANOTHERFIELD: (FIELD1: Int, NEWFIELD: Int),
+      EITHERFIELD: Either[(LEFTFIELD: (FIELD: Int)), (RIGHTFIELD: (FIELD: Int))],
+      OPTFIELD: Option[(FIELD: (LOWERDOWN: Int))],
+      MAPFIELD: Map[(KEY: (K: Int)), (VALUE: (V: Int))],
+      ITERFIELD: Vector[(FIELD: (LOWERDOWN: Int))]
+    ) = tup.transform(
+      _.put(_.anotherField)((newField = 3)),
+      _.rename(_.toUpperCase)
+
+
+
+    )
   }
 }
+
+//Block(List(DefDef("$anonfun", List(TermParamClause(List(ValDef("_$64", Inferred(), None)))), Inferred(), Some(Apply(Select(Ident("_$64"), "rename"), List(Block(List(DefDef("$anonfun", List(TermParamClause(List(ValDef("_$65", Inferred(), None)))), Inferred(), Some(Select(Ident("_$65"), "toUpperCase")))), Closure(Ident("$anonfun"), None))))))), Closure(Ident("$anonfun"), None))

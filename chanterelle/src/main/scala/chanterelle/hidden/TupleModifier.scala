@@ -73,7 +73,7 @@ object TupleModifier {
     def rename(renamer: Renamer => Renamer): TupleModifier[Tup] & Local[Tup] & Regional[Tup]
   }
 
-  type Local[Tup]
+  sealed trait Local[Tup]
 
   object Local {
     extension [Tup] (self: TupleModifier[Tup] & Local[Tup]) {
@@ -82,7 +82,7 @@ object TupleModifier {
     }
   }
 
-  type Regional[Tup]
+  sealed trait Regional[Tup]
 
   object Regional {
     extension [Tup] (self: TupleModifier[Tup] & Regional[Tup]) {

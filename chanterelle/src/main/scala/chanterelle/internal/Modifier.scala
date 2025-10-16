@@ -5,6 +5,7 @@ import chanterelle.hidden.TupleModifier
 import scala.quoted.*
 
 import NamedTuple.AnyNamedTuple
+import chanterelle.hidden.Renamer
 
 private[chanterelle] enum Modifier derives Debug {
   def path: Path
@@ -57,15 +58,20 @@ private[chanterelle] object Modifier {
           case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index, Span.fromExpr(cfg)))
         }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
-      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer) } =>
-        val parsedRenames = ParseRenamer.parse(renamer)
-        Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
+      // workaround for the case below...
+      case cfg @ AsTerm(Lambda(_, Apply(Select(Ident(_), "rename"), List(renamer)))) => 
+        val parsedRenames = ParseRenamer.parse(renamer.asExprOf[Renamer => Renamer])
+        Right(Modifier.Rename(Path.empty(Type.of[Any]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
+      // this ish ain't matchign stuff if the type of `.rename` is  'Local & Regional' even tho the .local and .regional extractors work. Fun. 
+      // case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer) } =>
+      //   val parsedRenames = ParseRenamer.parse(renamer)
+      //   Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
+        
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).local(${ AsTerm(PathSelector(path)) }) } =>
         val parsedRenames = ParseRenamer.parse(renamer)
         Right(Modifier.Rename(path, parsedRenames, Kind.Local, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
-      
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).regional(${ AsTerm(PathSelector(path)) }) } =>
         val parsedRenames = ParseRenamer.parse(renamer)
         Right(Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here

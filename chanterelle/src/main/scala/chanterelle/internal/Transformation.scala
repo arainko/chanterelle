@@ -223,12 +223,12 @@ object Transformation {
       }
     }
 
-    def updateAll(fn: (String, OfField[E]) => (String, OfField[Err]), keepRemovals: Boolean = true): Named[Err] = {
+    def updateAll(fn: (String, OfField[E]) => (String, OfField[Err])): Named[Err] = {
       val updatedFields = 
         this.allFields.map {
           case name -> (field, removed) =>
             val (updatedName, updatedField) = fn(name, field)
-            updatedName -> (updatedField, if keepRemovals then removed else false)
+            updatedName -> (updatedField, removed)
         }
 
       this.copy(allFields = updatedFields, isModified = IsModified.Yes)
@@ -283,9 +283,9 @@ object Transformation {
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.map { case (_, value) => value.calculateTpe.repr }.toVector)
 
-    def updateAll(f: Transformation[E] => Transformation[Err], keepRemovals: Boolean = true): Tuple[Err] = 
+    def updateAll(f: Transformation[E] => Transformation[Err]): Tuple[Err] = 
       this.copy(
-        allFields = allFields.transform{ case (idx, (t, removed)) => (f(t), if keepRemovals then removed else false) },
+        allFields = allFields.transform{ case (idx, (t, removed)) => (f(t), removed) },
         isModified = IsModified.Yes
       )
 
