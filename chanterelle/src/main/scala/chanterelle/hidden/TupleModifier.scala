@@ -1,8 +1,9 @@
 package chanterelle.hidden
 
+import chanterelle.FieldName
+
 import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
-import chanterelle.FieldName
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -85,12 +86,12 @@ object TupleModifier {
      *  val tup = (optField = Some((field = (lowerDown = 1))))
      *
      *  // point it at the named tuple inside the Option to only rename the 'toplevel' fields
-     *  val actualLocal = tup.transform(_.rename(_.toUpperCase).local(_.optField.element)) 
+     *  val actualLocal = tup.transform(_.rename(_.toUpperCase).local(_.optField.element))
      *  val expectedLocal = (optField = Some((FIELD = (lowerDown = 1))))
      *  assertEquals(actualLocal, expectedLocal)
-     * 
+     *
      *  // '.regional' makes it so it transforms all the of fields 'underneath' the path
-     *  val actualRegional = tup.transform(_.rename(_.toUpperCase).regional(_.optField.element)) 
+     *  val actualRegional = tup.transform(_.rename(_.toUpperCase).regional(_.optField.element))
      *  val expectedRegional = (optField = Some((FIELD = (LOWERDOWN = 1))))
      *  assertEquals(actualRegional, expectedRegional)
      * }}}

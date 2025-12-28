@@ -16,15 +16,14 @@ package chanterelle
  * }}}
  *
  * ...is not since the value of `dynamicString` is not known at compiletime.
- * 
+ *
  * Users can provide their own 'bundles' of operations by creating and using `transparent inline defs`, like so:
  * {{{
- * transparent inline def renamedAndUppercased(inline fieldName: FieldName) = 
+ * transparent inline def renamedAndUppercased(inline fieldName: FieldName) =
  *   fieldName.rename("someName", "someOtherName").toUpperCase
- * 
+ *
  * (someName = 1).transform(_.rename(renamedAndUppercased)) // yields (SOMEOTHERNAME = 1)
  * }}}
- * 
  */
 sealed trait FieldName {
 
@@ -75,22 +74,23 @@ sealed trait FieldName {
 }
 
 object FieldName {
-  // The snake-case-to-camel-case and kebab-case-to-camel-case transformation regexes were copied from circe-generic-extras: 
+  // The snake-case-to-camel-case and kebab-case-to-camel-case transformation regexes were copied from circe-generic-extras:
   // https://github.com/circe/circe-generic-extras/blob/2e103585b26ec30619a7de33ff15122344f041f3/generic-extras/src/main/scala/io/circe/generic/extras/Configuration.scala#L86
   object camelCase {
+
     /**
-      * Transforms a field name from camelCase to kebab-case
-      */
-    transparent inline def toKebabCase(inline fieldName: FieldName): FieldName = 
+     * Transforms a field name from camelCase to kebab-case
+     */
+    transparent inline def toKebabCase(inline fieldName: FieldName): FieldName =
       fieldName
         .regexReplace("([A-Z]+)([A-Z][a-z])", "$1-$2")
         .regexReplace("([a-z\\d])([A-Z])", "$1-$2")
         .toLowerCase
 
     /**
-      * Transforms a field name from camelCase to snake_case
-      */
-    transparent inline def toSnakeCase(inline fieldName: FieldName): FieldName = 
+     * Transforms a field name from camelCase to snake_case
+     */
+    transparent inline def toSnakeCase(inline fieldName: FieldName): FieldName =
       fieldName
         .regexReplace("([A-Z]+)([A-Z][a-z])", "$1_$2")
         .regexReplace("([a-z\\d])([A-Z])", "$1_$2")
@@ -98,20 +98,22 @@ object FieldName {
   }
 
   object snakeCase {
+
     /**
-      * Transforms a field from snake_case to camelCase
-      */
-    transparent inline def toCamelCase(inline fieldName: FieldName): FieldName = 
+     * Transforms a field from snake_case to camelCase
+     */
+    transparent inline def toCamelCase(inline fieldName: FieldName): FieldName =
       fieldName
         .regexReplace("^_[a-zA-Z\\d]", _.replace("_", "").toLowerCase)
         .regexReplace("_[a-zA-Z\\d]", _.replace("_", "").toUpperCase)
   }
 
   object kebabCase {
+
     /**
-      * Transforms a field from kebab-case to camelCase
-      */
-    transparent inline def toCamelCase(inline fieldName: FieldName): FieldName = 
+     * Transforms a field from kebab-case to camelCase
+     */
+    transparent inline def toCamelCase(inline fieldName: FieldName): FieldName =
       fieldName
         .regexReplace("^-[a-zA-Z\\d]", _.replace("-", "").toLowerCase)
         .regexReplace("-[a-zA-Z\\d]", _.replace("-", "").toUpperCase)

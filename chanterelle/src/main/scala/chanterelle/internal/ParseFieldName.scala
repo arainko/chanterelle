@@ -28,7 +28,9 @@ private[chanterelle] object ParseFieldName {
         case '{ (arg: FieldName) => ($body(arg): FieldName).replace(${ Expr(from) }, ${ Expr(to) }) } =>
           recurse(body, ((str: String) => str.replace(from, to)) :: accumulatedFunctions)
 
-        case '{ (arg: FieldName) => ($body(arg): FieldName).regexReplace(${ Expr(pattern) }: String, ${ Expr(replacement) }: String) } =>
+        case '{ (arg: FieldName) =>
+              ($body(arg): FieldName).regexReplace(${ Expr(pattern) }: String, ${ Expr(replacement) }: String)
+            } =>
           recurse(
             body, {
               val regex = Pattern.compile(pattern)
@@ -36,7 +38,9 @@ private[chanterelle] object ParseFieldName {
             } :: accumulatedFunctions
           )
 
-        case '{ (arg: FieldName) => ($body(arg): FieldName).regexReplace(${ Expr(pattern) }: String, $fieldName: FieldName => FieldName) } =>
+        case '{ (arg: FieldName) =>
+              ($body(arg): FieldName).regexReplace(${ Expr(pattern) }: String, $fieldName: FieldName => FieldName)
+            } =>
           val nestedFieldName = Function.chain(recurse(fieldName, Nil))
           recurse(
             body, {

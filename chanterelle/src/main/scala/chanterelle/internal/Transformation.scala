@@ -224,7 +224,7 @@ object Transformation {
     }
 
     def updateAll(fn: (String, OfField[E]) => (String, OfField[Err])): Named[Err] = {
-      val updatedFields = 
+      val updatedFields =
         this.allFields.map {
           case name -> (field, removed) =>
             val (updatedName, updatedField) = fn(name, field)
@@ -283,9 +283,9 @@ object Transformation {
     def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.map { case (_, value) => value.calculateTpe.repr }.toVector)
 
-    def updateAll(f: Transformation[E] => Transformation[Err]): Tuple[Err] = 
+    def updateAll(f: Transformation[E] => Transformation[Err]): Tuple[Err] =
       this.copy(
-        allFields = allFields.transform{ case (_, (t, removed)) => (f(t), removed) },
+        allFields = allFields.transform { case (_, (t, removed)) => (f(t), removed) },
         isModified = IsModified.Yes
       )
 
@@ -406,11 +406,11 @@ object Transformation {
 
   object OfField {
 
-    extension [E <: Err] (self: OfField[E]) {
+    extension [E <: Err](self: OfField[E]) {
       def update(f: Transformation[E] => Transformation[Err]): OfField[Err] =
         self match {
           case src @ FromSource(transformation = t) => src.copy(transformation = f(t))
-          case mod: FromModifier => mod
+          case mod: FromModifier                    => mod
         }
     }
 
@@ -443,30 +443,34 @@ object Transformation {
     case Yes, No
   }
 
-  private def renameNamedNodes(transformation: Transformation[Err], rename: String => String, kind: Modifier.Kind): Transformation[Err] = {
+  private def renameNamedNodes(
+    transformation: Transformation[Err],
+    rename: String => String,
+    kind: Modifier.Kind
+  ): Transformation[Err] = {
     def recurse(curr: Transformation[Err]): Transformation[Err] = curr match {
-      case named: Transformation.Named[Err] => 
+      case named: Transformation.Named[Err] =>
         named.updateAll((name, field) => rename(name) -> field.update(recurse))
-      case tup: Transformation.Tuple[Err] => 
+      case tup: Transformation.Tuple[Err] =>
         tup.updateAll(recurse)
-      case opt: Transformation.Optional[Err] => 
+      case opt: Transformation.Optional[Err] =>
         opt.update(recurse)
-      case either: Transformation.Either[Err] => 
+      case either: Transformation.Either[Err] =>
         either.updateLeft(recurse).updateRight(recurse)
-      case map: Transformation.Map[Err, scala.collection.Map] => 
+      case map: Transformation.Map[Err, scala.collection.Map] =>
         map.updateKey(recurse).updateValue(recurse)
-      case iter: Transformation.Iter[Err, Iterable]=> 
+      case iter: Transformation.Iter[Err, Iterable] =>
         iter.update(recurse)
       case leaf: Transformation.Leaf =>
         leaf
-      case confed: Transformation.ConfedUp => 
+      case confed: Transformation.ConfedUp =>
         confed
-      case err: Transformation.Error => 
+      case err: Transformation.Error =>
         err
     }
 
     def locally(curr: Transformation[Err]): Transformation[Err] = curr match {
-      case named: Transformation.Named[Err] => 
+      case named: Transformation.Named[Err] =>
         named.updateAll((name, field) => rename(name) -> field)
       case other => other
     }
