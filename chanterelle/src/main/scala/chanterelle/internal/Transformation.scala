@@ -112,7 +112,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           Transformation.ConfedUp(Configured.Update(m.tpe, m.function), m.span)
 
         case m: Modifier.Rename =>
-          Transformation.renameNamedNodes(transformation, m.renamer, m.kind)
+          Transformation.renameNamedNodes(transformation, m.fieldName, m.kind)
       }
     }
     recurse(modifier.path.segments.toList)(this)
@@ -285,7 +285,7 @@ object Transformation {
 
     def updateAll(f: Transformation[E] => Transformation[Err]): Tuple[Err] = 
       this.copy(
-        allFields = allFields.transform{ case (idx, (t, removed)) => (f(t), removed) },
+        allFields = allFields.transform{ case (_, (t, removed)) => (f(t), removed) },
         isModified = IsModified.Yes
       )
 

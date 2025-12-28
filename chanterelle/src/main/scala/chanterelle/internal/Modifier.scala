@@ -5,7 +5,7 @@ import chanterelle.hidden.TupleModifier
 import scala.quoted.*
 
 import NamedTuple.AnyNamedTuple
-import chanterelle.hidden.Renamer
+import chanterelle.FieldName
 
 private[chanterelle] enum Modifier derives Debug {
   def path: Path
@@ -15,7 +15,7 @@ private[chanterelle] enum Modifier derives Debug {
   case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?], span: Span)
   case Update(path: Path, tpe: Type[?], function: Expr[? => ?], span: Span)
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
-  case Rename(path: Path, renamer: String => String, kind: Modifier.Kind, span: Span)
+  case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
 }
 
 private[chanterelle] object Modifier {
@@ -59,21 +59,21 @@ private[chanterelle] object Modifier {
         }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
       // workaround for the case below...
-      case cfg @ AsTerm(Lambda(_, Apply(Select(Ident(_), "rename"), List(renamer)))) => 
-        val parsedRenames = ParseRenamer.parse(renamer.asExprOf[Renamer => Renamer])
+      case cfg @ AsTerm(Lambda(_, Apply(Select(Ident(_), "rename"), List(fieldName)))) => 
+        val parsedRenames = ParseFieldName.parse(fieldName.asExprOf[FieldName => FieldName])
         Right(Modifier.Rename(Path.empty(Type.of[Any]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
       // this ish ain't matchign stuff if the type of `.rename` is  'Local & Regional' even tho the .local and .regional extractors work. Fun. 
-      // case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer) } =>
-      //   val parsedRenames = ParseRenamer.parse(renamer)
+      // case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($fieldName) } =>
+      //   val parsedRenames = ParseFieldName.parse(fieldName)
       //   Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
         
-      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).local(${ AsTerm(PathSelector(path)) }) } =>
-        val parsedRenames = ParseRenamer.parse(renamer)
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($fieldName).local(${ AsTerm(PathSelector(path)) }) } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
         Right(Modifier.Rename(path, parsedRenames, Kind.Local, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
-      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($renamer).regional(${ AsTerm(PathSelector(path)) }) } =>
-        val parsedRenames = ParseRenamer.parse(renamer)
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($fieldName).regional(${ AsTerm(PathSelector(path)) }) } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
         Right(Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
 
       case other =>
