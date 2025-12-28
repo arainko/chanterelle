@@ -264,4 +264,269 @@ class ModifiersSpec extends ChanterelleSuite {
 
     assertEquals(actual, expected)
   }
+
+  test("renames work") {
+    val tup = (
+      anotherField = (field1 = 123),
+      eitherField = Either.cond("asd".startsWith("a"), (rightField = (field = 1)), (leftField = (field = 1))),
+      optField = Some((field = (lowerDown = 1))),
+      mapField = Map((key = (k = 1)) -> (value = (v = 1))),
+      iterField = Vector((field = (lowerDown = 1)))
+    )
+
+    val actual = tup.transform(
+      _.put(_.anotherField)((newField = 3)),
+      _.rename(_.toUpperCase)
+    )
+
+    val expected = (
+      ANOTHERFIELD = (FIELD1 = 123, NEWFIELD = 3),
+      EITHERFIELD = Either.cond("asd".startsWith("a"), (RIGHTFIELD = (FIELD = 1)), (LEFTFIELD = (FIELD = 1))),
+      OPTFIELD = Some((FIELD = (LOWERDOWN = 1))),
+      MAPFIELD = Map((KEY = (K = 1)) -> (VALUE = (V = 1))),
+      ITERFIELD = Vector((FIELD = (LOWERDOWN = 1)))
+    )
+
+    assertEquals(actual, expected)
+  }
+
+  test("local renames work when pointing to a named tuple") {
+    val tup = (
+      anotherField = (field1 = 123),
+      eitherField = Either.cond("asd".startsWith("a"), (rightField = (field = 1)), (leftField = (field = 1))),
+      optField = Some((field = (lowerDown = 1))),
+      mapField = Map((key = (k = 1)) -> (value = (v = 1))),
+      iterField = Vector((field = (lowerDown = 1)))
+    )
+
+    val actual = tup.transform(
+      _.put(_.anotherField)((newField = 3)),
+      _.rename(_.toUpperCase).local(_.optField.element)
+    )
+
+    val expected = (
+      anotherField = (field1 = 123, newField = 3),
+      eitherField = Either.cond("asd".startsWith("a"), (rightField = (field = 1)), (leftField = (field = 1))),
+      optField = Some((FIELD = (lowerDown = 1))),
+      mapField = Map((key = (k = 1)) -> (value = (v = 1))),
+      iterField = Vector((field = (lowerDown = 1)))
+    )
+
+    assertEquals(actual, expected)
+  }
+
+  test("regional renames work") {
+    val tup = (
+      anotherField = (field1 = 123),
+      eitherField = Either.cond("asd".startsWith("a"), (rightField = (field = 1)), (leftField = (field = 1))),
+      optField = Some((field = (lowerDown = 1))),
+      mapField = Map((key = (k = 1)) -> (value = (v = 1))),
+      iterField = Vector((field = (lowerDown = 1)))
+    )
+
+    val actual = tup.transform(
+      _.put(_.anotherField)((newField = 3)),
+      _.rename(_.toUpperCase).regional(_.eitherField)
+    )
+
+    val expected = (
+      anotherField = (field1 = 123, newField = 3),
+      eitherField = Either.cond("asd".startsWith("a"), (RIGHTFIELD = (FIELD = 1)), (LEFTFIELD = (FIELD = 1))),
+      optField = Some((field = (lowerDown = 1))),
+      mapField = Map((key = (k = 1)) -> (value = (v = 1))),
+      iterField = Vector((field = (lowerDown = 1)))
+    )
+
+    assertEquals(actual, expected)
+  }
+
+  test("camelCase to snake_case transformation") {
+    val camel = (
+      simpleField = 1,
+      fieldWithNumber1 = 2,
+      field2WithNumber = 3,
+      _leadingUnderscore = 4,
+      trailingUnderscore_ = 5,
+      mixedCASEField = 6,
+      fieldWith123Numbers = 7,
+      fieldWithMultiple___Underscores = 8
+    )
+    val expectedSnake = (
+      simple_field = 1,
+      field_with_number1 = 2,
+      field2_with_number = 3,
+      _leading_underscore = 4,
+      trailing_underscore_ = 5,
+      mixed_case_field = 6,
+      field_with123_numbers = 7,
+      field_with_multiple___underscores = 8
+    )
+    val snake = camel.transform(_.rename(FieldName.camelCase.toSnakeCase))
+    assertEquals(snake, expectedSnake)
+  }
+
+  test("snake_case to camelCase transformation") {
+    val snake = (
+      simple_field = 1,
+      field_with_number1 = 2,
+      field2_with_number = 3,
+      _leading_underscore = 4,
+      trailing_underscore_ = 5,
+      mixed_case_field = 6,
+      field_with123_numbers = 7,
+      field_with_multiple___underscores = 8
+    )
+    val expectedCamel = (
+      simpleField = 1,
+      fieldWithNumber1 = 2,
+      field2WithNumber = 3,
+      leadingUnderscore = 4,
+      trailingUnderscore_ = 5,
+      mixedCaseField = 6,
+      fieldWith123Numbers = 7,
+      fieldWithMultiple__Underscores = 8
+    )
+    val camel = snake.transform(_.rename(FieldName.snakeCase.toCamelCase))
+    assertEquals(camel, expectedCamel)
+  }
+
+  test("camelCase to kebab-case transformation") {
+    val camel = (
+      simpleField = 1,
+      fieldWithNumber1 = 2,
+      field2WithNumber = 3,
+      `-leadingDash` = 4,
+      `trailingDash-` = 5,
+      mixedCASEField = 6,
+      fieldWith123Numbers = 7,
+      `fieldWithMultiple---Dashes` = 8,
+      fieldWithDash1 = 9
+    )
+    val expectedKebab = (
+      `simple-field` = 1,
+      `field-with-number1` = 2,
+      `field2-with-number` = 3,
+      `-leading-dash` = 4,
+      `trailing-dash-` = 5,
+      `mixed-case-field` = 6,
+      `field-with123-numbers` = 7,
+      `field-with-multiple---dashes` = 8,
+      `field-with-dash1` = 9
+    )
+    val kebab = camel.transform(_.rename(FieldName.camelCase.toKebabCase))
+    assertEquals(kebab, expectedKebab)
+  }
+
+  test("kebab-case to camelCase transformation") {
+    val kebab = (
+      `simple-field` = 1,
+      `field-With-number1` = 2,
+      `field2-with-number` = 3,
+      `-leading-dash` = 4,
+      `trailing-dash-` = 5,
+      `mixed-case-field` = 6,
+      `field-with123-numbers` = 7,
+      `field-with-multiple---dashes` = 8,
+      `field-with-dash1` = 9,
+      `-Uppercase-leading-dash` = 10
+    )
+    val expectedCamel = (
+      simpleField = 1,
+      fieldWithNumber1 = 2,
+      field2WithNumber = 3,
+      leadingDash = 4,
+      `trailingDash-` = 5,
+      mixedCaseField = 6,
+      fieldWith123Numbers = 7,
+      `fieldWithMultiple--Dashes` = 8,
+      fieldWithDash1 = 9,
+      uppercaseLeadingDash = 10
+    )
+
+    val camel = kebab.transform(_.rename(FieldName.kebabCase.toCamelCase))
+    assertEquals(camel, expectedCamel)
+  }
+
+  test("example API field name transformations with nested fields") {
+    val camel = (
+      repoInfo = (
+        fullName = "octocat/hello-world",
+        createdAt = "2011-01-26T19:01:12Z",
+        owner = (
+          profileImageUrl = "http://a0.twimg.com/profile_images/1135218950/twitterapi_normal.png",
+          userName = "octocat"
+        )
+      ),
+      weather = (
+        feelsLike = 278.4,
+        tempMin = 279.15,
+        tempMax = 281.15,
+        details = (
+          humidityLevel = 81,
+          pressureValue = 1012
+        )
+      )
+    )
+
+    val expectedSnake = (
+      repo_info = (
+        full_name = "octocat/hello-world",
+        created_at = "2011-01-26T19:01:12Z",
+        owner = (
+          profile_image_url = "http://a0.twimg.com/profile_images/1135218950/twitterapi_normal.png",
+          user_name = "octocat"
+        )
+      ),
+      weather = (
+        feels_like = 278.4,
+        temp_min = 279.15,
+        temp_max = 281.15,
+        details = (
+          humidity_level = 81,
+          pressure_value = 1012
+        )
+      )
+    )
+
+    val expectedKebab = (
+      `repo-info` = (
+        `full-name` = "octocat/hello-world",
+        `created-at` = "2011-01-26T19:01:12Z",
+        owner = (
+          `profile-image-url` = "http://a0.twimg.com/profile_images/1135218950/twitterapi_normal.png",
+          `user-name` = "octocat"
+        )
+      ),
+      weather = (
+        `feels-like` = 278.4,
+        `temp-min` = 279.15,
+        `temp-max` = 281.15,
+        details = (
+          `humidity-level` = 81,
+          `pressure-value` = 1012
+        )
+      )
+    )
+
+    val snake = camel.transform(_.rename(FieldName.camelCase.toSnakeCase))
+    val snakeRoundrip = snake.transform(_.rename(FieldName.snakeCase.toCamelCase))
+    assertEquals(snake, expectedSnake)
+    assertEquals(snakeRoundrip, camel)
+
+    val kebab = camel.transform(_.rename(FieldName.camelCase.toKebabCase))
+    val kebabRoundtrip = kebab.transform(_.rename(FieldName.kebabCase.toCamelCase))
+    assertEquals(kebab, expectedKebab)
+    assertEquals(kebabRoundtrip, camel)
+
+    val camelToSnakeToKebabToCamel =
+      camel.transform(
+        _.rename(
+          FieldName.camelCase.toSnakeCase
+            .andThen(FieldName.snakeCase.toCamelCase)
+            .andThen(FieldName.camelCase.toKebabCase)
+            .andThen(FieldName.kebabCase.toCamelCase)
+        )
+      )
+    assertEquals(camelToSnakeToKebabToCamel, camel)
+  }
 }

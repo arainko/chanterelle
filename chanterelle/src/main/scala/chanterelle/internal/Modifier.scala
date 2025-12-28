@@ -1,5 +1,6 @@
 package chanterelle.internal
 
+import chanterelle.FieldName
 import chanterelle.hidden.TupleModifier
 
 import scala.quoted.*
@@ -14,6 +15,7 @@ private[chanterelle] enum Modifier derives Debug {
   case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?], span: Span)
   case Update(path: Path, tpe: Type[?], function: Expr[? => ?], span: Span)
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
+  case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
 }
 
 private[chanterelle] object Modifier {
@@ -56,10 +58,44 @@ private[chanterelle] object Modifier {
           case (path, Path.Segment.TupleElement(tpe, index)) => Right(Modifier.Remove(path, index, Span.fromExpr(cfg)))
         }.getOrElse(Left(ErrorMessage.SelectorNeedsToPointToAField(path, Span.fromExpr(cfg))))
 
+      // workaround for the case below...
+      case cfg @ AsTerm(Lambda(_, Apply(Select(Ident(_), "rename"), List(fieldName)))) =>
+        val parsedRenames = ParseFieldName.parse(fieldName.asExprOf[FieldName => FieldName])
+        Right(
+          Modifier.Rename(Path.empty(Type.of[Any]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))
+        )
+
+      // this ish ain't matchign stuff if the type of `.rename` is  'Local & Regional' even tho the .local and .regional extractors work. Fun.
+      // case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($fieldName) } =>
+      //   val parsedRenames = ParseFieldName.parse(fieldName)
+      //   Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg)))
+
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.rename($fieldName).local(${ AsTerm(PathSelector(path)) })
+          } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
+        Right(
+          Modifier.Rename(path, parsedRenames, Kind.Local, Span.fromExpr(cfg))
+        )
+
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.rename($fieldName).regional(${ AsTerm(PathSelector(path)) })
+          } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
+        Right(
+          Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))
+        )
+
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
         report.errorAndAbort(s"Couldn't parse '${CodePrinter.codeAtSpan(Span.fromExpr(other))}' as a valid modifier", other)
     }
+  }
+
+  enum Kind derives Debug {
+    case Regional, Local
+
+    def isLocal: Boolean = this.isInstanceOf[Local.type]
   }
 
   private object AsTerm {

@@ -1,5 +1,7 @@
 package chanterelle.hidden
 
+import chanterelle.FieldName
+
 import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
 
@@ -68,6 +70,52 @@ object TupleModifier {
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def remove[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
+
+    /**
+     * Renames fields according to the passed in FieldName to FieldName function (which needs to be known at compiletime).
+     * {{{
+     * val tup = (anotherField = (field1 = 123, field2 = 123)).transform(_.rename(_.toUpperCase))
+     *
+     * val expected = (ANOTHERFIELD = (FIELD1 = 123, FIELD2 = 123))
+     *
+     * assertEquals(tup, expected)
+     * }}}
+     *
+     * The blast radius of the renaming function can be further controlled with '.local' and '.regional':
+     * {{{
+     *  val tup = (optField = Some((field = (lowerDown = 1))))
+     *
+     *  // point it at the named tuple inside the Option to only rename the 'toplevel' fields
+     *  val actualLocal = tup.transform(_.rename(_.toUpperCase).local(_.optField.element))
+     *  val expectedLocal = (optField = Some((FIELD = (lowerDown = 1))))
+     *  assertEquals(actualLocal, expectedLocal)
+     *
+     *  // '.regional' makes it so it transforms all the of fields 'underneath' the path
+     *  val actualRegional = tup.transform(_.rename(_.toUpperCase).regional(_.optField.element))
+     *  val expectedRegional = (optField = Some((FIELD = (LOWERDOWN = 1))))
+     *  assertEquals(actualRegional, expectedRegional)
+     * }}}
+     */
+    @compileTimeOnly("Only usable as part of the .transform DSL")
+    def rename(fieldName: FieldName => FieldName): TupleModifier[Tup] & Local[Tup] & Regional[Tup]
+  }
+
+  sealed trait Local[Tup]
+
+  object Local {
+    extension [Tup](self: TupleModifier[Tup] & Local[Tup]) {
+      @compileTimeOnly("Only usable as part of the .transform DSL")
+      def local[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+    }
+  }
+
+  sealed trait Regional[Tup]
+
+  object Regional {
+    extension [Tup](self: TupleModifier[Tup] & Regional[Tup]) {
+      @compileTimeOnly("Only usable as part of the .transform DSL")
+      def regional[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+    }
   }
 
 }

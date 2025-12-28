@@ -32,8 +32,8 @@ private[chanterelle] object Interpreter {
                     }
                 }
 
-              case (_, InterpretableTransformation.OfField.FromSource(idx, transformation)) =>
-                runTransformation(StructuredValue.of(source, value).fieldValue(idx), transformation)
+              case (_, InterpretableTransformation.OfField.FromSource(srcName, transformation)) =>
+                runTransformation(StructuredValue.of(source, value).fieldValue(srcName), transformation)
             }
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
             '{ $recreated: NamedTuple[names, values] }
