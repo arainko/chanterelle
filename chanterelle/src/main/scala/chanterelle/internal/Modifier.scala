@@ -63,12 +63,12 @@ private[chanterelle] object Modifier {
         val parsedRenames = ParseFieldName.parse(fieldName.asExprOf[FieldName => FieldName])
         Right(
           Modifier.Rename(Path.empty(Type.of[Any]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))
-        ) // TODO: not sure about the type I'm passing in here
+        )
 
       // this ish ain't matchign stuff if the type of `.rename` is  'Local & Regional' even tho the .local and .regional extractors work. Fun.
       // case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.rename($fieldName) } =>
       //   val parsedRenames = ParseFieldName.parse(fieldName)
-      //   Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))) //TODO: not sure about the type I'm passing in here
+      //   Right(Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg)))
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
             builder.rename($fieldName).local(${ AsTerm(PathSelector(path)) })
@@ -76,7 +76,7 @@ private[chanterelle] object Modifier {
         val parsedRenames = ParseFieldName.parse(fieldName)
         Right(
           Modifier.Rename(path, parsedRenames, Kind.Local, Span.fromExpr(cfg))
-        ) // TODO: not sure about the type I'm passing in here
+        )
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
             builder.rename($fieldName).regional(${ AsTerm(PathSelector(path)) })
@@ -84,7 +84,7 @@ private[chanterelle] object Modifier {
         val parsedRenames = ParseFieldName.parse(fieldName)
         Right(
           Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))
-        ) // TODO: not sure about the type I'm passing in here
+        )
 
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
