@@ -4,10 +4,10 @@
 
 ## Installation
 ```scala
-libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.1"
+libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.2"
 
 // or if you're using Scala.js or Scala Native
-libraryDependencies += "io.github.arainko" %%% "chanterelle" % "0.1.1"
+libraryDependencies += "io.github.arainko" %%% "chanterelle" % "0.1.2"
 ```
 
 ## Documentation
@@ -95,6 +95,93 @@ val transformed = tup.transform(_.remove(_.anotherField.field2))
 ```
 
 
+* `.rename` - transforms the field names
+```scala
+val tup = (anotherField = (field1 = 123, field2 = 123))
+
+val transformed = tup.transform(_.rename(_.replace("field", "property").toUpperCase))
+```
+
+
+```scala
+
+(ANOTHERFIELD = (PROPERTY1 = 123, PROPERTY2 = 123))
+```
+
+
+The blast radius of the renaming function can be further controlled with '.local' and '.regional':
+
+```scala
+val tup = (optField = Some((field = (lowerDown = 1))))
+
+// '.local' renames the toplevel fields
+val transformedLocal = tup.transform(_.rename(_.toUpperCase).local(_.optField.element))
+
+// '.regional' makes it so that all the of fields underneath the path are transformed
+val transformedRegional = tup.transform(_.rename(_.toUpperCase).regional(_.optField.element))
+```
+
+
+```scala
+
+val transformedLocal = (optField = Some((FIELD = (lowerDown = 1))))
+val transformedRegional = (optField = Some((FIELD = (LOWERDOWN = 1))))
+```
+
+There's also a number of predefined case transformations inside the `FieldName` companion object:
+```scala
+val camel = (
+  repoInfo = (
+    fullName = "octocat/hello-world",
+    createdAt = "2011-01-26T19:01:12Z",
+  )
+)
+
+val snake = (
+  repo_info = (
+    full_name = "octocat/hello-world",
+    created_at = "2011-01-26T19:01:12Z",
+  )
+)
+
+val kebab = (
+  `repo-info` = (
+    `full-name` = "octocat/hello-world",
+    `created-at` = "2011-01-26T19:01:12Z",
+  )
+)
+
+val camelToSnake = camel.transform(_.rename(FieldName.camelCase.toSnakeCase))
+val camelToKebab = camel.transform(_.rename(FieldName.camelCase.toKebabCase))
+val snakeToCamel = snake.transform(_.rename(FieldName.snakeCase.toCamelCase))
+val kebabToCamel = kebab.transform(_.rename(FieldName.kebabCase.toCamelCase))
+```
+
+
+```scala
+
+val camelToSnake = (repo_info = (full_name = "octocat/hello-world", created_at = "2011-01-26T19:01:12Z"))
+val camelToKebab = (repo-info = (full-name = "octocat/hello-world", created-at = "2011-01-26T19:01:12Z"))
+val snakeToCamel = (repoInfo = (fullName = "octocat/hello-world", createdAt = "2011-01-26T19:01:12Z"))
+val kebabToCamel = (repoInfo = (fullName = "octocat/hello-world", createdAt = "2011-01-26T19:01:12Z"))
+```
+
+Users can also define their own bundles of transformations by combaning various operations on `FieldNames` in a `transparent inline def`:
+```scala
+transparent inline def renamedAndUppercased(inline fieldName: FieldName) =
+   fieldName.rename("someName", "someOtherName").toUpperCase
+
+val tup = (someName = 1)
+val transformed = tup.transform(_.rename(renamedAndUppercased))
+```
+
+
+```scala
+
+(SOMEOTHERNAME = 1)
+```
+
+
 ### Path selectors
 
 Let's go through a couple of examples of using the path selector:
@@ -128,7 +215,7 @@ val transformed = tup.transform(
 
 ```scala
 
-(optional = Some(2), coll = Vector(2, 3, 4))
+(optional = Some(2), coll = Iterable(2, 3, 4))
 ```
 
 
