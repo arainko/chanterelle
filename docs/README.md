@@ -4,7 +4,10 @@
 
 ## Installation
 ```scala
-libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.0"
+libraryDependencies += "io.github.arainko" %% "chanterelle" % "0.1.2"
+
+// or if you're using Scala.js or Scala Native
+libraryDependencies += "io.github.arainko" %%% "chanterelle" % "0.1.2"
 ```
 
 ## Documentation
@@ -76,6 +79,79 @@ Docs.prettyPrint(transformed)
 ```scala mdoc:silent:nest
 val tup = (anotherField = (field1 = 123, field2 = 123))
 val transformed = tup.transform(_.remove(_.anotherField.field2))
+```
+
+```scala mdoc:passthrough
+Docs.prettyPrint(transformed)
+```
+
+* `.rename` - transforms the field names
+```scala mdoc:silent:nest
+val tup = (anotherField = (field1 = 123, field2 = 123))
+
+val transformed = tup.transform(_.rename(_.replace("field", "property").toUpperCase))
+```
+
+```scala mdoc:passthrough
+Docs.prettyPrint(transformed)
+```
+
+The blast radius of the renaming function can be further controlled with '.local' and '.regional':
+
+```scala mdoc:silent:nest
+val tup = (optField = Some((field = (lowerDown = 1))))
+
+// '.local' renames the toplevel fields
+val transformedLocal = tup.transform(_.rename(_.toUpperCase).local(_.optField.element))
+
+// '.regional' makes it so that all the of fields underneath the path are transformed
+val transformedRegional = tup.transform(_.rename(_.toUpperCase).regional(_.optField.element))
+```
+
+```scala mdoc:passthrough
+Docs.prettyPrintVals(transformedLocal, transformedRegional)
+```
+
+There's also a number of predefined case transformations inside the `FieldName` companion object:
+```scala mdoc:nest:silent
+val camel = (
+  repoInfo = (
+    fullName = "octocat/hello-world",
+    createdAt = "2011-01-26T19:01:12Z",
+  )
+)
+
+val snake = (
+  repo_info = (
+    full_name = "octocat/hello-world",
+    created_at = "2011-01-26T19:01:12Z",
+  )
+)
+
+val kebab = (
+  `repo-info` = (
+    `full-name` = "octocat/hello-world",
+    `created-at` = "2011-01-26T19:01:12Z",
+  )
+)
+
+val camelToSnake = camel.transform(_.rename(FieldName.camelCase.toSnakeCase))
+val camelToKebab = camel.transform(_.rename(FieldName.camelCase.toKebabCase))
+val snakeToCamel = snake.transform(_.rename(FieldName.snakeCase.toCamelCase))
+val kebabToCamel = kebab.transform(_.rename(FieldName.kebabCase.toCamelCase))
+```
+
+```scala mdoc:passthrough
+Docs.prettyPrintVals(camelToSnake, camelToKebab, snakeToCamel, kebabToCamel)
+```
+
+Users can also define their own bundles of transformations by combaning various operations on `FieldNames` in a `transparent inline def`:
+```scala mdoc:nest:silent
+transparent inline def renamedAndUppercased(inline fieldName: FieldName) =
+   fieldName.rename("someName", "someOtherName").toUpperCase
+
+val tup = (someName = 1)
+val transformed = tup.transform(_.rename(renamedAndUppercased))
 ```
 
 ```scala mdoc:passthrough
