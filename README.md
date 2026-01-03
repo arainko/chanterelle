@@ -219,7 +219,7 @@ val transformed = tup.transform(
 ```
 
 
-* accesing keys and values of a `Map`
+* accessing keys and values of a `Map`
 
 Much like in the case of collections and `Options`, `Maps` can also be modified with the combination of `.element` and tuple accessors (`._1` for the key and `._2` for the value):
 ```scala
