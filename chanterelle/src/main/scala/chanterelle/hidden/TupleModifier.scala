@@ -98,6 +98,9 @@ object TupleModifier {
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def rename(fieldName: FieldName => FieldName): TupleModifier[Tup] & Local[Tup] & Regional[Tup]
+
+    @compileTimeOnly("Only usable as part of the .transform DSL")
+    def merge[A <: NamedTuple.AnyNamedTuple](value: A): TupleModifier[Tup] & Regional[Tup]
   }
 
   sealed trait Local[Tup]
