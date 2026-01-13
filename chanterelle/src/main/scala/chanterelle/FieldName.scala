@@ -71,6 +71,8 @@ sealed trait FieldName {
    * Equivalent to `String#capitalize`
    */
   def capitalize: FieldName
+
+  def matchTyped[Trans[x <: String] <: String]: FieldName
 }
 
 object FieldName {

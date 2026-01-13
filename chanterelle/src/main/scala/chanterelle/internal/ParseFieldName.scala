@@ -58,6 +58,22 @@ private[chanterelle] object ParseFieldName {
         case '{ (arg: FieldName) => ($body(arg): FieldName).capitalize } =>
           recurse(body, ((str: String) => str.capitalize) :: accumulatedFunctions)
 
+        case '{ 
+          type trans[x <: String] <: String
+          (arg: FieldName) => ($body(arg): FieldName).matchTyped[trans] 
+        } => 
+          def evaluate[F[x <: String] <: String: Type](name: String)(using Quotes): String = {
+            import quotes.reflect.*
+            val fieldNameTpe = ConstantType(StringConstant(name)).asType
+            fieldNameTpe match { case '[type name <: String; name] => 
+              Type.of[F[name]].repr.simplified.asType match {
+                case '[type res <: String; res] => Type.valueOfConstant[res].get
+              }
+            }
+          }
+
+          recurse(body, evaluate[trans] :: accumulatedFunctions)
+
         case '{ ($first: FieldName => FieldName).andThen[FieldName]($second) } =>
           recurse(first, recurse(second, accumulatedFunctions))
 

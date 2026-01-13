@@ -119,3 +119,11 @@ object TupleModifier {
   }
 
 }
+
+object test {
+  val source = (int = 1, str = "asd", nested = (field1 = 1, field2 = 2))
+
+  val mergee = (int = "asd", str = 1)
+
+  val d = source.nested ++ mergee
+}

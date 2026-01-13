@@ -53,3 +53,66 @@ object EntryPoint {
   private def ErrorsWithSpan(using errorSpan: Span)(errors: List[ErrorMessage]) = (errors = errors, errorSpan = errorSpan)
 
 }
+
+import scala.compiletime.ops.string.*
+
+object SnakeCaseConverter:
+
+  type Uppercase = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+
+  type ToLower[S <: String] <: String = S match
+    case "A" => "a"
+    case "B" => "b"
+    case "C" => "c"
+    case "D" => "d"
+    case "E" => "e"
+    case "F" => "f"
+    case "G" => "g"
+    case "H" => "h"
+    case "I" => "i"
+    case "J" => "j"
+    case "K" => "k"
+    case "L" => "l"
+    case "M" => "m"
+    case "N" => "n"
+    case "O" => "o"
+    case "P" => "p"
+    case "Q" => "q"
+    case "R" => "r"
+    case "S" => "s"
+    case "T" => "t"
+    case "U" => "u"
+    case "V" => "v"
+    case "W" => "w"
+    case "X" => "x"
+    case "Y" => "y"
+    case "Z" => "z"
+    case _   => S
+
+  // 1. Entry point: Handles the first character separately (to avoid leading underscores)
+  type ToSnakeCase[S <: String] <: String = 
+    Length[S] match
+      case 0 => 
+        ""
+      case _ => 
+        ToLower[Substring[S, 0, 1]] + SnakeStep[Substring[S, 1, Length[S]]]
+
+  // 2. Recursive Step: Evaluates one character at a time and shrinks the string
+  type SnakeStep[S <: String] <: String = 
+    Length[S] match
+      case 0 => 
+        ""
+      case _ => 
+        Substring[S, 0, 1] match
+          case Uppercase => 
+            "_" + ToLower[Substring[S, 0, 1]] + SnakeStep[Substring[S, 1, Length[S]]]
+          case _ => 
+            Substring[S, 0, 1] + SnakeStep[Substring[S, 1, Length[S]]]
+
+object test2 {
+  val one = two
+
+  def cos = two
+
+  val two = 2
+}
