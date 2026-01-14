@@ -272,6 +272,46 @@ object Transformation {
       )
   }
 
+  opaque type SourceRef = Int
+
+  object SourceRef {
+    private var counter = 0
+
+    val Primary: SourceRef = -1
+
+    def fresh(): SourceRef = {
+      val current = counter
+      counter += 1
+      current
+    }
+  }
+
+  case class Merged[+E <: Err](
+    source: Structure.Named,
+    mergees: VectorMap[SourceRef, Structure.Named],
+    private val allFields: VectorMap[String, (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef], removed: Boolean)]
+  ) extends Transformation[E]("merged") {
+
+    final def _3 = fields
+    val fields: VectorMap[String, (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef])] = allFields.collect {
+      case (key, (field = value, sourceRef = idx, accessibleFrom = af, removed = false)) => key -> (value, idx, af)
+    }
+
+    def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
+      rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
+
+    override def calculateTpe(using Quotes): Type[? <: AnyKind] =
+      rollupTuple(
+        fields.map {
+          case _ -> (field = OfField.FromSource(transformation = t)) => t.calculateTpe.repr
+          case _ -> (field = OfField.FromModifier(modifier = conf))  => conf.tpe.repr
+        }.toVector
+      )
+
+    override val isModified: IsModified = IsModified.Yes
+
+  }
+
   case class Tuple[+E <: Err](
     source: Structure.Tuple,
     private val allFields: SortedMap[Int, (transformation: Transformation[E], removed: Boolean)],

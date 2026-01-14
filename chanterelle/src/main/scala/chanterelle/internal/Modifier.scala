@@ -86,6 +86,13 @@ private[chanterelle] object Modifier {
           Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))
         )
 
+      case cfg @ '{ 
+        type a <: NamedTuple.AnyNamedTuple
+        (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergeValue) 
+        } => {
+        ???
+      }
+
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
         report.errorAndAbort(s"Couldn't parse '${CodePrinter.codeAtSpan(Span.fromExpr(other))}' as a valid modifier", other)

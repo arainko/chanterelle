@@ -113,5 +113,6 @@ object InterpretableTransformation {
   enum OfField derives Debug {
     case FromSource(name: String, transformation: InterpretableTransformation)
     case FromModifier(modifier: Configured.NamedSpecific)
+    
   }
 }

@@ -30,6 +30,8 @@ private[chanterelle] object Interpreter {
                           }
                         }
                     }
+
+                  case Configured.NamedSpecific.Merge(struct, value) => ???
                 }
 
               case (_, InterpretableTransformation.OfField.FromSource(srcName, transformation)) =>
