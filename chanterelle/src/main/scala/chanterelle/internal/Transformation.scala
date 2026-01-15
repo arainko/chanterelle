@@ -197,7 +197,7 @@ object Transformation {
 
   case class Named[+E <: Err](
     source: Structure.Named,
-    private val allFields: VectorMap[String, (field: OfField[E], removed: Boolean)],
+    private[Transformation] val allFields: VectorMap[String, (field: OfField[E], removed: Boolean)],
     isModified: IsModified
   ) extends Transformation[E]("named tuple") {
     final def _2 = fields
@@ -289,13 +289,17 @@ object Transformation {
   case class Merged[+E <: Err](
     source: Structure.Named,
     mergees: VectorMap[SourceRef, Structure.Named],
-    private val allFields: VectorMap[String, (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef], removed: Boolean)]
+    private val allFields: VectorMap[
+      String,
+      (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef], removed: Boolean)
+    ]
   ) extends Transformation[E]("merged") {
 
     final def _3 = fields
-    val fields: VectorMap[String, (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef])] = allFields.collect {
-      case (key, (field = value, sourceRef = idx, accessibleFrom = af, removed = false)) => key -> (value, idx, af)
-    }
+    val fields: VectorMap[String, (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef])] =
+      allFields.collect {
+        case (key, (field = value, sourceRef = idx, accessibleFrom = af, removed = false)) => key -> (value, idx, af)
+      }
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
@@ -310,6 +314,42 @@ object Transformation {
 
     override val isModified: IsModified = IsModified.Yes
 
+  }
+
+  object Merged {
+    def create(source: Transformation.Named[Err], mergee: Structure.Named, ref: SourceRef): Transformation.Merged[Err] = {
+      val mutualKeys = source.allFields.keySet.intersect(mergee.fields.keySet)
+
+      val overriddenTransformations = mutualKeys.view.map { name =>
+        val mergeeStruct = mergee.fields(name)
+        val (field, removed) = source.allFields(name)
+        // TODO: don't create the transformation eagerly here, just pattern match on the structure instead
+        val transformation = Transformation.create(mergeeStruct) // Transformation.create doesn't create Merged nodes
+        val value = (field, transformation) match {
+          case (OfField.FromSource(`name`, left: Transformation.Named[Err]), right: Transformation.Named[Err]) =>
+            // TODO: which 'name' do I use? I guess the upper-level name but I also need to check if OfField(name, ...) is accessible from SourceRef.Primary
+            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector(SourceRef.Primary), removed)
+          case (OfField.FromSource(_, left: Transformation.Named[Err]), right: Transformation.Named[Err]) =>
+            // TODO: which 'name' do I use? I guess the upper-level name but I also need to check if OfField(name, ...) is accessible from SourceRef.Primary
+            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector.empty, removed)
+          case (OfField.FromSource(name, left: Transformation.Merged[Err]), right: Transformation.Named[Err]) =>
+            ???
+          case (_, right) => (OfField.FromSource(name, right), ref, Vector(SourceRef.Primary), removed)
+        }
+        name -> value
+      }.to(VectorMap)
+
+      val additionalTransformations =
+        mergee.fields
+          .removedAll(mutualKeys)
+          .transform((name, struct) => (OfField.FromSource(name, Transformation.create(struct)), ref, Vector.empty, false))
+
+      val allFields =
+        source.allFields
+          .transform((_, value) => (value.field, SourceRef.Primary, Vector.empty, value.removed)) ++ overriddenTransformations ++ additionalTransformations
+
+      Merged(source.source, VectorMap(ref -> mergee), allFields)
+    }
   }
 
   case class Tuple[+E <: Err](
