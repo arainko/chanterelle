@@ -5,6 +5,8 @@ import chanterelle.internal.Transformation.IsModified
 import scala.annotation.nowarn
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
+import scala.deriving.Mirror
+import Transformation.Error
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -17,7 +19,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
   )(inline errorMessage: Transformation[Err] => ErrorMessage): Transformation[Err] =
     this match {
       case a: A  => fn(a)
-      case other => Transformation.Error(errorMessage(other))
+      case other => Error(errorMessage(other))
     }
 
   @nowarn("msg=Unreachable")
@@ -28,7 +30,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
     this match {
       case a: A  => fnA(a)
       case b: B  => fnB(b)
-      case other => Transformation.Error(errorMessage(other))
+      case other => Error(errorMessage(other))
     }
 
   def calculateTpe(using Quotes): Type[?]
@@ -51,19 +53,19 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           )
 
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateKey(recurse(next)))(other =>
+          curr.narrow[Transformation.MapLike[Err, ?]](_.updateKey(recurse(next)))(other =>
             ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
           )
 
         case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateValue(recurse(next)))(other =>
+          curr.narrow[Transformation.MapLike[Err, ?]](_.updateValue(recurse(next)))(other =>
             ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
           )
 
         case Path.Segment.Element(tpe) :: next =>
           curr.narrow(
             when[Transformation.Optional[Err]](_.update(recurse(next))),
-            when[Transformation.Iter[Err, ?]](_.update(recurse(next)))
+            when[Transformation.IterLike[Err, ?]](_.update(recurse(next)))
           )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, modifier.span))
 
         case Path.Segment.LeftElement(tpe) :: next =>
@@ -113,6 +115,11 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
 
         case m: Modifier.Rename =>
           Transformation.renameNamedNodes(transformation, m.fieldName, m.kind)
+
+        case m: Modifier.Merge =>
+          transformation.narrow[Transformation.Named[Err]](
+            transformation => Transformation.Merged.create(transformation, m.valueStructure, m.ref) //TODO: add case for Transformation.Merged
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple or merged", other, modifier.span))
       }
     }
     recurse(modifier.path.segments.toList)(this)
@@ -138,9 +145,9 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
               recurse(paramTransformation :: tail, acc)
             case Transformation.Either(source, left, right, _) =>
               recurse(left :: right :: tail, acc)
-            case Transformation.Map(source, key, value, _) =>
+            case Transformation.MapLike(source, key, value, _) =>
               recurse(value :: tail, acc)
-            case Transformation.Iter(source, elem, _) =>
+            case Transformation.IterLike(source, elem, _) =>
               recurse(elem :: tail, acc)
             case Transformation.Leaf(output) =>
               recurse(tail, acc)
@@ -156,17 +163,29 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
   }
 }
 
-object Transformation {
+private[chanterelle] object Transformation {
+  type Exact[Struct <: Structure] <: Transformation[Nothing] =
+    Struct match {
+      case Structure.Named      => Transformation.Named[Nothing]
+      case Structure.Tuple      => Transformation.Tuple[Nothing]
+      case Structure.Optional   => Transformation.Optional[Nothing]
+      case Structure.Either     => Transformation.Either[Nothing]
+      case Structure.Collection =>
+        Transformation.MapLike[Nothing, scala.collection.Map] | Transformation.IterLike[Nothing, Iterable]
+      case Structure.Leaf => Leaf
+    }
 
   given Debug[Transformation[Err]] = Debug.derived
 
-  def create(structure: Structure): Transformation[Err] = {
+  def create(structure: Structure): Transformation[Nothing] = createExact(structure)
+
+  def createExact(structure: Structure): Transformation.Exact[structure.type] = {
     structure match {
       case named: Structure.Named =>
         Named(
           named,
           named.fields.map { (name, field) =>
-            name -> (field = Transformation.OfField.FromSource(name, create(field)), removed = false)
+            name -> (field = Transformation.OfField.FromSource(name, createExact(field)), removed = false)
           },
           IsModified.No
         )
@@ -174,22 +193,22 @@ object Transformation {
       case tuple: Structure.Tuple =>
         Tuple(
           tuple,
-          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = create(t), removed = false)).to(SortedMap),
+          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = createExact(t), removed = false)).to(SortedMap),
           IsModified.No
         )
 
       case optional: Structure.Optional =>
-        Optional(optional, create(optional.paramStruct), IsModified.No)
+        Optional(optional, createExact(optional.paramStruct), IsModified.No)
 
       case either: Structure.Either =>
-        Either(either, create(either.left), create(either.right), IsModified.No)
+        Either(either, createExact(either.left), createExact(either.right), IsModified.No)
 
       case coll: Structure.Collection =>
         coll.repr match
-          case source @ Structure.Collection.Repr.Map(tycon, key, value) =>
-            Transformation.Map(source, create(key), create(value), IsModified.No)
-          case source @ Structure.Collection.Repr.Iter(tycon, element) =>
-            Transformation.Iter(source, create(element), IsModified.No)
+          case source @ Structure.Collection.Repr.MapLike(tycon, key, value) =>
+            Transformation.MapLike(source, createExact(key), createExact(value), IsModified.No)
+          case source @ Structure.Collection.Repr.IterLike(tycon, element) =>
+            Transformation.IterLike(source, createExact(element), IsModified.No)
       case leaf: Structure.Leaf =>
         Leaf(leaf)
     }
@@ -272,31 +291,17 @@ object Transformation {
       )
   }
 
-  opaque type SourceRef = Int
-
-  object SourceRef {
-    private var counter = 0
-
-    val Primary: SourceRef = -1
-
-    def fresh(): SourceRef = {
-      val current = counter
-      counter += 1
-      current
-    }
-  }
-
   case class Merged[+E <: Err](
     source: Structure.Named,
-    mergees: VectorMap[SourceRef, Structure.Named],
+    mergees: VectorMap[Sources.Ref, Structure.Named],
     private val allFields: VectorMap[
       String,
-      (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef], removed: Boolean)
+      (field: OfField[E], sourceRef: Sources.Ref, accessibleFrom: Vector[Sources.Ref], removed: Boolean)
     ]
   ) extends Transformation[E]("merged") {
 
     final def _3 = fields
-    val fields: VectorMap[String, (field: OfField[E], sourceRef: SourceRef, accessibleFrom: Vector[SourceRef])] =
+    val fields: VectorMap[String, (field: OfField[E], sourceRef: Sources.Ref, accessibleFrom: Vector[Sources.Ref])] =
       allFields.collect {
         case (key, (field = value, sourceRef = idx, accessibleFrom = af, removed = false)) => key -> (value, idx, af)
       }
@@ -304,7 +309,7 @@ object Transformation {
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
 
-    override def calculateTpe(using Quotes): Type[? <: AnyKind] =
+    def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(
         fields.map {
           case _ -> (field = OfField.FromSource(transformation = t)) => t.calculateTpe.repr
@@ -312,12 +317,21 @@ object Transformation {
         }.toVector
       )
 
+    def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
+      val values = calculateValuesTpe
+      val names = calculateNamesTpe
+      ((names, values): @unchecked) match {
+        case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
+          Type.of[NamedTuple.NamedTuple[names, values]]
+      }
+    }
+
     override val isModified: IsModified = IsModified.Yes
 
   }
 
   object Merged {
-    def create(source: Transformation.Named[Err], mergee: Structure.Named, ref: SourceRef): Transformation.Merged[Err] = {
+    def create(source: Transformation.Named[Err], mergee: Structure.Named, ref: Sources.Ref): Transformation.Merged[Err] = {
       val mutualKeys = source.allFields.keySet.intersect(mergee.fields.keySet)
 
       val overriddenTransformations = mutualKeys.view.map { name =>
@@ -328,16 +342,16 @@ object Transformation {
         val value = (field, transformation) match {
           case (OfField.FromSource(`name`, left: Transformation.Named[Err]), right: Transformation.Named[Err]) =>
             // TODO: which 'name' do I use? I guess the upper-level name but I also need to check if OfField(name, ...) is accessible from SourceRef.Primary
-            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector(SourceRef.Primary), removed)
+            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector(Sources.Ref.Primary), false)
           case (OfField.FromSource(_, left: Transformation.Named[Err]), right: Transformation.Named[Err]) =>
             // TODO: which 'name' do I use? I guess the upper-level name but I also need to check if OfField(name, ...) is accessible from SourceRef.Primary
-            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector.empty, removed)
+            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector.empty, false)
           case (OfField.FromSource(name, left: Transformation.Merged[Err]), right: Transformation.Named[Err]) =>
             ???
-          case (_, right) => (OfField.FromSource(name, right), ref, Vector(SourceRef.Primary), removed)
+          case (_, right) => (OfField.FromSource(name, right), ref, Vector(Sources.Ref.Primary), removed)
         }
         name -> value
-      }.to(VectorMap)
+      }.toMap
 
       val additionalTransformations =
         mergee.fields
@@ -346,7 +360,9 @@ object Transformation {
 
       val allFields =
         source.allFields
-          .transform((_, value) => (value.field, SourceRef.Primary, Vector.empty, value.removed)) ++ overriddenTransformations ++ additionalTransformations
+          .transform((_, value) =>
+            (value.field, Sources.Ref.Primary, Vector.empty, value.removed)
+          ) ++ overriddenTransformations ++ additionalTransformations
 
       Merged(source.source, VectorMap(ref -> mergee), allFields)
     }
@@ -425,8 +441,8 @@ object Transformation {
       this.copy(right = f(right), isModified = IsModified.Yes)
   }
 
-  case class Map[+E <: Err, F[k, v] <: collection.Map[k, v]](
-    source: Structure.Collection.Repr.Map[F],
+  case class MapLike[+E <: Err, F[k, v] <: collection.Map[k, v]](
+    source: Structure.Collection.Repr.MapLike[F],
     key: Transformation[E],
     value: Transformation[E],
     isModified: IsModified
@@ -437,15 +453,15 @@ object Transformation {
       }
     }
 
-    def updateKey(f: Transformation[E] => Transformation[Err]): Map[Err, F] =
+    def updateKey(f: Transformation[E] => Transformation[Err]): MapLike[Err, F] =
       this.copy(key = f(key), isModified = IsModified.Yes)
 
-    def updateValue(f: Transformation[E] => Transformation[Err]): Map[Err, F] =
+    def updateValue(f: Transformation[E] => Transformation[Err]): MapLike[Err, F] =
       this.copy(value = f(value), isModified = IsModified.Yes)
   }
 
-  case class Iter[+E <: Err, F[elem] <: Iterable[elem]](
-    source: Structure.Collection.Repr.Iter[F],
+  case class IterLike[+E <: Err, F[elem] <: Iterable[elem]](
+    source: Structure.Collection.Repr.IterLike[F],
     elem: Transformation[E],
     isModified: IsModified
   ) extends Transformation[E]("iterable") {
@@ -456,7 +472,7 @@ object Transformation {
       }
     }
 
-    def update(f: Transformation[E] => Transformation[Err]): Iter[Err, F] =
+    def update(f: Transformation[E] => Transformation[Err]): IterLike[Err, F] =
       this.copy(elem = f(elem), isModified = IsModified.Yes)
   }
 
@@ -537,9 +553,9 @@ object Transformation {
         opt.update(recurse)
       case either: Transformation.Either[Err] =>
         either.updateLeft(recurse).updateRight(recurse)
-      case map: Transformation.Map[Err, scala.collection.Map] =>
+      case map: Transformation.MapLike[Err, scala.collection.Map] =>
         map.updateKey(recurse).updateValue(recurse)
-      case iter: Transformation.Iter[Err, Iterable] =>
+      case iter: Transformation.IterLike[Err, Iterable] =>
         iter.update(recurse)
       case leaf: Transformation.Leaf =>
         leaf

@@ -32,12 +32,5 @@ private[chanterelle] object Configured {
       export valueStructure.fieldName
       export valueStructure.valueStructure.tpe
     }
-
-    case class Merge(
-      valueStructure: Structure.Named,
-      value: Expr[?]
-    ) extends NamedSpecific {
-      export valueStructure.tpe
-    }
   }
 }

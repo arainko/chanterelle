@@ -6,6 +6,9 @@ import chanterelle.hidden.TupleModifier
 import scala.quoted.*
 
 import NamedTuple.AnyNamedTuple
+import scala.collection.mutable.ReusableBuilder
+import scala.collection.mutable.Builder
+import scala.collection.immutable.IntMap
 
 private[chanterelle] enum Modifier derives Debug {
   def path: Path
@@ -16,12 +19,13 @@ private[chanterelle] enum Modifier derives Debug {
   case Update(path: Path, tpe: Type[?], function: Expr[? => ?], span: Span)
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
+  case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
 }
 
 private[chanterelle] object Modifier {
   def parse[A](
     mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]]
-  )(using Quotes): Either[List[ErrorMessage], List[Modifier]] = {
+  )(using sources: Sources.Builder, quotes: Quotes): Either[List[ErrorMessage], List[Modifier]] = {
     import quotes.reflect.*
     mods.parTraverse {
       // TODO: report an issue to dotty: not able to match with quotes if $value is of type NamedTuple[?, ?]
@@ -90,7 +94,14 @@ private[chanterelle] object Modifier {
         type a <: NamedTuple.AnyNamedTuple
         (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergeValue) 
         } => {
-        ???
+        Structure
+          .toplevel[a]
+          .narrow[Structure.Named]
+          .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[a], Span.fromExpr(cfg))) //TODO: dedicated error message
+          .map { struct => 
+            val sourceRef = sources.add(mergeValue)
+            Modifier.Merge(Path.empty(Type.of[tup]), struct, sourceRef, Span.fromExpr(cfg))
+          }
       }
 
       case other =>

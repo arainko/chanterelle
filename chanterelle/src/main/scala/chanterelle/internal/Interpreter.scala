@@ -9,7 +9,7 @@ import NamedTuple.*
 
 private[chanterelle] object Interpreter {
 
-  def runTransformation(value: Expr[Any], transformation: InterpretableTransformation)(using Quotes): Expr[?] = {
+  def runTransformation(primary: Expr[Any], transformation: InterpretableTransformation)(using Quotes): Expr[?] = {
     transformation match
       case InterpretableTransformation.Named(source, fields, namesTpe, valuesTpe) =>
         ((namesTpe, valuesTpe): @unchecked) match {
@@ -23,19 +23,17 @@ private[chanterelle] object Interpreter {
                     fn match {
                       case '{ $fn: (src => out) } =>
                         '{
-                          val computed = $fn(${ value.asExprOf[src] })
+                          val computed = $fn(${ primary.asExprOf[src] })
                           ${
                             val computedValue = 'computed
                             StructuredValue.of(struct, computedValue).fieldValue(struct.fieldName)
                           }
                         }
                     }
-
-                  case Configured.NamedSpecific.Merge(struct, value) => ???
                 }
 
               case (_, InterpretableTransformation.OfField.FromSource(srcName, transformation)) =>
-                runTransformation(StructuredValue.of(source, value).fieldValue(srcName), transformation)
+                runTransformation(StructuredValue.of(source, primary).fieldValue(srcName), transformation)
             }
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
             '{ $recreated: NamedTuple[names, values] }
@@ -45,21 +43,21 @@ private[chanterelle] object Interpreter {
           case '[source] -> '[output] =>
             val exprs = fields.map {
               case (idx, transformation) =>
-                runTransformation(StructuredValue.of(source, value).elementValue(idx), transformation)
+                runTransformation(StructuredValue.of(source, primary).elementValue(idx), transformation)
             }
             Expr.ofTupleFromSeq(exprs.toVector).asExprOf[output]
         }
       case InterpretableTransformation.Optional(source, paramTransformation, outputTpe) =>
         (source.tpe, outputTpe): @unchecked match {
           case ('[Option[a]], '[Option[out]]) =>
-            val optValue = value.asExprOf[Option[a]]
+            val optValue = primary.asExprOf[Option[a]]
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
 
       case InterpretableTransformation.Either(source, left, right, outputTpe) =>
         (source.tpe, outputTpe): @unchecked match {
           case ('[scala.Either[e, a]], '[scala.Either[outE, outA]]) =>
-            val eitherValue = value.asExprOf[scala.Either[e, a]]
+            val eitherValue = primary.asExprOf[scala.Either[e, a]]
             '{
               $eitherValue match
                 case Left(value)  => Left(${ runTransformation('value, left).asExprOf[outE] })
@@ -72,13 +70,13 @@ private[chanterelle] object Interpreter {
           case update: Configured.Update =>
             update.fn match {
               case '{ $fn: (src => out) } =>
-                '{ $fn(${ value.asExprOf[src] }) }
+                '{ $fn(${ primary.asExprOf[src] }) }
             }
 
-      case InterpretableTransformation.Iter(source, paramTransformation, factory, outputTpe) =>
+      case InterpretableTransformation.IterLike(source, paramTransformation, factory, outputTpe) =>
         outputTpe match {
           case '[Iterable[elem]] =>
-            value match {
+            primary match {
               case '{ $srcValue: Iterable[srcElem] } =>
                 source.tycon match {
                   case '[type coll[a]; coll] =>
@@ -92,8 +90,8 @@ private[chanterelle] object Interpreter {
             }
         }
 
-      case InterpretableTransformation.Map(source, keyTransformation, valueTransformation, fac, outputTpe) =>
-        (source.tycon, outputTpe, value): @unchecked match {
+      case InterpretableTransformation.MapLike(source, keyTransformation, valueTransformation, fac, outputTpe) =>
+        (source.tycon, outputTpe, primary): @unchecked match {
           case (
                 '[type outMap[k, v]; outMap],
                 '[collection.Map[outKey, outValue]],
@@ -111,6 +109,6 @@ private[chanterelle] object Interpreter {
                 .to[outMap[outKey, outValue]]($factory)
             }
         }
-      case InterpretableTransformation.Leaf(_) => value
+      case InterpretableTransformation.Leaf(_) => primary
   }
 }

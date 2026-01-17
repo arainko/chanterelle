@@ -23,9 +23,10 @@ object EntryPoint {
       mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
       transformation = Transformation.create(structure)
       given Span = Span.ofMacroExpansion
+      builder @ given Sources.Builder = Sources.newBuilder
       modifiers <- Modifier.parse(mods.toList).leftMap(ErrorsWithSpan)
       given Span = Span.minimalAvailable(modifiers.map(_.span))
-      modifiedTransformation = modifiers.foldLeft(transformation)((transformation, mod) => transformation.applyModifier(mod))
+      modifiedTransformation = modifiers.foldLeft[Transformation[Err]](transformation)((transformation, mod) => transformation.applyModifier(mod))
       refinedTransformation <- modifiedTransformation.refine.leftMap(ErrorsWithSpan)
       interpretableTransformation <-
         InterpretableTransformation.create(refinedTransformation).leftMap(err => ErrorsWithSpan(err :: Nil))
