@@ -76,9 +76,9 @@ object InterpretableTransformation {
           Named(
             source,
             fields.map {
-              case (name, Transformation.OfField.FromSource(srcName, t)) =>
+              case (name, Transformation.Field.FromSource(srcName, t)) =>
                 name -> OfField.FromSource(srcName, recurse(t))
-              case (name, Transformation.OfField.FromModifier(mod)) =>
+              case (name, Transformation.Field.FromModifier(mod)) =>
                 name -> OfField.FromModifier(mod)
             },
             t.calculateNamesTpe,
@@ -110,9 +110,9 @@ object InterpretableTransformation {
         case t @ Transformation.Merged(source, mergees, fields) =>
           val tFields =
             fields.map {
-              case (name, (Transformation.OfField.FromSource(srcName, t), ref, accessibleFrom)) =>
+              case (name, (Transformation.Field.FromSource(srcName, t), ref, accessibleFrom)) =>
                 name -> (OfField.FromSource(srcName, recurse(t)), ref, accessibleFrom)
-              case (name, (Transformation.OfField.FromModifier(mod), ref, accessibleFrom)) =>
+              case (name, (Transformation.Field.FromModifier(mod), ref, accessibleFrom)) =>
                 name -> (OfField.FromModifier(mod), ref, accessibleFrom)
             }
           Merged(

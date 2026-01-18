@@ -88,7 +88,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           transformation.narrow[Transformation.Named[Err]](
             _.withModifiedField(
               m.valueStructure.fieldName,
-              Transformation.OfField.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value))
+              Transformation.Field.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value))
             )
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
@@ -96,7 +96,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           transformation.narrow[Transformation.Named[Err]](
             _.withModifiedField(
               m.valueStructure.fieldName,
-              Transformation.OfField.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value))
+              Transformation.Field.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value))
             )
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
@@ -117,8 +117,8 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
           Transformation.renameNamedNodes(transformation, m.fieldName, m.kind)
 
         case m: Modifier.Merge =>
-          transformation.narrow[Transformation.Named[Err]](
-            transformation => Transformation.Merged.create(transformation, m.valueStructure, m.ref) //TODO: add case for Transformation.Merged
+          transformation.narrow[Transformation.Named[Err]](transformation =>
+            Transformation.Merged.create(transformation, m.valueStructure, m.ref) // TODO: add case for Transformation.Merged
           )(other => ErrorMessage.UnexpectedTransformation("named tuple or merged", other, modifier.span))
       }
     }
@@ -136,7 +136,7 @@ private[chanterelle] sealed abstract class Transformation[+E <: Err](val readabl
             case Transformation.Named(source, allFields, _) =>
               val transformations =
                 allFields.values.collect {
-                  case Transformation.OfField.FromSource(name, transformation) => transformation
+                  case Transformation.Field.FromSource(name, transformation) => transformation
                 }.toList
               recurse(transformations ::: tail, acc)
             case Transformation.Tuple(source, allFields, _) =>
@@ -185,7 +185,7 @@ private[chanterelle] object Transformation {
         Named(
           named,
           named.fields.map { (name, field) =>
-            name -> (field = Transformation.OfField.FromSource(name, createExact(field)), removed = false)
+            name -> (field = Transformation.Field.FromSource(name, createExact(field)), removed = false)
           },
           IsModified.No
         )
@@ -216,22 +216,17 @@ private[chanterelle] object Transformation {
 
   case class Named[+E <: Err](
     source: Structure.Named,
-    private[Transformation] val allFields: VectorMap[String, (field: OfField[E], removed: Boolean)],
+    private[Transformation] val allFields: VectorMap[String, (field: Field[E], removed: Boolean)],
     isModified: IsModified
   ) extends Transformation[E]("named tuple") {
     final def _2 = fields
-    val fields: VectorMap[String, OfField[E]] = allFields.collect { case (key, (field = value, removed = false)) => key -> value }
+    val fields: VectorMap[String, Field[E]] = allFields.collect { case (key, (field = value, removed = false)) => key -> value }
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
 
     def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
-      rollupTuple(
-        fields.map {
-          case _ -> OfField.FromSource(transformation = t) => t.calculateTpe.repr
-          case _ -> OfField.FromModifier(modifier = conf)  => conf.tpe.repr
-        }.toVector
-      )
+      rollupTuple(fields.map((_, field) => field.calculateTpe.repr).toVector)
 
     def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
       val values = calculateValuesTpe
@@ -242,7 +237,7 @@ private[chanterelle] object Transformation {
       }
     }
 
-    def updateAll(fn: (String, OfField[E]) => (String, OfField[Err])): Named[Err] = {
+    def updateAll(fn: (String, Field[E]) => (String, Field[Err])): Named[Err] = {
       val updatedFields =
         this.allFields.map {
           case name -> (field, removed) =>
@@ -256,25 +251,25 @@ private[chanterelle] object Transformation {
     def update(name: String, f: Transformation[E] => Transformation[Err]): Named[Err] = {
       val fieldTransformation =
         this.allFields.andThen {
-          case (field = field @ OfField.FromSource(name, transformation)) =>
+          case (field = field @ Field.FromSource(name, transformation)) =>
             (field = field.copy(transformation = f(transformation)), removed = false)
-          case (field = OfField.FromModifier(_)) =>
-            (field = OfField.error(name, ErrorMessage.AlreadyConfigured(name)), removed = false)
+          case (field = Field.FromModifier(_)) =>
+            (field = Field.error(name, ErrorMessage.AlreadyConfigured(name)), removed = false)
         }
-          .applyOrElse(name, name => (field = OfField.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
+          .applyOrElse(name, name => (field = Field.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
       this.copy(
         allFields = this.allFields.updated(name, fieldTransformation),
         isModified = IsModified.Yes
       )
     }
 
-    def withModifiedFields(fields: VectorMap[String, Transformation.OfField[Err]]): Named[Err] =
+    def withModifiedFields(fields: VectorMap[String, Transformation.Field[Err]]): Named[Err] =
       this.copy(
         allFields = this.allFields ++ fields.transform((_, v) => (field = v, removed = false)),
         isModified = IsModified.Yes
       )
 
-    def withModifiedField(name: String, transformation: Transformation.OfField[Err]): Named[Err] =
+    def withModifiedField(name: String, transformation: Transformation.Field[Err]): Named[Err] =
       // this will uhhh... create a new record if it doesn't exist
       this.copy(
         allFields = this.allFields.updated(name, (field = transformation, removed = false)),
@@ -285,7 +280,7 @@ private[chanterelle] object Transformation {
       this.copy(
         allFields = this.allFields.updatedWith(name) {
           case Some((field = src)) => Some((field = src, removed = true))
-          case None                => Some((field = OfField.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
+          case None                => Some((field = Field.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
         },
         isModified = IsModified.Yes
       )
@@ -294,28 +289,14 @@ private[chanterelle] object Transformation {
   case class Merged[+E <: Err](
     source: Structure.Named,
     mergees: VectorMap[Sources.Ref, Structure.Named],
-    private val allFields: VectorMap[
-      String,
-      (field: OfField[E], sourceRef: Sources.Ref, accessibleFrom: Vector[Sources.Ref], removed: Boolean)
-    ]
+    fields: VectorMap[String, Merged.Field[E]]
   ) extends Transformation[E]("merged") {
-
-    final def _3 = fields
-    val fields: VectorMap[String, (field: OfField[E], sourceRef: Sources.Ref, accessibleFrom: Vector[Sources.Ref])] =
-      allFields.collect {
-        case (key, (field = value, sourceRef = idx, accessibleFrom = af, removed = false)) => key -> (value, idx, af)
-      }
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
 
     def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
-      rollupTuple(
-        fields.map {
-          case _ -> (field = OfField.FromSource(transformation = t)) => t.calculateTpe.repr
-          case _ -> (field = OfField.FromModifier(modifier = conf))  => conf.tpe.repr
-        }.toVector
-      )
+      rollupTuple(fields.map((_, field) => field.calculateTpe.repr).toVector)
 
     def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
       val values = calculateValuesTpe
@@ -336,19 +317,16 @@ private[chanterelle] object Transformation {
 
       val overriddenTransformations = mutualKeys.view.map { name =>
         val mergeeStruct = mergee.fields(name)
-        val (field, removed) = source.allFields(name)
-        // TODO: don't create the transformation eagerly here, just pattern match on the structure instead
-        val transformation = Transformation.create(mergeeStruct) // Transformation.create doesn't create Merged nodes
-        val value = (field, transformation) match {
-          case (OfField.FromSource(`name`, left: Transformation.Named[Err]), right: Transformation.Named[Err]) =>
-            // TODO: which 'name' do I use? I guess the upper-level name but I also need to check if OfField(name, ...) is accessible from SourceRef.Primary
-            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector(Sources.Ref.Primary), false)
-          case (OfField.FromSource(_, left: Transformation.Named[Err]), right: Transformation.Named[Err]) =>
-            // TODO: which 'name' do I use? I guess the upper-level name but I also need to check if OfField(name, ...) is accessible from SourceRef.Primary
-            (OfField.FromSource(name, Merged.create(left, right.source, ref)), ref, Vector.empty, false)
-          case (OfField.FromSource(name, left: Transformation.Merged[Err]), right: Transformation.Named[Err]) =>
+        val (field, _) = source.allFields(name)
+        val value = (field, mergeeStruct) match {
+          case (Transformation.Field.FromSource(`name`, left: Transformation.Named[Err]), right: Structure.Named) =>
+            Merged.Field.FromSecondary(name, ref, Set(ref, Sources.Ref.Primary), Merged.create(left, right, ref))
+          case (Transformation.Field.FromSource(_, left: Transformation.Named[Err]), right: Structure.Named) =>
+            Merged.Field.FromSecondary(name, ref, Set(ref), Merged.create(left, right, ref))
+          case (Transformation.Field.FromSource(name, left: Transformation.Merged[Err]), right: Structure.Named) =>
             ???
-          case (_, right) => (OfField.FromSource(name, right), ref, Vector(Sources.Ref.Primary), removed)
+          case (_, right) =>
+            Merged.Field.FromSecondary(name, ref, Set(ref), Transformation.Leaf(right.asLeaf))
         }
         name -> value
       }.toMap
@@ -356,15 +334,34 @@ private[chanterelle] object Transformation {
       val additionalTransformations =
         mergee.fields
           .removedAll(mutualKeys)
-          .transform((name, struct) => (OfField.FromSource(name, Transformation.create(struct)), ref, Vector.empty, false))
+          .transform((name, struct) => Merged.Field.FromSecondary(name, ref, Set(ref), Transformation.Leaf(struct.asLeaf)))
 
       val allFields =
-        source.allFields
-          .transform((_, value) =>
-            (value.field, Sources.Ref.Primary, Vector.empty, value.removed)
-          ) ++ overriddenTransformations ++ additionalTransformations
+        source.allFields.transform((_, value) => Merged.Field.FromPrimary(value.field, value.removed)) ++
+          overriddenTransformations ++
+          additionalTransformations
 
       Merged(source.source, VectorMap(ref -> mergee), allFields)
+    }
+
+    enum Field[+E <: Err] {
+      case FromPrimary(underlying: Transformation.Field[E], removed: Boolean)
+      case FromSecondary(
+        name: String,
+        ref: Sources.Ref,
+        accessibleFrom: Set[Sources.Ref],
+        transformation: Transformation.Leaf | Transformation.Merged[E]
+      )
+    }
+
+    object Field {
+      extension [E <: Err](self: Field[E]) {
+        def calculateTpe(using Quotes): Type[?] =
+          self match
+            case FromPrimary(underlying, removed)                         => underlying.calculateTpe
+            case FromSecondary(name, ref, accessibleFrom, transformation) => transformation.calculateTpe
+
+      }
     }
   }
 
@@ -495,23 +492,28 @@ private[chanterelle] object Transformation {
   }
 
   @nowarn("msg=unused implicit parameter")
-  enum OfField[+E <: Err] derives Debug {
-    case FromSource(name: String, transformation: Transformation[E]) extends OfField[E]
-    case FromModifier(modifier: Configured.NamedSpecific) extends OfField[Nothing]
+  enum Field[+E <: Err] derives Debug {
+    case FromSource(name: String, transformation: Transformation[E]) extends Field[E]
+    case FromModifier(modifier: Configured.NamedSpecific) extends Field[Nothing]
   }
 
-  object OfField {
+  object Field {
 
-    extension [E <: Err](self: OfField[E]) {
-      def update(f: Transformation[E] => Transformation[Err]): OfField[Err] =
+    extension [E <: Err](self: Field[E]) {
+      def update(f: Transformation[E] => Transformation[Err]): Field[Err] =
         self match {
           case src @ FromSource(transformation = t) => src.copy(transformation = f(t))
           case mod: FromModifier                    => mod
         }
+
+      def calculateTpe(using Quotes): Type[?] = self match
+        case FromSource(name, transformation) => transformation.calculateTpe
+        case FromModifier(modifier)           => modifier.tpe
+
     }
 
-    def error(name: String, message: ErrorMessage): OfField[Err] =
-      OfField.FromSource(name, Transformation.Error(message))
+    def error(name: String, message: ErrorMessage): Field[Err] =
+      Field.FromSource(name, Transformation.Error(message))
   }
 
   private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
