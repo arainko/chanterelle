@@ -9,13 +9,13 @@ import NamedTuple.*
 
 private[chanterelle] object Interpreter {
 
-  def runTransformation(primary: Expr[Any], transformation: InterpretableTransformation)(using Quotes): Expr[?] = {
+  def runTransformation(primary: Expr[Any], transformation: Transformation)(using secondary: Sources, quotes: Quotes): Expr[?] = {
     transformation match
-      case InterpretableTransformation.Named(source, fields, namesTpe, valuesTpe) =>
+      case Transformation.Named(source, fields, namesTpe, valuesTpe) =>
         ((namesTpe, valuesTpe): @unchecked) match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map {
-              case (_, InterpretableTransformation.OfField.FromModifier(modifier)) =>
+              case (_, Transformation.Field.FromModifier(modifier)) =>
                 modifier match {
                   case Configured.NamedSpecific.Add(valueStructure = struct, value = value) =>
                     StructuredValue.of(struct, value).fieldValue(struct.fieldName)
@@ -32,13 +32,13 @@ private[chanterelle] object Interpreter {
                     }
                 }
 
-              case (_, InterpretableTransformation.OfField.FromSource(srcName, transformation)) =>
+              case (_, Transformation.Field.FromSource(srcName, transformation)) =>
                 runTransformation(StructuredValue.of(source, primary).fieldValue(srcName), transformation)
             }
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
             '{ $recreated: NamedTuple[names, values] }
         }
-      case InterpretableTransformation.Tuple(source, fields, outputTpe) =>
+      case Transformation.Tuple(source, fields, outputTpe) =>
         (source.tpe, outputTpe): @unchecked match {
           case '[source] -> '[output] =>
             val exprs = fields.map {
@@ -47,14 +47,14 @@ private[chanterelle] object Interpreter {
             }
             Expr.ofTupleFromSeq(exprs.toVector).asExprOf[output]
         }
-      case InterpretableTransformation.Optional(source, paramTransformation, outputTpe) =>
+      case Transformation.Optional(source, paramTransformation, outputTpe) =>
         (source.tpe, outputTpe): @unchecked match {
           case ('[Option[a]], '[Option[out]]) =>
             val optValue = primary.asExprOf[Option[a]]
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
 
-      case InterpretableTransformation.Either(source, left, right, outputTpe) =>
+      case Transformation.EitherLike(source, left, right, outputTpe) =>
         (source.tpe, outputTpe): @unchecked match {
           case ('[scala.Either[e, a]], '[scala.Either[outE, outA]]) =>
             val eitherValue = primary.asExprOf[scala.Either[e, a]]
@@ -65,7 +65,7 @@ private[chanterelle] object Interpreter {
             }
         }
 
-      case InterpretableTransformation.ConfedUp(config) =>
+      case Transformation.ConfedUp(config) =>
         config match
           case update: Configured.Update =>
             update.fn match {
@@ -73,7 +73,7 @@ private[chanterelle] object Interpreter {
                 '{ $fn(${ primary.asExprOf[src] }) }
             }
 
-      case InterpretableTransformation.IterLike(source, paramTransformation, factory, outputTpe) =>
+      case Transformation.IterLike(source, paramTransformation, factory, outputTpe) =>
         outputTpe match {
           case '[Iterable[elem]] =>
             primary match {
@@ -90,7 +90,7 @@ private[chanterelle] object Interpreter {
             }
         }
 
-      case InterpretableTransformation.MapLike(source, keyTransformation, valueTransformation, fac, outputTpe) =>
+      case Transformation.MapLike(source, keyTransformation, valueTransformation, fac, outputTpe) =>
         (source.tycon, outputTpe, primary): @unchecked match {
           case (
                 '[type outMap[k, v]; outMap],
@@ -109,6 +109,10 @@ private[chanterelle] object Interpreter {
                 .to[outMap[outKey, outValue]]($factory)
             }
         }
-      case InterpretableTransformation.Leaf(_) => primary
+
+      case Transformation.Merged(source, mergees, fields, namesTpe, valuesTpe) => 
+        ???
+
+      case Transformation.Leaf(_) => primary
   }
 }

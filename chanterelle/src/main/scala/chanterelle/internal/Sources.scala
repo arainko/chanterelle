@@ -27,6 +27,7 @@ private[chanterelle] object Sources {
 
   extension (self: Sources) {
     def updated(ref: Ref, value: Expr[Any]): Sources = self.updated(ref, value)
+    // def advanceSources()
     def get(ref: Ref): Expr[Any] = self(ref)
   }
 }

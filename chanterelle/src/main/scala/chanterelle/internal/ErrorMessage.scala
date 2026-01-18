@@ -1,6 +1,6 @@
 package chanterelle.internal
 
-import chanterelle.internal.Transformation.ConfedUp
+import chanterelle.internal.Plan.ConfedUp
 
 import scala.quoted.*
 
@@ -38,7 +38,7 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class UnexpectedTransformation(expected: String, actual: Transformation[Err], override val span: Span)
+  case class UnexpectedTransformation(expected: String, actual: Plan[Err], override val span: Span)
       extends ErrorMessage {
     def render(using Quotes) = {
       val rendered =
