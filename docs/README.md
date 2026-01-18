@@ -117,21 +117,21 @@ There's also a number of predefined case transformations inside the `FieldName` 
 val camel = (
   repoInfo = (
     fullName = "octocat/hello-world",
-    createdAt = "2011-01-26T19:01:12Z",
+    createdAt = "2011-01-26T19:01:12Z"
   )
 )
 
 val snake = (
   repo_info = (
     full_name = "octocat/hello-world",
-    created_at = "2011-01-26T19:01:12Z",
+    created_at = "2011-01-26T19:01:12Z"
   )
 )
 
 val kebab = (
   `repo-info` = (
     `full-name` = "octocat/hello-world",
-    `created-at` = "2011-01-26T19:01:12Z",
+    `created-at` = "2011-01-26T19:01:12Z"
   )
 )
 
@@ -148,7 +148,7 @@ Docs.prettyPrintVals(camelToSnake, camelToKebab, snakeToCamel, kebabToCamel)
 Users can also define their own bundles of transformations by combaning various operations on `FieldNames` in a `transparent inline def`:
 ```scala mdoc:nest:silent
 transparent inline def renamedAndUppercased(inline fieldName: FieldName) =
-   fieldName.rename("someName", "someOtherName").toUpperCase
+  fieldName.rename("someName", "someOtherName").toUpperCase
 
 val tup = (someName = 1)
 val transformed = tup.transform(_.rename(renamedAndUppercased))
