@@ -57,7 +57,7 @@ private[chanterelle] enum InterpretableTransformation derives Debug {
   case Merged(
     source: Structure.Named,
     mergees: VectorMap[Sources.Ref, Structure.Named],
-    fields: VectorMap[String, (field: InterpretableTransformation.OfField, ref: Sources.Ref, accessibleFrom: Vector[Sources.Ref])],
+    fields: VectorMap[String, InterpretableTransformation.Merged.Field],
     namesTpe: Type[? <: scala.Tuple],
     valuesTpe: Type[? <: scala.Tuple]
   )
@@ -66,6 +66,14 @@ private[chanterelle] enum InterpretableTransformation derives Debug {
 object InterpretableTransformation {
 
   def create(transformation: Transformation[Nothing])(using Quotes): scala.Either[ErrorMessage, InterpretableTransformation] = {
+    def transformField(ofField: Transformation.Field[Nothing])(using Label[ErrorMessage]): OfField =
+      ofField match {
+        case Transformation.Field.FromSource(srcName, t) =>
+          OfField.FromSource(srcName, recurse(t))
+        case Transformation.Field.FromModifier(mod) =>
+          OfField.FromModifier(mod)
+      }
+
     def recurse(transformation: Transformation[Nothing])(using Label[ErrorMessage]): InterpretableTransformation =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
@@ -75,12 +83,7 @@ object InterpretableTransformation {
         case t @ Transformation.Named(source, fields, _) =>
           Named(
             source,
-            fields.map {
-              case (name, Transformation.Field.FromSource(srcName, t)) =>
-                name -> OfField.FromSource(srcName, recurse(t))
-              case (name, Transformation.Field.FromModifier(mod)) =>
-                name -> OfField.FromModifier(mod)
-            },
+            fields.transform((_, field) => transformField(field)),
             t.calculateNamesTpe,
             t.calculateValuesTpe
           )
@@ -109,11 +112,11 @@ object InterpretableTransformation {
 
         case t @ Transformation.Merged(source, mergees, fields) =>
           val tFields =
-            fields.map {
-              case (name, (Transformation.Field.FromSource(srcName, t), ref, accessibleFrom)) =>
-                name -> (OfField.FromSource(srcName, recurse(t)), ref, accessibleFrom)
-              case (name, (Transformation.Field.FromModifier(mod), ref, accessibleFrom)) =>
-                name -> (OfField.FromModifier(mod), ref, accessibleFrom)
+            fields.collect {
+              case (name, Transformation.Merged.Field.FromPrimary(ofField, false)) =>
+                name -> InterpretableTransformation.Merged.Field.FromPrimary(transformField(ofField))
+              case (name, Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)) =>
+                name -> InterpretableTransformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, ???)
             }
           Merged(
             source,
@@ -138,5 +141,17 @@ object InterpretableTransformation {
     case FromSource(name: String, transformation: InterpretableTransformation)
     case FromModifier(modifier: Configured.NamedSpecific)
 
+  }
+
+  object Merged {
+    enum Field {
+      case FromPrimary(underlying: InterpretableTransformation.OfField)
+      case FromSecondary(
+        name: String,
+        ref: Sources.Ref,
+        accessibleFrom: Set[Sources.Ref],
+        transformation: Leaf | Merged
+      )
+    }
   }
 }
