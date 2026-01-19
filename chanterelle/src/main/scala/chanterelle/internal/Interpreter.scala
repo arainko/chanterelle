@@ -111,25 +111,22 @@ private[chanterelle] object Interpreter {
         }
 
       case m @ Transformation.Merged(source, mergees, fields, namesTpe, valuesTpe) =>
-        println(Debug.show(m))
         (namesTpe, valuesTpe): @unchecked match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map {
               case (_, Transformation.Merged.Field.FromPrimary(field)) =>
                 handleField(source, field)
               case (_, Transformation.Merged.Field.FromSecondary(name, ref, accessibleFrom, transformation)) =>
+                given Sources = accessibleFrom.foldLeft(secondary) { (acc, ref) =>
+                  val struct = if ref == Sources.Ref.Primary then source else mergees(ref)
+                  val value = if ref == Sources.Ref.Primary then primary else secondary.get(ref)
+                  acc.updated(ref, StructuredValue.of(struct, value).fieldValue(name))
+                }
                 transformation match {
                   case Transformation.Leaf(output) =>
                     val value = secondary.get(ref)
                     StructuredValue.of(mergees(ref), value).fieldValue(name)
                   case t: Transformation.Merged =>
-                    given Sources = accessibleFrom.foldLeft(secondary) { (acc, ref) =>
-                      val struct = if ref == Sources.Ref.Primary then source else mergees(ref)
-                      val value = if ref == Sources.Ref.Primary then primary else secondary.get(ref)
-                      println(ref)
-                      println(Debug.show(struct))
-                      acc.updated(ref, StructuredValue.of(struct, value).fieldValue(name))
-                    }
                     runTransformation(primary, t)
                 }
             }

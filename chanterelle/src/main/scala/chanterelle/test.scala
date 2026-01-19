@@ -35,10 +35,14 @@ object test {
       )
   )
 
-  val tup1 = (one = (arr = "asd", ru = 1), two = 2)
+  val tup1 = (one = (arr = "asd", ru = 1))
+
+  val mergee1 = (
+    one = (arr = 1),
+  )
 
 
-  val actual = tup1.transform(_.merge(mergee))
+  val actual = tup1.transform(_.merge(mergee1))
 
   val expected =
     (
