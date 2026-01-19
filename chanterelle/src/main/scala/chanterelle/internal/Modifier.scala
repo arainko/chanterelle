@@ -93,7 +93,7 @@ private[chanterelle] object Modifier {
       case cfg @ '{ 
         type a <: NamedTuple.AnyNamedTuple
         (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergeValue) 
-        } => {
+      } => {
         Structure
           .toplevel[a]
           .narrow[Structure.Named]
