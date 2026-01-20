@@ -2,10 +2,14 @@ package chanterelle.internal
 
 import scala.quoted.*
 import scala.collection.mutable.ArrayBuffer
+import scala.annotation.implicitNotFound
 
 private[chanterelle] opaque type Sources = Map[Int, Expr[Any]]
 
 private[chanterelle] object Sources {
+
+  @implicitNotFound("Call Sources.current.withPrimary to be able to use Sources")
+  opaque type Scope = Unit
 
   opaque type Ref = Int
 
@@ -28,10 +32,16 @@ private[chanterelle] object Sources {
 
   def newBuilder: Builder = ArrayBuffer.empty
 
+  inline def current(using src: Sources): src.type = src
+
   extension (self: Sources) {
-    def updated(ref: Ref, value: Expr[Any]): Sources = 
+    inline def withPrimary[A](expr: Expr[Any])(inline f: (Sources, Scope) ?=> A): A = {
+      f(using self.updated(Ref.Primary, expr), ())
+    }
+
+    def updated(ref: Ref, value: Expr[Any])(using Scope): Sources = 
       self.updated(ref, value)
-    // def advanceSources()
-    def get(ref: Ref): Expr[Any] = self(ref)
+      
+    def get(ref: Ref)(using Scope): Expr[Any] = self(ref)
   }
 }

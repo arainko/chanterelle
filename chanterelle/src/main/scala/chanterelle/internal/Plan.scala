@@ -141,10 +141,10 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
                   case (_, Plan.Field.FromSource(name, transformation)) => transformation
                 }.toList
               recurse(transformations ::: tail, acc)
-            case Plan.Merged(source, mergees, fields) =>
+            case Plan.Merged(mergees, fields) =>
               val transformations = 
                 fields.collect {
-                  case (_, Plan.Merged.Field.FromPrimary(Plan.Field.FromSource(_, plan), _)) => plan
+                  case (_, Plan.Merged.Field.FromPrimary(_, Plan.Field.FromSource(_, plan), _)) => plan
                 }.toList
               recurse(transformations ::: tail, acc)
             case Plan.Tuple(source, allFields, _) =>
@@ -295,7 +295,6 @@ private[chanterelle] object Plan {
   }
 
   case class Merged[+E <: Err](
-    source: Structure.Named,
     mergees: VectorMap[Sources.Ref, Structure.Named],
     fields: VectorMap[String, Merged.Field[E]]
   ) extends Plan[E]("merged") {
@@ -345,15 +344,15 @@ private[chanterelle] object Plan {
           .transform((name, struct) => Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf)))
 
       val allFields =
-        source.allFields.transform((_, value) => Merged.Field.FromPrimary(value.field, value.removed)) ++
+        source.allFields.transform((_, value) => Merged.Field.FromPrimary(source.source, value.field, value.removed)) ++
           overriddenTransformations ++
           additionalTransformations
 
-      Merged(source.source, VectorMap(ref -> mergee), allFields)
+      Merged(VectorMap(Sources.Ref.Primary -> source.source, ref -> mergee), allFields)
     }
 
     enum Field[+E <: Err] {
-      case FromPrimary(underlying: Plan.Field[E], removed: Boolean)
+      case FromPrimary(source: Structure.Named, underlying: Plan.Field[E], removed: Boolean)
       case FromSecondary(
         name: String,
         ref: Sources.Ref,
@@ -366,7 +365,7 @@ private[chanterelle] object Plan {
       extension [E <: Err](self: Field[E]) {
         def calculateTpe(using Quotes): Type[?] =
           self match
-            case FromPrimary(underlying, removed)                         => underlying.calculateTpe
+            case FromPrimary(_, underlying, removed)                         => underlying.calculateTpe
             case FromSecondary(name, ref, accessibleFrom, transformation) => transformation.calculateTpe
 
       }

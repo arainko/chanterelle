@@ -55,7 +55,6 @@ private[chanterelle] enum Transformation derives Debug {
   case ConfedUp(config: Configured)
 
   case Merged(
-    primary: Structure.Named,
     mergees: VectorMap[Sources.Ref, Structure.Named],
     fields: VectorMap[String, Transformation.Merged.Field],
     namesTpe: Type[? <: scala.Tuple],
@@ -77,8 +76,8 @@ private[chanterelle] object Transformation {
     def fromMerged(plan: Plan.Merged[Nothing])(using Quotes, Label[ErrorMessage]): Transformation.Merged = {
       val fields =
         plan.fields.collect {
-          case (name, Plan.Merged.Field.FromPrimary(field, false)) =>
-            name -> Transformation.Merged.Field.FromPrimary(transformField(field))
+          case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
+            name -> Transformation.Merged.Field.FromPrimary(source, transformField(field))
           case (name, Plan.Merged.Field.FromSecondary(secName, ref, accessibleFrom, plan)) =>
             val transformation: Transformation.Leaf | Transformation.Merged = plan match {
               case leaf: Plan.Leaf              => Transformation.fromLeaf(leaf)
@@ -87,7 +86,6 @@ private[chanterelle] object Transformation {
             name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
         }
       Merged(
-        plan.source,
         plan.mergees,
         fields,
         plan.calculateNamesTpe,
@@ -161,7 +159,7 @@ private[chanterelle] object Transformation {
 
   object Merged {
     enum Field derives Debug {
-      case FromPrimary(underlying: Transformation.Field)
+      case FromPrimary(source: Structure.Named, underlying: Transformation.Field)
       case FromSecondary(
         name: String,
         ref: Sources.Ref,
