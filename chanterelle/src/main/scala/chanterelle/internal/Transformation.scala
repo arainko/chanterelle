@@ -160,7 +160,7 @@ private[chanterelle] object Transformation {
   }
 
   object Merged {
-    enum Field {
+    enum Field derives Debug {
       case FromPrimary(underlying: Transformation.Field)
       case FromSecondary(
         name: String,

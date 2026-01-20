@@ -3,8 +3,9 @@ package chanterelle
 import chanterelle.hidden.TupleModifier
 import chanterelle.internal.EntryPoint
 import scala.NamedTuple.*
+import chanterelle.internal.Debug
 
-object test {
+object test extends App {
 
   val tup = (
     top1 = 1,
@@ -25,7 +26,6 @@ object test {
 
 
   val mergee = (
-    one = (arr = 1),
     top1 = "1",
     top3 = 
       (
@@ -37,12 +37,9 @@ object test {
 
   val tup1 = (one = (arr = "asd", ru = 1))
 
-  val mergee1 = (
-    one = (arr = 1),
-  )
+  val mergee1 = (one = (arr = 1, add = 2))
 
-
-  val actual = tup1.transform(_.merge(mergee1))
+  val actual = tup.transform(_.merge(mergee))
 
   val expected =
     (
@@ -62,6 +59,9 @@ object test {
       )
     )
 
+  val a = println(actual)
+  val b = println(expected)
+  assert(actual == expected)
     /*
 
     tup.transform(_.merge(mergee), _.merge(mergee2))
