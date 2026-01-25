@@ -344,12 +344,12 @@ private[chanterelle] object Plan {
             Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf))
 
           case (
-                Merged.Field.FromSecondary(name, prevRef, accessibleFrom, transformation: Plan.Merged[E]),
+                Merged.Field.FromSecondary(name, _, accessibleFrom, plan: Plan.Merged[E]),
                 right: Structure.Named
               ) =>
-            Merged.Field.FromSecondary(name, ref, accessibleFrom + ref, transformation.merge(right, ref))
+            Merged.Field.FromSecondary(name, ref, accessibleFrom + ref, plan.merge(right, ref))
 
-          case (Merged.Field.FromSecondary(name, prevRef, accessibleFrom, plan), right) =>
+          case (Merged.Field.FromSecondary(name, _, accessibleFrom, _), right) =>
             Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf))
         }
         name -> value
@@ -358,7 +358,12 @@ private[chanterelle] object Plan {
       val additionalTransformations =
         mergee.fields
           .removedAll(mutualKeys)
-          .transform((name, struct) => Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf)))
+          .transform{ 
+            case (name, struct: Structure.Named) => 
+              val plan = Plan.createExact(struct)
+              ???
+            case (name, struct) => Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf))
+          }
 
       val allFields =
         fields ++
@@ -371,6 +376,20 @@ private[chanterelle] object Plan {
   }
 
   object Merged {
+    def fromSecondaryNamed(source: Structure.Named, ref: Sources.Ref): Plan.Merged[Err] = {
+      val toplevel = Plan.createExact(source)
+      val fields = toplevel
+        .allFields
+        .transform { 
+          case (name, (field = Plan.Field.FromSource(srcName, plan: Plan.Named[Err]))) =>
+             Merged.Field.FromSecondary(srcName, ref, Set(ref), fromSecondaryNamed(plan, ref)) 
+          case (name, (field = Plan.Field.FromSource(srcName, plan))) => 
+            Merged.Field.FromSecondary(srcName, ref, Set(ref), Plan.Leaf(plan.))  
+          case (name, (field = f: Plan.Field.FromModifier)) => 
+            Merged.Field.FromSecondary(source.source, value.field, value.removed) 
+        }
+    }
+
     def create(source: Plan.Named[Err], mergee: Structure.Named, ref: Sources.Ref): Plan.Merged[Err] = {
       val mutualKeys = source.allFields.keySet.intersect(mergee.fields.keySet)
 
