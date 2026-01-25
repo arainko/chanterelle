@@ -529,4 +529,52 @@ class ModifiersSpec extends ChanterelleSuite {
       )
     assertEquals(camelToSnakeToKebabToCamel, camel)
   }
+
+  test("toplevel .merge works") {
+    val tup = (
+      top1 = 1,
+      top2 = 2,
+      top3 = (
+        level1 = 1,
+        level2 = 2,
+        level3 = 3,
+        level4 = (
+          low1 = 1,
+          low2 = 2,
+          low3 = 3
+        )
+      )
+    )
+
+    val mergee = (
+      top1 = "1",
+      top3 = (
+        level1 = "1",
+        level4 = (low4 = 4),
+        level5 = 123
+      )
+    )
+
+    val expected =
+      (
+        top1 = mergee.top1,
+        top2 = tup.top2,
+        top3 = (
+          level1 = mergee.top3.level1,
+          level2 = tup.top3.level2,
+          level3 = tup.top3.level3,
+          level4 = (
+            low1 = tup.top3.level4.low1,
+            low2 = tup.top3.level4.low2,
+            low3 = tup.top3.level4.low3,
+            low4 = mergee.top3.level4.low4
+          ),
+          level5 = mergee.top3.level5
+        )
+      )
+
+    val actual = tup.transform(_.merge(mergee))
+
+    assertEquals(expected, actual)
+  }
 }

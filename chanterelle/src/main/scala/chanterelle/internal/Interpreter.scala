@@ -139,7 +139,10 @@ private[chanterelle] object Interpreter {
   }
 
   extension (sources: Sources)
-    private def advance(mergees: VectorMap[Sources.Ref, Structure.Named], field: Transformation.Merged.Field.FromSecondary)(using Sources.Scope, Quotes): Sources =
+    private def advance(
+      mergees: VectorMap[Sources.Ref, Structure.Named],
+      field: Transformation.Merged.Field.FromSecondary
+    )(using Sources.Scope, Quotes): Sources =
       field.accessibleFrom.foldLeft(sources) { (acc, ref) =>
         val struct = mergees(ref)
         val value = sources.get(ref)

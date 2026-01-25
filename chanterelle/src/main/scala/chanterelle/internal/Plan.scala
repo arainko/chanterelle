@@ -46,7 +46,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
         case Path.Segment.Field(name = name) :: next =>
           curr.narrow(
             when[Plan.Named[Err]](_.update(name, recurse(next))),
-            when[Plan.Merged[Err]](_ => ???) //TODO: add .update to Merged (only works when we're in a FromPrimary field)
+            when[Plan.Merged[Err]](_ => ???) // TODO: add .update to Merged (only works when we're in a FromPrimary field)
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
         case Path.Segment.TupleElement(index = index) :: next =>
@@ -142,7 +142,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
                 }.toList
               recurse(transformations ::: tail, acc)
             case Plan.Merged(mergees, fields) =>
-              val transformations = 
+              val transformations =
                 fields.collect {
                   case (_, Plan.Merged.Field.FromPrimary(_, Plan.Field.FromSource(_, plan), _)) => plan
                 }.toList
@@ -316,6 +316,51 @@ private[chanterelle] object Plan {
 
     override val isModified: IsModified = IsModified.Yes
 
+    @nowarn
+    def merge(mergee: Structure.Named, ref: Sources.Ref): Merged[E] = {
+      val mutualKeys = fields.keySet.intersect(mergee.fields.keySet)
+      val overriddenTransformations = mutualKeys.view.map { name =>
+        val mergeeStruct = mergee.fields(name)
+        val field = fields(name)
+        val value = (field, mergeeStruct) match {
+          case (
+                Merged.Field.FromPrimary(source, Field.FromSource(srcName, left: Plan.Named[E]), removed),
+                right: Structure.Named
+              ) =>
+            val refs = if srcName == name then Set(ref, Sources.Ref.Primary) else Set(ref)
+            Merged.Field.FromSecondary(name, ref, refs, Merged.create(left, right, ref))
+
+          case (
+                Merged.Field.FromPrimary(source, Field.FromSource(srcName, left: Plan.Merged[E]), removed),
+                right: Structure.Named
+              ) =>
+            val refs = if srcName == name then Set(ref, Sources.Ref.Primary) else Set(ref)
+            Merged.Field.FromSecondary(name, ref, )
+            ???
+          // Merged.Field.FromSecondary(name, ref, Set(ref), Merged.create(left, right, ref))
+
+          case (Merged.Field.FromPrimary(source, _, removed), right) =>
+            Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf))
+
+          case (
+                Merged.Field.FromSecondary(name, prevRef, accessibleFrom, transformation: Plan.Merged[E]),
+                right: Structure.Named
+              ) =>
+            ???
+
+          // case (Plan.Field.FromSource(_, left: Plan.Named[Err]), right: Structure.Named) =>
+          //   Merged.Field.FromSecondary(name, ref, Set(ref), Merged.create(left, right, ref))
+
+          // case (Plan.Field.FromSource(name, left: Plan.Merged[Err]), right: Structure.Named) =>
+          //   ???
+          // case (_, right) =>
+          //   Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf)) //TODO: allow Plan.Merged? We'd be able to make further marges
+        }
+        name -> value
+      }.toMap
+      ???
+    }
+
   }
 
   object Merged {
@@ -328,12 +373,22 @@ private[chanterelle] object Plan {
         val value = (field, mergeeStruct) match {
           case (Plan.Field.FromSource(`name`, left: Plan.Named[Err]), right: Structure.Named) =>
             Merged.Field.FromSecondary(name, ref, Set(ref, Sources.Ref.Primary), Merged.create(left, right, ref))
+
           case (Plan.Field.FromSource(_, left: Plan.Named[Err]), right: Structure.Named) =>
             Merged.Field.FromSecondary(name, ref, Set(ref), Merged.create(left, right, ref))
+
           case (Plan.Field.FromSource(name, left: Plan.Merged[Err]), right: Structure.Named) =>
-            ???
+            val plan = left.merge(right, ref)
+            // TODO: come back to plan.mergees.keySet, I have a feeling we might have to filter out some stuff based on the field name
+            Merged.Field.FromSecondary(name, ref, Set(ref) ++ plan.mergees.keySet, left.merge(right, ref))
+
           case (_, right) =>
-            Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf))
+            Merged.Field.FromSecondary(
+              name,
+              ref,
+              Set(ref),
+              Plan.Leaf(right.asLeaf)
+            ) // TODO: allow Plan.Merged? We'd be able to make further marges
         }
         name -> value
       }.toMap
@@ -365,7 +420,7 @@ private[chanterelle] object Plan {
       extension [E <: Err](self: Field[E]) {
         def calculateTpe(using Quotes): Type[?] =
           self match
-            case FromPrimary(_, underlying, removed)                         => underlying.calculateTpe
+            case FromPrimary(_, underlying, removed)                      => underlying.calculateTpe
             case FromSecondary(name, ref, accessibleFrom, transformation) => transformation.calculateTpe
 
       }
