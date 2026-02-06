@@ -93,16 +93,15 @@ private[chanterelle] object Modifier {
       case cfg @ '{ 
         type a <: NamedTuple.AnyNamedTuple
         (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergeValue) 
-      } => {
+      } => 
         Structure
           .toplevel[a]
           .narrow[Structure.Named]
-          .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[a], Span.fromExpr(cfg))) //TODO: dedicated error message
+          .toRight(ErrorMessage.CanOnlyMergedNamedTuples(Span.fromExpr(cfg)))
           .map { struct => 
             val sourceRef = sources.add(mergeValue)
             Modifier.Merge(Path.empty(Type.of[tup]), struct, sourceRef, Span.fromExpr(cfg))
           }
-      }
 
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")

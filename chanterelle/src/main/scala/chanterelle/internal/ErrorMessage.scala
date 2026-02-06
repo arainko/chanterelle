@@ -20,7 +20,7 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class AlreadyConfigured(name: String) extends ErrorMessage {
+  case class AlreadyConfigured(name: String, override val span: Span) extends ErrorMessage {
     def render(using Quotes) = s"The field '$name' has already been configured"
 
   }
@@ -60,5 +60,17 @@ private[chanterelle] object ErrorMessage {
       s"Couldn't find an implicit instance of Factory for ${tpe.repr.show(using Printer.TypeReprCode)}"
     }
 
+  }
+
+  case class CantModifySecondaryField(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String = {
+      s"Can't modify a field that has been overriden by a .merge"
+    }
+  }
+
+  case class CanOnlyMergedNamedTuples(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String = {
+      s"Merges can only happen between two named tuples"
+    }
   }
 }

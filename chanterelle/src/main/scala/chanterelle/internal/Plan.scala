@@ -8,6 +8,7 @@ import scala.quoted.*
 import scala.deriving.Mirror
 import Plan.Error
 import chanterelle.internal.Plan.Merged.Field
+import scala.annotation.tailrec
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -45,8 +46,8 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
       segments match {
         case Path.Segment.Field(name = name) :: next =>
           curr.narrow(
-            when[Plan.Named[Err]](_.update(name, recurse(next))),
-            when[Plan.Merged[Err]](_ => ???) // TODO: add .update to Merged (only works when we're in a FromPrimary field)
+            when[Plan.Named[Err]](_.update(name, recurse(next), modifier.span)),
+            when[Plan.Merged[Err]](_.update(name, recurse(next), modifier.span))
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
 
         case Path.Segment.TupleElement(index = index) :: next =>
@@ -120,9 +121,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
         case m: Modifier.Merge =>
           transformation.narrow(
-            when[Plan.Named[Err]](transformation =>
-              Plan.Merged.create(transformation, m.valueStructure, m.ref)
-            ),
+            when[Plan.Named[Err]](transformation => Plan.Merged.create(transformation, m.valueStructure, m.ref)),
             when[Plan.Merged[Err]](_.merge(m.valueStructure, m.ref))
           )(other => ErrorMessage.UnexpectedTransformation("named tuple or merged", other, modifier.span))
       }
@@ -131,7 +130,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
   }
 
   def refine: Either[List[ErrorMessage], Plan[Nothing]] = {
-    def recurse(
+    @tailrec def recurse(
       stack: List[Plan[E]],
       acc: List[ErrorMessage]
     ): Either[List[ErrorMessage], Plan[Nothing]] =
@@ -139,17 +138,26 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
         case head :: tail =>
           head match
             case Plan.Named(source, allFields, _) =>
-              val transformations =
-                allFields.collect {
-                  case (_, Plan.Field.FromSource(name, transformation)) => transformation
-                }.toList
-              recurse(transformations ::: tail, acc)
-            case Plan.Merged(mergees, fields) =>
-              val transformations =
-                fields.collect {
-                  case (_, Plan.Merged.Field.FromPrimary(_, Plan.Field.FromSource(_, plan), _)) => plan
-                }.toList
-              recurse(transformations ::: tail, acc)
+              val plans = List.newBuilder[Plan[E]]
+
+              allFields.foreach {
+                case (_, Plan.Field.FromSource(name, transformation)) => plans += transformation
+                case (_, Plan.Field.FromModifier(_)) => ()
+              }
+
+              recurse(plans.result() ::: tail, acc)
+            case Plan.Merged(_, fields) =>
+              val errors = List.newBuilder[ErrorMessage]
+              val plans = List.newBuilder[Plan[E]]
+
+              fields.foreach {
+                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromSource(plan = plan))) => plans += plan
+                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromModifier(_))) => ()
+                case (_, Plan.Merged.Field.FromSecondary(plan = plan)) => plans += plan
+                case (_, Plan.Merged.Field.Error(err)) => errors += err.message
+              }
+
+              recurse(plans.result() ::: tail, acc ::: errors.result())
             case Plan.Tuple(source, allFields, _) =>
               recurse(allFields.values.toList ::: tail, acc)
             case Plan.Optional(source, paramTransformation, _) =>
@@ -259,13 +267,13 @@ private[chanterelle] object Plan {
       this.copy(allFields = updatedFields, isModified = IsModified.Yes)
     }
 
-    def update(name: String, f: Plan[E] => Plan[Err]): Named[Err] = {
+    def update(name: String, f: Plan[E] => Plan[Err], modifierSpan: Span): Named[Err] = {
       val fieldTransformation =
         this.allFields.andThen {
           case (field = field @ Field.FromSource(name, transformation)) =>
-            (field = field.copy(transformation = f(transformation)), removed = false)
+            (field = field.copy(plan = f(transformation)), removed = false)
           case (field = Field.FromModifier(_)) =>
-            (field = Field.error(name, ErrorMessage.AlreadyConfigured(name)), removed = false)
+            (field = Field.error(name, ErrorMessage.AlreadyConfigured(name, modifierSpan)), removed = false)
         }
           .applyOrElse(name, name => (field = Field.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
       this.copy(
@@ -319,6 +327,30 @@ private[chanterelle] object Plan {
 
     override val isModified: IsModified = IsModified.Yes
 
+    def update(name: String, f: Plan[E] => Plan[Err], modifierSpan: Span): Merged[Err] = {
+      val fieldTransformation =
+        this.fields.andThen {
+          case field @ Merged.Field.FromPrimary(underlying = Field.FromSource(name, plan)) =>
+            field.copy(underlying = Field.FromSource(name, f(plan)), removed = false)
+          case field @ Merged.Field.FromPrimary(underlying =  Field.FromModifier(_)) =>
+            field.copy(underlying = Field.error(name, ErrorMessage.AlreadyConfigured(name, modifierSpan)), removed = false)
+          case _: Merged.Field.FromSecondary[E] =>
+            Merged.Field.Error(Plan.Error(ErrorMessage.CantModifySecondaryField(modifierSpan)))
+        }
+          .applyOrElse(name, name => Merged.Field.Error(Plan.Error(ErrorMessage.NoFieldFound(name))))
+
+      this.copy(fields = fields.updated(name, fieldTransformation))
+    }
+
+    def updateAll(
+      f: String => String,
+      primaryUpdate: Plan.Field[E] => Plan.Field[Err],
+      secondaryMerged: Plan.Merged[E] => Plan.Merged[Err]
+    ): Merged[Err] = {
+      val updatedFields = fields.map { (name, field) => f(name) -> field.update(primaryUpdate, secondaryMerged) }
+      this.copy(fields = updatedFields)
+    }
+
     def merge(mergee: Structure.Named, ref: Sources.Ref): Merged[Err] = {
       val mutualKeys = fields.keySet.intersect(mergee.fields.keySet)
 
@@ -344,13 +376,15 @@ private[chanterelle] object Plan {
             Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf))
 
           case (
-                Merged.Field.FromSecondary(name, _, accessibleFrom, plan: Plan.Merged[E]),
+                Merged.Field.FromSecondary(srcName, _, accessibleFrom, plan: Plan.Merged[E]),
                 right: Structure.Named
               ) =>
-            Merged.Field.FromSecondary(name, ref, accessibleFrom + ref, plan.merge(right, ref))
+            Merged.Field.FromSecondary(srcName, ref, accessibleFrom + ref, plan.merge(right, ref))
 
-          case (Merged.Field.FromSecondary(name, _, accessibleFrom, _), right) =>
-            Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf))
+          case (Merged.Field.FromSecondary(srcName, _, accessibleFrom, _), right) =>
+            Merged.Field.FromSecondary(srcName, ref, Set(ref), Plan.Leaf(right.asLeaf))
+
+          case (err: Merged.Field.Error, _) => err
         }
         name -> value
       }.toMap
@@ -358,11 +392,11 @@ private[chanterelle] object Plan {
       val additionalTransformations =
         mergee.fields
           .removedAll(mutualKeys)
-          .transform{ 
-            case (name, struct: Structure.Named) => 
-              val plan = Plan.createExact(struct)
-              ???
-            case (name, struct) => Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf))
+          .transform {
+            case (name, struct: Structure.Named) =>
+              Merged.Field.FromSecondary(name, ref, Set(ref), Merged.fromSecondaryNamed(struct, ref))
+            case (name, struct) =>
+              Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf))
           }
 
       val allFields =
@@ -376,18 +410,15 @@ private[chanterelle] object Plan {
   }
 
   object Merged {
-    def fromSecondaryNamed(source: Structure.Named, ref: Sources.Ref): Plan.Merged[Err] = {
-      val toplevel = Plan.createExact(source)
-      val fields = toplevel
-        .allFields
-        .transform { 
-          case (name, (field = Plan.Field.FromSource(srcName, plan: Plan.Named[Err]))) =>
-             Merged.Field.FromSecondary(srcName, ref, Set(ref), fromSecondaryNamed(plan, ref)) 
-          case (name, (field = Plan.Field.FromSource(srcName, plan))) => 
-            Merged.Field.FromSecondary(srcName, ref, Set(ref), Plan.Leaf(plan.))  
-          case (name, (field = f: Plan.Field.FromModifier)) => 
-            Merged.Field.FromSecondary(source.source, value.field, value.removed) 
-        }
+    def fromSecondaryNamed(source: Structure.Named, ref: Sources.Ref): Plan.Merged[Nothing] = {
+      val fields = source.fields.transform {
+        case (name, struct: Structure.Named) =>
+          Merged.Field.FromSecondary(name, ref, Set(ref), fromSecondaryNamed(struct, ref))
+        case (name, struct) =>
+          Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf))
+      }
+
+      Merged(VectorMap(ref -> source), fields)
     }
 
     def create(source: Plan.Named[Err], mergee: Structure.Named, ref: Sources.Ref): Plan.Merged[Err] = {
@@ -411,7 +442,7 @@ private[chanterelle] object Plan {
               ref,
               Set(ref),
               Plan.Leaf(right.asLeaf)
-            ) // TODO: allow Plan.Merged? We'd be able to make further marges
+            )
         }
         name -> value
       }.toMap
@@ -419,7 +450,12 @@ private[chanterelle] object Plan {
       val additionalTransformations =
         mergee.fields
           .removedAll(mutualKeys)
-          .transform((name, struct) => Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf)))
+          .transform {
+            case (name, struct: Structure.Named) =>
+              Merged.Field.FromSecondary(name, ref, Set(ref), Merged.fromSecondaryNamed(struct, ref))
+            case (name, struct) =>
+              Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(struct.asLeaf))
+          }
 
       val allFields =
         source.allFields.transform((_, value) => Merged.Field.FromPrimary(source.source, value.field, value.removed)) ++
@@ -435,8 +471,26 @@ private[chanterelle] object Plan {
         name: String,
         ref: Sources.Ref,
         accessibleFrom: Set[Sources.Ref],
-        transformation: Plan.Leaf | Plan.Merged[E]
+        plan: Plan.Leaf | Plan.Merged[E]
       )
+      case Error(error: Plan.Error) extends Field[Err]
+
+      final def update(
+        primaryUpdate: Plan.Field[E] => Plan.Field[Err],
+        secondaryMerged: Plan.Merged[E] => Plan.Merged[Err]
+      ): Field[Err] =
+        this match {
+          case primary @ FromPrimary(underlying = field) =>
+            primary.copy(underlying = primaryUpdate(field))
+          case secondary @ FromSecondary(plan = plan) =>
+            secondary.copy(
+              plan = plan match {
+                case leaf: Plan.Leaf        => leaf
+                case merged: Plan.Merged[E] => secondaryMerged(merged)
+              }
+            )
+          case err: Field.Error => err
+        }
     }
 
     object Field {
@@ -445,6 +499,7 @@ private[chanterelle] object Plan {
           self match
             case FromPrimary(_, underlying, removed)                      => underlying.calculateTpe
             case FromSecondary(name, ref, accessibleFrom, transformation) => transformation.calculateTpe
+            case Error(error) => Type.of[Nothing] //TODO: make this work only on Field[Nothing]
 
       }
     }
@@ -578,7 +633,7 @@ private[chanterelle] object Plan {
 
   @nowarn("msg=unused implicit parameter")
   enum Field[+E <: Err] derives Debug {
-    case FromSource(name: String, transformation: Plan[E]) extends Field[E]
+    case FromSource(name: String, plan: Plan[E]) extends Field[E]
     case FromModifier(modifier: Configured.NamedSpecific) extends Field[Nothing]
   }
 
@@ -587,7 +642,7 @@ private[chanterelle] object Plan {
     extension [E <: Err](self: Field[E]) {
       def update(f: Plan[E] => Plan[Err]): Field[Err] =
         self match {
-          case src @ FromSource(transformation = t) => src.copy(transformation = f(t))
+          case src @ FromSource(plan = p) => src.copy(plan = f(p))
           case mod: FromModifier                    => mod
         }
 
@@ -644,6 +699,10 @@ private[chanterelle] object Plan {
         map.updateKey(recurse).updateValue(recurse)
       case iter: Plan.IterLike[Err, Iterable] =>
         iter.update(recurse)
+      case merged: Plan.Merged[Err] =>
+        def update(merged: Plan.Merged[Err]): Plan.Merged[Err] =
+          merged.updateAll(rename, _.update(recurse), update)
+        update(merged)
       case leaf: Plan.Leaf =>
         leaf
       case confed: Plan.ConfedUp =>
@@ -655,6 +714,8 @@ private[chanterelle] object Plan {
     def locally(curr: Plan[Err]): Plan[Err] = curr match {
       case named: Plan.Named[Err] =>
         named.updateAll((name, field) => rename(name) -> field)
+      case merged: Plan.Merged[Err] =>
+        merged.updateAll(rename, identity, identity)
       case other => other
     }
 

@@ -582,8 +582,38 @@ class ModifiersSpec extends ChanterelleSuite {
         )
       )
 
-    val actual = tup.transform(_.merge(mergee), _.merge(mergee2))
+    val actual = 
+      tup.transform(
+        _.merge(mergee),
+        _.merge(mergee2), 
+        // _.update(_.top3.level4.low1)(_ + 1) //TODO: revisit this, it shouuld work?
+      )
 
     // assertEquals(expected, actual)
+  }
+
+  test("empty merges") {
+    val empty = NamedTuple.Empty
+
+    val mergee = (
+      top1 = "1",
+      top3 = (
+        level1 = "1",
+        level4 = (low4 = 4),
+        level5 = 123
+      ),
+      additional = (asd = 1, dsa = 2)
+    )
+
+    val mergee2 = (
+      top3 = (
+        level4 = (awoo = 3),
+      )
+    )
+
+    val mergee3 = (additional = (asd = "OVERWRITTEN", moreFields = 3))
+
+    val ress = 
+      empty.transform(_.merge(mergee), _.merge(mergee2), _.merge(mergee3), _.rename(_.capitalize).local(a => a))
   }
 }
