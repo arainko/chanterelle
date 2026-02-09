@@ -235,7 +235,7 @@ private[chanterelle] object Plan {
 
   case class Named[+E <: Err](
     source: Structure.Named,
-    private[Plan] val allFields: VectorMap[String, (field: Field[E], removed: Boolean)],
+    private val allFields: VectorMap[String, (field: Field[E], removed: Boolean)],
     isModified: IsModified
   ) extends Plan[E]("named tuple") {
     final def _2 = fields
@@ -334,7 +334,7 @@ private[chanterelle] object Plan {
             field.copy(underlying = Field.FromSource(name, f(plan)), removed = false)
           case field @ Merged.Field.FromPrimary(underlying =  Field.FromModifier(_)) =>
             field.copy(underlying = Field.error(name, ErrorMessage.AlreadyConfigured(name, modifierSpan)), removed = false)
-          case _: Merged.Field.FromSecondary[E] =>
+          case f: Merged.Field.FromSecondary[E] =>
             Merged.Field.Error(Plan.Error(ErrorMessage.CantModifySecondaryField(modifierSpan)))
         }
           .applyOrElse(name, name => Merged.Field.Error(Plan.Error(ErrorMessage.NoFieldFound(name))))
@@ -422,11 +422,11 @@ private[chanterelle] object Plan {
     }
 
     def create(source: Plan.Named[Err], mergee: Structure.Named, ref: Sources.Ref): Plan.Merged[Err] = {
-      val mutualKeys = source.allFields.keySet.intersect(mergee.fields.keySet)
+      val mutualKeys = source.fields.keySet.intersect(mergee.fields.keySet)
 
       val overriddenTransformations = mutualKeys.view.map { name =>
         val mergeeStruct = mergee.fields(name)
-        val (field, _) = source.allFields(name)
+        val field = source.fields(name)
         val value = (field, mergeeStruct) match {
           case (Plan.Field.FromSource(srcName, left: Plan.Named[Err]), right: Structure.Named) =>
             val refs = if srcName == name then Set(ref, Sources.Ref.Primary) else Set(ref)
@@ -458,7 +458,7 @@ private[chanterelle] object Plan {
           }
 
       val allFields =
-        source.allFields.transform((_, value) => Merged.Field.FromPrimary(source.source, value.field, value.removed)) ++
+        source.fields.transform((_, value) => Merged.Field.FromPrimary(source.source, value, false)) ++
           overriddenTransformations ++
           additionalTransformations
 
