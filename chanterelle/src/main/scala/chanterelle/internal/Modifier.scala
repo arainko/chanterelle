@@ -90,17 +90,30 @@ private[chanterelle] object Modifier {
           Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))
         )
 
+      case cfg @ AsTerm(Lambda(_, Apply(TypeApply(Select(Ident(_), "merge"), tpe :: Nil), List(mergee)))) =>
+        tpe.tpe.asType match {
+          case '[a] =>
+            Structure
+            .toplevel[a]
+            .narrow[Structure.Named]
+            .toRight(ErrorMessage.CanOnlyMergeNamedTuples(Span.fromExpr(cfg)))
+            .map { struct => 
+              val sourceRef = sources.add(mergee.asExpr)
+              Modifier.Merge(Path.empty(Type.of[Any]), struct, sourceRef, Span.fromExpr(cfg))
+            }
+        }
+      
       case cfg @ '{ 
         type a <: NamedTuple.AnyNamedTuple
-        (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergeValue) 
+        (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergeValue).regional(${ AsTerm(PathSelector(path)) }) 
       } => 
         Structure
           .toplevel[a]
           .narrow[Structure.Named]
-          .toRight(ErrorMessage.CanOnlyMergedNamedTuples(Span.fromExpr(cfg)))
+          .toRight(ErrorMessage.CanOnlyMergeNamedTuples(Span.fromExpr(cfg)))
           .map { struct => 
             val sourceRef = sources.add(mergeValue)
-            Modifier.Merge(Path.empty(Type.of[tup]), struct, sourceRef, Span.fromExpr(cfg))
+            Modifier.Merge(path, struct, sourceRef, Span.fromExpr(cfg))
           }
 
       case other =>

@@ -672,7 +672,8 @@ class ModifiersSpec extends ChanterelleSuite {
         level4 = (
           low1 = 1,
           low2 = 2,
-          low3 = 3
+          low3 = 3,
+          toBeModified = (field1 = 1)
         )
       )
     )
@@ -705,6 +706,7 @@ class ModifiersSpec extends ChanterelleSuite {
             low1 = tup.top3.level4.low1,
             low2 = tup.top3.level4.low2,
             low3 = tup.top3.level4.low3,
+            toBeModified = (field1 = 101, newName = 20),
             low4 = mergee.top3.level4.low4,
             oneMore = mergee2.top3.level4.oneMore
           ),
@@ -717,7 +719,57 @@ class ModifiersSpec extends ChanterelleSuite {
       tup.transform(
         _.merge(mergee),
         _.merge(mergee2),
-        _.update(_.top3.level4.low1)(_ + 1) // TODO: revisit this, it shouuld work?
+        _.put(_.top3.level4.toBeModified)((newName = 20)),
+        _.update(_.top3.level4.toBeModified.field1)(_ + 100)
       )
+
+    assertEquals(actual, expected)
   }
+
+  test(".merge.regional works") {
+    val tup = (
+      top1 = 1,
+      top2 = 2,
+      top3 = (
+        level1 = 1,
+        level2 = 2,
+        level3 = 3,
+        level4 = (
+          low1 = 1,
+          low2 = 2,
+          low3 = 3
+        )
+      )
+    )
+
+    val mergee = (
+        level1 = "1",
+        level4 = (low4 = 4),
+        level5 = 123
+    )
+
+    val expected =
+      (
+        top1 = tup.top1,
+        top2 = tup.top2,
+        top3 = (
+          level1 = mergee.level1,
+          level2 = tup.top3.level2,
+          level3 = tup.top3.level3,
+          level4 = (
+            low1 = tup.top3.level4.low1,
+            low2 = tup.top3.level4.low2,
+            low3 = tup.top3.level4.low3,
+            low4 = mergee.level4.low4,
+          ),
+          level5 = mergee.level5
+        )
+      )
+
+    val actual =
+      tup.transform(_.merge(mergee).regional(_.top3))
+
+    assertEquals(expected, actual)
+  }
+
 }

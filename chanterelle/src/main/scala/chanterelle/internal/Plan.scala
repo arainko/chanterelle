@@ -5,7 +5,6 @@ import chanterelle.internal.Plan.IsModified
 import scala.annotation.nowarn
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
-import scala.deriving.Mirror
 import Plan.Error
 import chanterelle.internal.Plan.Merged.Field
 import scala.annotation.tailrec
@@ -334,8 +333,11 @@ private[chanterelle] object Plan {
             field.copy(underlying = Field.FromSource(name, f(plan)), removed = false)
           case field @ Merged.Field.FromPrimary(underlying =  Field.FromModifier(_)) =>
             field.copy(underlying = Field.error(name, ErrorMessage.AlreadyConfigured(name, modifierSpan)), removed = false)
-          case f: Merged.Field.FromSecondary[E] =>
-            Merged.Field.Error(Plan.Error(ErrorMessage.CantModifySecondaryField(modifierSpan)))
+          case field: Merged.Field.FromSecondary[E] =>
+            //TODO: could also check if input is Leaf then out is also Leaf, same for Merged?
+              f(field.plan) match
+                case merged @ Merged(_, _) => field.copy(plan = merged) 
+                case _ => Merged.Field.Error(Plan.Error(ErrorMessage.CantModifySecondaryField(modifierSpan)))
         }
           .applyOrElse(name, name => Merged.Field.Error(Plan.Error(ErrorMessage.NoFieldFound(name))))
 

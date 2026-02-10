@@ -64,11 +64,11 @@ private[chanterelle] object ErrorMessage {
 
   case class CantModifySecondaryField(override val span: Span) extends ErrorMessage {
     def render(using Quotes): String = {
-      s"Can't modify a field that has been overriden by a .merge"
+      s"Can't modify a field that has been overridden by a .merge"
     }
   }
 
-  case class CanOnlyMergedNamedTuples(override val span: Span) extends ErrorMessage {
+  case class CanOnlyMergeNamedTuples(override val span: Span) extends ErrorMessage {
     def render(using Quotes): String = {
       s"Merges can only happen between two named tuples"
     }
