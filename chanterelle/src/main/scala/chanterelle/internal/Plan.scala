@@ -3,7 +3,7 @@ package chanterelle.internal
 import chanterelle.internal.Plan.IsModified
 import chanterelle.internal.Plan.Merged.Field
 
-import scala.annotation.{nowarn, tailrec}
+import scala.annotation.{ nowarn, tailrec }
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 
