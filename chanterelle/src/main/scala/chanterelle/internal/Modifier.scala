@@ -25,12 +25,15 @@ private[chanterelle] object Modifier {
   )(using sources: Sources.Builder, quotes: Quotes): Either[List[ErrorMessage], List[Modifier]] = {
     import quotes.reflect.*
 
-    def parseMerged[Mergee: Type](path: Path, mergee: Expr[Mergee], cfgSpan: Span)(using sources: Sources.Builder, quotes: Quotes) =
+    def parseMerged[Mergee: Type](path: Path, mergee: Expr[Mergee], cfgSpan: Span)(using
+      sources: Sources.Builder,
+      quotes: Quotes
+    ) =
       Structure
         .toplevel[Mergee]
         .narrow[Structure.Named]
         .toRight(ErrorMessage.CanOnlyMergeNamedTuples(cfgSpan))
-        .map { struct => 
+        .map { struct =>
           val sourceRef = sources.add(mergee)
           Modifier.Merge(path, struct, sourceRef, cfgSpan)
         }
@@ -102,11 +105,12 @@ private[chanterelle] object Modifier {
         tpe.tpe.asType match {
           case '[a] => parseMerged(Path.empty(Type.of[Any]), mergee.asExprOf[a], Span.fromExpr(cfg))
         }
-      
-      case cfg @ '{ 
-        type a <: NamedTuple.AnyNamedTuple
-        (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergee).regional(${ AsTerm(PathSelector(path)) }) 
-      } => parseMerged(path, mergee.asExprOf[a], Span.fromExpr(cfg))
+
+      case cfg @ '{
+            type a <: NamedTuple.AnyNamedTuple
+            (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergee).regional(${ AsTerm(PathSelector(path)) })
+          } =>
+        parseMerged(path, mergee.asExprOf[a], Span.fromExpr(cfg))
 
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")

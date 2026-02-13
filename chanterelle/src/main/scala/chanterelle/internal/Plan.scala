@@ -117,10 +117,8 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
         case Modifier.Remove(fieldToRemove = name: String) =>
           transformation.narrow(
-            when[Plan.Named[Err]](_.withoutField(name)),
-          )(other =>
-            ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span)
-          )
+            when[Plan.Named[Err]](_.withoutField(name))
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
 
         case Modifier.Remove(fieldToRemove = idx: Int) =>
           transformation.narrow[Plan.Tuple[Err]](_.withoutField(idx))(other =>

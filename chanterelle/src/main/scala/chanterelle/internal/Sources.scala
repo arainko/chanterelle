@@ -39,9 +39,9 @@ private[chanterelle] object Sources {
       f(using self.updated(Ref.Primary, expr), ())
     }
 
-    def updated(ref: Ref, value: Expr[Any])(using Scope): Sources = 
+    def updated(ref: Ref, value: Expr[Any])(using Scope): Sources =
       self.updated(ref, value)
-      
+
     def get(ref: Ref)(using Scope): Expr[Any] = self(ref)
   }
 }

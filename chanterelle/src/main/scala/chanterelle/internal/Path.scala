@@ -10,7 +10,6 @@ private[chanterelle] final case class Path(root: Type[?], segments: Vector[Path.
 
   def appended(segment: Path.Segment): Path = self :+ segment
 
-
   // def prepended(segment: Path.Segment): Path = self.copy(segments = segments.prepended(segment))
 
   // def narrowedCurrentTpe: Type[?] =

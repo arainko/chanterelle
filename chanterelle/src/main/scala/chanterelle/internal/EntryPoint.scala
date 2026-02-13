@@ -26,7 +26,9 @@ object EntryPoint {
       builder @ given Sources.Builder = Sources.newBuilder
       modifiers <- Modifier.parse(mods.toList).leftMap(ErrorsWithSpan)
       given Span = Span.minimalAvailable(modifiers.map(_.span))
-      modifiedTransformation = modifiers.foldLeft[Plan[Err]](transformation)((transformation, mod) => transformation.applyModifier(mod))
+      modifiedTransformation = modifiers.foldLeft[Plan[Err]](transformation)((transformation, mod) =>
+        transformation.applyModifier(mod)
+      )
       refinedTransformation <- modifiedTransformation.refine.leftMap(ErrorsWithSpan)
       interpretableTransformation <-
         Transformation.create(refinedTransformation).leftMap(err => ErrorsWithSpan(err :: Nil))

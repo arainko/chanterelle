@@ -792,7 +792,7 @@ class ModifiersSpec extends ChanterelleSuite {
       tup.transform(_.merge(mergee), _.update(_.field2)(_ + 1))
       """
     }("Can't modify a field that has been overridden by a .merge")
-    
+
   }
 
 }
