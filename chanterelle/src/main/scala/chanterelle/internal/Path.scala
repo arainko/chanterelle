@@ -2,8 +2,6 @@ package chanterelle.internal
 
 import scala.quoted.*
 import scala.reflect.TypeTest
-import scala.annotation.alpha
-import scala.annotation.targetName
 
 private[chanterelle] final case class Path(root: Type[?], segments: Vector[Path.Segment]) { self =>
   def :+(segment: Path.Segment): Path = self.copy(segments = segments.appended(segment))

@@ -1,8 +1,8 @@
 package chanterelle.internal
 
-import scala.quoted.*
-import scala.collection.mutable.ArrayBuffer
 import scala.annotation.implicitNotFound
+import scala.collection.mutable.ArrayBuffer
+import scala.quoted.*
 
 private[chanterelle] opaque type Sources = Map[Int, Expr[Any]]
 

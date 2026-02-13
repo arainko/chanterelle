@@ -1,14 +1,14 @@
 package chanterelle.internal
 
+import chanterelle.internal.Sources.Ref
 import chanterelle.internal.Structure.*
+import chanterelle.internal.Transformation.Field
 
 import scala.collection.Factory
+import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
 import NamedTuple.*
-import chanterelle.internal.Transformation.Field
-import chanterelle.internal.Sources.Ref
-import scala.collection.immutable.VectorMap
 
 private[chanterelle] object Interpreter {
 

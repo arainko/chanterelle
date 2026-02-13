@@ -1,13 +1,13 @@
 package chanterelle.internal
 
 import chanterelle.internal.Plan.IsModified
+import chanterelle.internal.Plan.Merged.Field
 
-import scala.annotation.nowarn
+import scala.annotation.{nowarn, tailrec}
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
+
 import Plan.Error
-import chanterelle.internal.Plan.Merged.Field
-import scala.annotation.tailrec
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
