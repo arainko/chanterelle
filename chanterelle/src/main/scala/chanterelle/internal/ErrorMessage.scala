@@ -38,7 +38,7 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class UnexpectedTransformation(expected: String, actual: Plan[Err], override val span: Span)
+  case class UnexpectedTransformation(expected: String, actual: Plan[Err], traversedPath: Path, override val span: Span)
       extends ErrorMessage {
     def render(using Quotes) = {
       val rendered =
@@ -48,7 +48,7 @@ private[chanterelle] object ErrorMessage {
           case other => other.readableName
         }
 
-      s"Couldn't traverse transformation plan, expected $expected but encountered $rendered"
+      s"Couldn't traverse transformation plan, expected $expected but encountered $rendered at ${traversedPath.render}"
     }
 
   }

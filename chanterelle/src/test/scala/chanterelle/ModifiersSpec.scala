@@ -743,9 +743,9 @@ class ModifiersSpec extends ChanterelleSuite {
     )
 
     val mergee = (
-        level1 = "1",
-        level4 = (low4 = 4),
-        level5 = 123
+      level1 = "1",
+      level4 = (low4 = 4),
+      level5 = 123
     )
 
     val expected =
@@ -760,7 +760,7 @@ class ModifiersSpec extends ChanterelleSuite {
             low1 = tup.top3.level4.low1,
             low2 = tup.top3.level4.low2,
             low3 = tup.top3.level4.low3,
-            low4 = mergee.level4.low4,
+            low4 = mergee.level4.low4
           ),
           level5 = mergee.level5
         )
@@ -770,6 +770,29 @@ class ModifiersSpec extends ChanterelleSuite {
       tup.transform(_.merge(mergee).regional(_.top3))
 
     assertEquals(expected, actual)
+  }
+
+  test("_.merge.regional only works when targeting a named tuple (i.e. it errors out with a nice error message)") {
+
+    assertFailsToCompileWith {
+      """
+      val tup = (level1 = (name = 1), toplevel = 1)
+      val mergee = (merged = 2)
+    
+      tup.transform(_.merge(mergee).regional(_.toplevel))
+      """
+    }("Couldn't traverse transformation plan, expected named tuple but encountered ordinary value at _.toplevel")
+  }
+
+  test("modifying a field that has been overridden by a merge errors out in a nice way") {
+    assertFailsToCompileWith {
+      """
+      val tup = (field1 = 1, field2 = 2, field3 = 4)
+      val mergee = (field2 = "asd")
+      tup.transform(_.merge(mergee), _.update(_.field2)(_ + 1))
+      """
+    }("Can't modify a field that has been overridden by a .merge")
+    
   }
 
 }

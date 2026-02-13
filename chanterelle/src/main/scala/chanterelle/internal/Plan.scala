@@ -40,51 +40,64 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
   final def applyModifier(modifier: Modifier)(using Quotes): Plan[Err] = {
     def recurse(
-      segments: List[Path.Segment]
+      segments: List[Path.Segment],
+      traversed: Path
     )(curr: Plan[Err])(using Quotes): Plan[Err] = {
       segments match {
-        case Path.Segment.Field(name = name) :: next =>
+        case (seg @ Path.Segment.Field(name = name)) :: next =>
+          val traversedPath = traversed :+ seg
           curr.narrow(
-            when[Plan.Named[Err]](_.update(name, recurse(next), modifier.span)),
-            when[Plan.Merged[Err]](_.update(name, recurse(next), modifier.span))
-          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
+            when[Plan.Named[Err]](_.update(name, recurse(next, traversedPath), modifier.span)),
+            when[Plan.Merged[Err]](_.update(name, recurse(next, traversedPath), modifier.span))
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
 
-        case Path.Segment.TupleElement(index = index) :: next =>
-          curr.narrow[Plan.Tuple[Err]](_.update(index, recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("tuple", other, modifier.span)
+        case (seg @ Path.Segment.TupleElement(index = index)) :: next =>
+          val traversedPath = traversed :+ seg
+
+          curr.narrow[Plan.Tuple[Err]](_.update(index, recurse(next, traversedPath)))(other =>
+            ErrorMessage.UnexpectedTransformation("tuple", other, traversedPath, modifier.span)
           )
 
-        case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next =>
-          curr.narrow[Plan.MapLike[Err, ?]](_.updateKey(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
+        case (elem @ Path.Segment.Element(tpe)) :: (zero @ Path.Segment.TupleElement(_, 0)) :: next =>
+          val traversedPath = traversed :+ elem :+ zero
+          curr.narrow[Plan.MapLike[Err, ?]](_.updateKey(recurse(next, traversedPath)))(other =>
+            ErrorMessage.UnexpectedTransformation("map", other, traversedPath, modifier.span)
           )
 
-        case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next =>
-          curr.narrow[Plan.MapLike[Err, ?]](_.updateValue(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
+        case (elem @ Path.Segment.Element(tpe)) :: (one @ Path.Segment.TupleElement(_, 1)) :: next =>
+          val traversedPath = traversed :+ elem :+ one
+
+          curr.narrow[Plan.MapLike[Err, ?]](_.updateValue(recurse(next, traversedPath)))(other =>
+            ErrorMessage.UnexpectedTransformation("map", other, traversedPath, modifier.span)
           )
 
-        case Path.Segment.Element(tpe) :: next =>
+        case (elem @ Path.Segment.Element(tpe)) :: next =>
+          val traversedPath = traversed :+ elem
+
           curr.narrow(
-            when[Plan.Optional[Err]](_.update(recurse(next))),
-            when[Plan.IterLike[Err, ?]](_.update(recurse(next)))
-          )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, modifier.span))
+            when[Plan.Optional[Err]](_.update(recurse(next, traversedPath))),
+            when[Plan.IterLike[Err, ?]](_.update(recurse(next, traversedPath)))
+          )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, traversedPath, modifier.span))
 
-        case Path.Segment.LeftElement(tpe) :: next =>
-          curr.narrow[Plan.Either[Err]](_.updateLeft(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
+        case (elem @ Path.Segment.LeftElement(tpe)) :: next =>
+          val traversedPath = traversed :+ elem
+
+          curr.narrow[Plan.Either[Err]](_.updateLeft(recurse(next, traversedPath)))(other =>
+            ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
           )
 
-        case Path.Segment.RightElement(tpe) :: next =>
-          curr.narrow[Plan.Either[Err]](_.updateRight(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
+        case (elem @ Path.Segment.RightElement(tpe)) :: next =>
+          val traversedPath = traversed :+ elem
+
+          curr.narrow[Plan.Either[Err]](_.updateRight(recurse(next, traversedPath)))(other =>
+            ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
           )
 
-        case Nil => apply(modifier, curr)
+        case Nil => apply(modifier, curr, traversed)
       }
     }
 
-    def apply(modifier: Modifier, transformation: Plan[Err]): Plan[Err] = {
+    def apply(modifier: Modifier, transformation: Plan[Err], traversedPath: Path): Plan[Err] = {
       modifier match {
         case m: Modifier.Put =>
           transformation.narrow[Plan.Named[Err]](
@@ -92,7 +105,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
               m.valueStructure.fieldName,
               Plan.Field.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value))
             )
-          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
 
         case m: Modifier.Compute =>
           transformation.narrow[Plan.Named[Err]](
@@ -100,16 +113,18 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
               m.valueStructure.fieldName,
               Plan.Field.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value))
             )
-          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
 
         case Modifier.Remove(fieldToRemove = name: String) =>
-          transformation.narrow[Plan.Named[Err]](_.withoutField(name))(other =>
-            ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span)
+          transformation.narrow(
+            when[Plan.Named[Err]](_.withoutField(name)),
+          )(other =>
+            ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span)
           )
 
         case Modifier.Remove(fieldToRemove = idx: Int) =>
           transformation.narrow[Plan.Tuple[Err]](_.withoutField(idx))(other =>
-            ErrorMessage.UnexpectedTransformation("tuple", other, modifier.span)
+            ErrorMessage.UnexpectedTransformation("tuple", other, traversedPath, modifier.span)
           )
 
         case m: Modifier.Update =>
@@ -122,10 +137,10 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
           transformation.narrow(
             when[Plan.Named[Err]](transformation => Plan.Merged.create(transformation, m.valueStructure, m.ref)),
             when[Plan.Merged[Err]](_.merge(m.valueStructure, m.ref))
-          )(other => ErrorMessage.UnexpectedTransformation("named tuple or merged", other, modifier.span))
+          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
       }
     }
-    recurse(modifier.path.segments.toList)(this)
+    recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this)
   }
 
   def refine: Either[List[ErrorMessage], Plan[Nothing]] = {
@@ -141,7 +156,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
               allFields.foreach {
                 case (_, Plan.Field.FromSource(name, transformation)) => plans += transformation
-                case (_, Plan.Field.FromModifier(_)) => ()
+                case (_, Plan.Field.FromModifier(_))                  => ()
               }
 
               recurse(plans.result() ::: tail, acc)
@@ -151,9 +166,9 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
               fields.foreach {
                 case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromSource(plan = plan))) => plans += plan
-                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromModifier(_))) => ()
-                case (_, Plan.Merged.Field.FromSecondary(plan = plan)) => plans += plan
-                case (_, Plan.Merged.Field.Error(err)) => errors += err.message
+                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromModifier(_)))         => ()
+                case (_, Plan.Merged.Field.FromSecondary(plan = plan))                                   => plans += plan
+                case (_, Plan.Merged.Field.Error(err))                                                   => errors += err.message
               }
 
               recurse(plans.result() ::: tail, acc ::: errors.result())
@@ -307,7 +322,7 @@ private[chanterelle] object Plan {
   case class Merged[+E <: Err](
     mergees: VectorMap[Sources.Ref, Structure.Named],
     fields: VectorMap[String, Merged.Field[E]]
-  ) extends Plan[E]("merged") {
+  ) extends Plan[E]("merged value") {
 
     def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
       rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
@@ -331,13 +346,13 @@ private[chanterelle] object Plan {
         this.fields.andThen {
           case field @ Merged.Field.FromPrimary(underlying = Field.FromSource(name, plan)) =>
             field.copy(underlying = Field.FromSource(name, f(plan)), removed = false)
-          case field @ Merged.Field.FromPrimary(underlying =  Field.FromModifier(_)) =>
+          case field @ Merged.Field.FromPrimary(underlying = Field.FromModifier(_)) =>
             field.copy(underlying = Field.error(name, ErrorMessage.AlreadyConfigured(name, modifierSpan)), removed = false)
           case field: Merged.Field.FromSecondary[E] =>
-            //TODO: could also check if input is Leaf then out is also Leaf, same for Merged?
-              f(field.plan) match
-                case merged @ Merged(_, _) => field.copy(plan = merged) 
-                case _ => Merged.Field.Error(Plan.Error(ErrorMessage.CantModifySecondaryField(modifierSpan)))
+            // TODO: could also check if input is Leaf then out is also Leaf, same for Merged?
+            f(field.plan) match
+              case merged @ Merged(_, _) => field.copy(plan = merged)
+              case _                     => Merged.Field.Error(Plan.Error(ErrorMessage.CantModifySecondaryField(modifierSpan)))
         }
           .applyOrElse(name, name => Merged.Field.Error(Plan.Error(ErrorMessage.NoFieldFound(name))))
 
@@ -360,6 +375,7 @@ private[chanterelle] object Plan {
         val mergeeStruct = mergee.fields(name)
         val field = fields(name)
         val value = (field, mergeeStruct) match {
+          // merge with a field that hasn't been overridden by a merge yet which just happens to point to a named tuple
           case (
                 Merged.Field.FromPrimary(source, Field.FromSource(srcName, left: Plan.Named[E]), removed),
                 right: Structure.Named
@@ -367,6 +383,7 @@ private[chanterelle] object Plan {
             val refs = if srcName == name then Set(ref, Sources.Ref.Primary) else Set(ref)
             Merged.Field.FromSecondary(name, ref, refs, Merged.create(left, right, ref))
 
+          // merge with a field that hasn't been overridden by a merge yet but points to a field that has been merged in the past
           case (
                 Merged.Field.FromPrimary(source, Field.FromSource(srcName, left: Plan.Merged[E]), removed),
                 right: Structure.Named
@@ -374,15 +391,18 @@ private[chanterelle] object Plan {
             val refs = if srcName == name then Set(ref, Sources.Ref.Primary) else Set(ref)
             Merged.Field.FromSecondary(name, ref, refs, left.merge(right, ref))
 
+          // merge with a field that is neither a named tuple or a nother merged value -> it's just a run of the mill override from the mergee
           case (Merged.Field.FromPrimary(source, _, removed), right) =>
             Merged.Field.FromSecondary(name, ref, Set(ref), Plan.Leaf(right.asLeaf))
 
+          // merge with a field that has already been overridden and which points to another merged value
           case (
                 Merged.Field.FromSecondary(srcName, _, accessibleFrom, plan: Plan.Merged[E]),
                 right: Structure.Named
               ) =>
             Merged.Field.FromSecondary(srcName, ref, accessibleFrom + ref, plan.merge(right, ref))
 
+          // merge with a field that has already been overridden and which doesn't point to a merged value
           case (Merged.Field.FromSecondary(srcName, _, accessibleFrom, _), right) =>
             Merged.Field.FromSecondary(srcName, ref, Set(ref), Plan.Leaf(right.asLeaf))
 
@@ -430,14 +450,17 @@ private[chanterelle] object Plan {
         val mergeeStruct = mergee.fields(name)
         val field = source.fields(name)
         val value = (field, mergeeStruct) match {
+          // merge with a field that hasn't been overridden by a merge yet which just happens to point to a named tuple
           case (Plan.Field.FromSource(srcName, left: Plan.Named[Err]), right: Structure.Named) =>
             val refs = if srcName == name then Set(ref, Sources.Ref.Primary) else Set(ref)
             Merged.Field.FromSecondary(name, ref, refs, Merged.create(left, right, ref))
 
+          // merge with a field that hasn't been overridden by a merge yet but points to a field that has been merged in the past
           case (Plan.Field.FromSource(srcName, left: Plan.Merged[Err]), right: Structure.Named) =>
             val refs = if srcName == name then Set(ref, Sources.Ref.Primary) else Set(ref)
             Merged.Field.FromSecondary(srcName, ref, refs, left.merge(right, ref))
 
+          // everything else becomes a simple override from the mergee
           case (_, right) =>
             Merged.Field.FromSecondary(
               name,
@@ -501,7 +524,7 @@ private[chanterelle] object Plan {
           self match
             case FromPrimary(_, underlying, removed)                      => underlying.calculateTpe
             case FromSecondary(name, ref, accessibleFrom, transformation) => transformation.calculateTpe
-            case Error(error) => Type.of[Nothing] //TODO: make this work only on Field[Nothing]
+            case Error(error) => Type.of[Nothing] // TODO: make this work only on Field[Nothing]
 
       }
     }
@@ -645,7 +668,7 @@ private[chanterelle] object Plan {
       def update(f: Plan[E] => Plan[Err]): Field[Err] =
         self match {
           case src @ FromSource(plan = p) => src.copy(plan = f(p))
-          case mod: FromModifier                    => mod
+          case mod: FromModifier          => mod
         }
 
       def calculateTpe(using Quotes): Type[?] = self match
