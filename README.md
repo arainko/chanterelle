@@ -95,6 +95,40 @@ val transformed = tup.transform(_.remove(_.anotherField.field2))
 ```
 
 
+* `.merge` - deeply merges named tuples
+
+Named tuples are merged by field name, fields from the named tuple we merge with (the mergee) take precedence, nested named tuples (that don't come from modifications) and other merged values are recursed, other values get completely overwritten using the value from the mergee.
+
+```scala
+val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
+val mergee = (field2 = (level1Field3 = 5, level1Field2 = (anotherField = 6)))
+
+val transformed = tup.transform(_.merge(mergee))
+```
+
+
+```scala
+
+(field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4, anotherField = 6), level1Field3 = 5))
+```
+
+
+Merges can be pointed at a specific nested named tuple with `.regional`.
+ 
+```scala
+val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
+val mergee = (level1Field2 = (anotherField = 6))
+
+val transformed = tup.transform(_.merge(mergee).regional(_.field2))
+```
+
+
+```scala
+
+(field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4, anotherField = 6)))
+```
+
+
 * `.rename` - transforms the field names
 ```scala
 val tup = (anotherField = (field1 = 123, field2 = 123))
@@ -219,7 +253,7 @@ val transformed = tup.transform(
 ```
 
 
-* accessing keys and values of a `Map`
+* accesing keys and values of a `Map`
 
 Much like in the case of collections and `Options`, `Maps` can also be modified with the combination of `.element` and tuple accessors (`._1` for the key and `._2` for the value):
 ```scala

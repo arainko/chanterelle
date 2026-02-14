@@ -99,8 +99,58 @@ object TupleModifier {
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def rename(fieldName: FieldName => FieldName): TupleModifier[Tup] & Local[Tup] & Regional[Tup]
 
+    /**
+     * Deeply merges named tuples. 
+     * 
+     * Named tuples are merged by field name, fields from the named tuple we merge with (the mergee) take precedence, nested named tuples (that don't come from modifications) and merged values are recursed, other values get completely overwritten using the value from the mergee. 
+     * 
+     * {{{
+     * val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
+     * val mergee = (field2 = (level1Field3 = 5, level1Field2 = (anotherField = 6)))
+     *
+     * val actual = tup.transform(_.merge(mergee))
+     *
+     * val expected = (
+     *    field1 = tup.field1,
+     *    field2 = (
+     *      level1Field1 = tup.field2.level1Field1,
+     *      level1Field2 = (
+     *        level2Field = tup.field2.level1Field2.level2Field,
+     *        anotherField = mergee.field2.level1Field2.anotherField
+     *      ),
+     *      level1Field3 = mergee.field2.level1Field3
+     *    )
+     *  )
+     *
+     * assertEquals(actual, expected)
+     * }}}
+     *
+     * Merges can be pointed at a specific nested named tuple with `.regional`
+     * {{{
+     * val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
+     * val mergee = (level1Field2 = (anotherField = 6))
+     *
+     * val actual = tup.transform(_.merge(mergee).regional(_.field2))
+     *
+     * val expected = (
+     *   field1 = tup.field1,
+     *   field2 = (
+     *     level1Field1 = tup.field2.level1Field1,
+     *     level1Field2 = (
+     *       level2Field = tup.field2.level1Field2.level2Field,
+     *       anotherField = mergee.level1Field2.anotherField
+     *     )
+     *   )
+     * )
+     *
+     * assertEquals(actual, expected)
+     * }}}
+     *
+     * Certain limitations are imposed on merged values:
+     *  * `.remove`, `.put` and `.compute` aren't currently supported (users can still 'cut through' merged values to access other nodes of the transformation)
+     */
     @compileTimeOnly("Only usable as part of the .transform DSL")
-    def merge[A <: NamedTuple.AnyNamedTuple](value: A): TupleModifier[Tup] & Regional[Tup]
+    def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
   }
 
   sealed trait Local[Tup]
@@ -120,5 +170,29 @@ object TupleModifier {
       def regional[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
     }
   }
+
+}
+
+@main def main = {
+  import chanterelle.*
+
+  val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
+
+  val mergee = (level1Field2 = (anotherField = 6))
+
+  val actual = tup.transform(_.merge(mergee).regional(_.field2))
+
+  val expected = (
+    field1 = tup.field1,
+    field2 = (
+      level1Field1 = tup.field2.level1Field1,
+      level1Field2 = (
+        level2Field = tup.field2.level1Field2.level2Field,
+        anotherField = mergee.level1Field2.anotherField
+      )
+    )
+  )
+
+  assert(actual == expected)
 
 }
