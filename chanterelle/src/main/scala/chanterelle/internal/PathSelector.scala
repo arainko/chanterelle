@@ -91,7 +91,7 @@ private[chanterelle] object PathSelector {
           Path(ident.tpe.asType, acc.toVector)
 
         case other =>
-          quotes.reflect.report.errorAndAbort(s"Matched an unexpected term: ${Printer.TreeStructure.show(other)}")
+          Logger.debug(s"Matched an unexpected term: ${Printer.TreeStructure.show(other)}")
           val pos = expr.pos
           val code = pos.sourceCode.mkString
           outer.reflect.report.errorAndAbort(s"Couldn't parse '$code' as a valid path selector", pos)
