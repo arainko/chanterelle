@@ -172,27 +172,3 @@ object TupleModifier {
   }
 
 }
-
-@main def main = {
-  import chanterelle.*
-
-  val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
-
-  val mergee = (level1Field2 = (anotherField = 6))
-
-  val actual = tup.transform(_.merge(mergee).regional(_.field2))
-
-  val expected = (
-    field1 = tup.field1,
-    field2 = (
-      level1Field1 = tup.field2.level1Field1,
-      level1Field2 = (
-        level2Field = tup.field2.level1Field2.level2Field,
-        anotherField = mergee.level1Field2.anotherField
-      )
-    )
-  )
-
-  assert(actual == expected)
-
-}
