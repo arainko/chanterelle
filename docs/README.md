@@ -43,7 +43,7 @@ Docs.prettyPrint(transformed)
 
 ### Modifiers
 
-* `.put` - puts a new field
+* `.put` — adds a new field
 
 ```scala mdoc:silent:nest
 val tup = (anotherField = (field1 = 123))
@@ -87,7 +87,7 @@ Docs.prettyPrint(transformed)
 
 * `.merge` - deeply merges named tuples
 
-Named tuples are merged by field name, fields from the named tuple we merge with (the mergee) take precedence, nested named tuples (that don't come from modifications) and other merged values are recursed, other values get completely overwritten using the value from the mergee.
+Named tuples are merged by field name. Fields from the named tuple we merge with (the mergee) take precedence. Nested named tuples (that don't come from modifications) and other merged values are recursed. Other values get completely overwritten using the value from the mergee.
 
 ```scala mdoc:silent:nest
 val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
@@ -132,7 +132,7 @@ val tup = (optField = Some((field = (lowerDown = 1))))
 // '.local' renames the toplevel fields
 val transformedLocal = tup.transform(_.rename(_.toUpperCase).local(_.optField.element))
 
-// '.regional' makes it so that all the of fields underneath the path are transformed
+// '.regional' makes it so that all the fields underneath the path are transformed
 val transformedRegional = tup.transform(_.rename(_.toUpperCase).regional(_.optField.element))
 ```
 
@@ -173,7 +173,7 @@ val kebabToCamel = kebab.transform(_.rename(FieldName.kebabCase.toCamelCase))
 Docs.prettyPrintVals(camelToSnake, camelToKebab, snakeToCamel, kebabToCamel)
 ```
 
-Users can also define their own bundles of transformations by combaning various operations on `FieldNames` in a `transparent inline def`:
+Users can also define their own bundles of transformations by combining various operations on `FieldNames` in a `transparent inline def`:
 ```scala mdoc:nest:silent
 transparent inline def renamedAndUppercased(inline fieldName: FieldName) =
    fieldName.rename("someName", "someOtherName").toUpperCase
@@ -217,7 +217,7 @@ val transformed = tup.transform(
 Docs.prettyPrint(transformed)
 ```
 
-* accesing keys and values of a `Map`
+* accessing keys and values of a `Map`
 
 Much like in the case of collections and `Options`, `Maps` can also be modified with the combination of `.element` and tuple accessors (`._1` for the key and `._2` for the value):
 ```scala mdoc:silent:nest
