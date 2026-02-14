@@ -1,480 +1,171 @@
 package chanterelle.internal
 
-import chanterelle.internal.Transformation.IsModified
+import chanterelle.internal.Plan.IsModified
 
-import scala.annotation.nowarn
+import scala.collection.Factory
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
+import scala.util.boundary
+import scala.util.boundary.Label
 
-private[chanterelle] case object Err
-private[chanterelle] type Err = Err.type
+private[chanterelle] enum Transformation derives Debug {
+  case Named(
+    source: Structure.Named,
+    fields: VectorMap[String, Transformation.Field],
+    namesTpe: Type[? <: scala.Tuple],
+    valuesTpe: Type[? <: scala.Tuple]
+  )
 
-private[chanterelle] sealed abstract class Transformation[+E <: Err](val readableName: String) {
+  case Tuple(
+    source: Structure.Tuple,
+    fields: SortedMap[Int, Transformation],
+    outputTpe: Type[?]
+  )
 
-  @nowarn("msg=Unreachable")
-  final inline def narrow[A <: Transformation[Err]](
-    inline fn: A => Transformation[Err]
-  )(inline errorMessage: Transformation[Err] => ErrorMessage): Transformation[Err] =
-    this match {
-      case a: A  => fn(a)
-      case other => Transformation.Error(errorMessage(other))
-    }
+  case Optional(
+    source: Structure.Optional,
+    paramTransformation: Transformation,
+    outputTpe: Type[? <: Option[?]]
+  )
 
-  @nowarn("msg=Unreachable")
-  final inline def narrow[A <: Transformation[Err], B <: Transformation[Err]](
-    inline fnA: A => Transformation[Err],
-    inline fnB: B => Transformation[Err]
-  )(inline errorMessage: Transformation[Err] => ErrorMessage): Transformation[Err] =
-    this match {
-      case a: A  => fnA(a)
-      case b: B  => fnB(b)
-      case other => Transformation.Error(errorMessage(other))
-    }
+  case EitherLike(
+    source: Structure.Either,
+    left: Transformation,
+    right: Transformation,
+    outputTpe: Type[? <: scala.Either[?, ?]]
+  )
 
-  def calculateTpe(using Quotes): Type[?]
+  case MapLike[F[k, v] <: collection.Map[k, v]](
+    source: Structure.Collection.Repr.MapLike[F],
+    key: Transformation,
+    value: Transformation,
+    factory: Expr[Factory[?, ?]],
+    outputTpe: Type[?]
+  )
 
-  def isModified: IsModified
+  case IterLike[F[elem] <: Iterable[elem]](
+    source: Structure.Collection.Repr.IterLike[F],
+    elem: Transformation,
+    factory: Expr[Factory[?, ?]],
+    outputTpe: Type[?]
+  )
 
-  final def applyModifier(modifier: Modifier)(using Quotes): Transformation[Err] = {
-    def recurse(
-      segments: List[Path.Segment]
-    )(curr: Transformation[Err])(using Quotes): Transformation[Err] = {
-      segments match {
-        case Path.Segment.Field(name = name) :: next =>
-          curr.narrow[Transformation.Named[Err]](_.update(name, recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span)
-          )
+  case Leaf(output: Structure.Leaf)
 
-        case Path.Segment.TupleElement(index = index) :: next =>
-          curr.narrow[Transformation.Tuple[Err]](_.update(index, recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("tuple", other, modifier.span)
-          )
+  case ConfedUp(config: Configured)
 
-        case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 0) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateKey(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
-          )
-
-        case Path.Segment.Element(tpe) :: Path.Segment.TupleElement(_, 1) :: next =>
-          curr.narrow[Transformation.Map[Err, ?]](_.updateValue(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("map", other, modifier.span)
-          )
-
-        case Path.Segment.Element(tpe) :: next =>
-          curr.narrow(
-            when[Transformation.Optional[Err]](_.update(recurse(next))),
-            when[Transformation.Iter[Err, ?]](_.update(recurse(next)))
-          )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, modifier.span))
-
-        case Path.Segment.LeftElement(tpe) :: next =>
-          curr.narrow[Transformation.Either[Err]](_.updateLeft(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
-          )
-
-        case Path.Segment.RightElement(tpe) :: next =>
-          curr.narrow[Transformation.Either[Err]](_.updateRight(recurse(next)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, modifier.span)
-          )
-
-        case Nil => apply(modifier, curr)
-      }
-    }
-
-    def apply(modifier: Modifier, transformation: Transformation[Err]): Transformation[Err] = {
-      modifier match {
-        case m: Modifier.Put =>
-          transformation.narrow[Transformation.Named[Err]](
-            _.withModifiedField(
-              m.valueStructure.fieldName,
-              Transformation.OfField.FromModifier(Configured.NamedSpecific.Add(m.valueStructure, m.value))
-            )
-          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
-
-        case m: Modifier.Compute =>
-          transformation.narrow[Transformation.Named[Err]](
-            _.withModifiedField(
-              m.valueStructure.fieldName,
-              Transformation.OfField.FromModifier(Configured.NamedSpecific.Compute(m.valueStructure, m.value))
-            )
-          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span))
-
-        case Modifier.Remove(fieldToRemove = name: String) =>
-          transformation.narrow[Transformation.Named[Err]](_.withoutField(name))(other =>
-            ErrorMessage.UnexpectedTransformation("named tuple", other, modifier.span)
-          )
-
-        case Modifier.Remove(fieldToRemove = idx: Int) =>
-          transformation.narrow[Transformation.Tuple[Err]](_.withoutField(idx))(other =>
-            ErrorMessage.UnexpectedTransformation("tuple", other, modifier.span)
-          )
-
-        case m: Modifier.Update =>
-          Transformation.ConfedUp(Configured.Update(m.tpe, m.function), m.span)
-
-        case m: Modifier.Rename =>
-          Transformation.renameNamedNodes(transformation, m.fieldName, m.kind)
-      }
-    }
-    recurse(modifier.path.segments.toList)(this)
-  }
-
-  def refine: Either[List[ErrorMessage], Transformation[Nothing]] = {
-    def recurse(
-      stack: List[Transformation[E]],
-      acc: List[ErrorMessage]
-    ): Either[List[ErrorMessage], Transformation[Nothing]] =
-      stack match {
-        case head :: tail =>
-          head match
-            case Transformation.Named(source, allFields, _) =>
-              val transformations =
-                allFields.values.collect {
-                  case Transformation.OfField.FromSource(name, transformation) => transformation
-                }.toList
-              recurse(transformations ::: tail, acc)
-            case Transformation.Tuple(source, allFields, _) =>
-              recurse(allFields.values.toList ::: tail, acc)
-            case Transformation.Optional(source, paramTransformation, _) =>
-              recurse(paramTransformation :: tail, acc)
-            case Transformation.Either(source, left, right, _) =>
-              recurse(left :: right :: tail, acc)
-            case Transformation.Map(source, key, value, _) =>
-              recurse(value :: tail, acc)
-            case Transformation.Iter(source, elem, _) =>
-              recurse(elem :: tail, acc)
-            case Transformation.Leaf(output) =>
-              recurse(tail, acc)
-            case Transformation.ConfedUp(config, span) =>
-              recurse(tail, acc)
-            case err @ Transformation.Error(message) =>
-              recurse(tail, err.message :: acc)
-
-        case Nil => if acc.isEmpty then Right(this.asInstanceOf[Transformation[Nothing]]) else Left(acc)
-      }
-
-    recurse(this :: Nil, Nil)
-  }
+  case Merged(
+    mergees: VectorMap[Sources.Ref, Structure.Named],
+    fields: VectorMap[String, Transformation.Merged.Field],
+    namesTpe: Type[? <: scala.Tuple],
+    valuesTpe: Type[? <: scala.Tuple]
+  )
 }
 
-object Transformation {
+private[chanterelle] object Transformation {
 
-  given Debug[Transformation[Err]] = Debug.derived
-
-  def create(structure: Structure): Transformation[Err] = {
-    structure match {
-      case named: Structure.Named =>
-        Named(
-          named,
-          named.fields.map { (name, field) =>
-            name -> (field = Transformation.OfField.FromSource(name, create(field)), removed = false)
-          },
-          IsModified.No
-        )
-
-      case tuple: Structure.Tuple =>
-        Tuple(
-          tuple,
-          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = create(t), removed = false)).to(SortedMap),
-          IsModified.No
-        )
-
-      case optional: Structure.Optional =>
-        Optional(optional, create(optional.paramStruct), IsModified.No)
-
-      case either: Structure.Either =>
-        Either(either, create(either.left), create(either.right), IsModified.No)
-
-      case coll: Structure.Collection =>
-        coll.repr match
-          case source @ Structure.Collection.Repr.Map(tycon, key, value) =>
-            Transformation.Map(source, create(key), create(value), IsModified.No)
-          case source @ Structure.Collection.Repr.Iter(tycon, element) =>
-            Transformation.Iter(source, create(element), IsModified.No)
-      case leaf: Structure.Leaf =>
-        Leaf(leaf)
-    }
-  }
-
-  case class Named[+E <: Err](
-    source: Structure.Named,
-    private val allFields: VectorMap[String, (field: OfField[E], removed: Boolean)],
-    isModified: IsModified
-  ) extends Transformation[E]("named tuple") {
-    final def _2 = fields
-    val fields: VectorMap[String, OfField[E]] = allFields.collect { case (key, (field = value, removed = false)) => key -> value }
-
-    def calculateNamesTpe(using Quotes): Type[? <: scala.Tuple] =
-      rollupTuple(fields.keys.map(name => quotes.reflect.ConstantType(quotes.reflect.StringConstant(name))))
-
-    def calculateValuesTpe(using Quotes): Type[? <: scala.Tuple] =
-      rollupTuple(
-        fields.map {
-          case _ -> OfField.FromSource(transformation = t) => t.calculateTpe.repr
-          case _ -> OfField.FromModifier(modifier = conf)  => conf.tpe.repr
-        }.toVector
-      )
-
-    def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
-      val values = calculateValuesTpe
-      val names = calculateNamesTpe
-      ((names, values): @unchecked) match {
-        case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
-          Type.of[NamedTuple.NamedTuple[names, values]]
+  def create(transformation: Plan[Nothing])(using Quotes): scala.Either[ErrorMessage, Transformation] = {
+    def transformField(field: Plan.Field[Nothing])(using Label[ErrorMessage]): Field =
+      field match {
+        case Plan.Field.FromSource(srcName, plan) =>
+          Field.FromSource(srcName, recurse(plan))
+        case Plan.Field.FromModifier(mod) =>
+          Field.FromModifier(mod)
       }
-    }
 
-    def updateAll(fn: (String, OfField[E]) => (String, OfField[Err])): Named[Err] = {
-      val updatedFields =
-        this.allFields.map {
-          case name -> (field, removed) =>
-            val (updatedName, updatedField) = fn(name, field)
-            updatedName -> (updatedField, removed)
+    def fromMerged(plan: Plan.Merged[Nothing])(using Quotes, Label[ErrorMessage]): Transformation.Merged = {
+      val fields =
+        plan.fields.collect {
+          case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
+            name -> Transformation.Merged.Field.FromPrimary(source, transformField(field))
+          case (name, Plan.Merged.Field.FromSecondary(secName, ref, accessibleFrom, plan)) =>
+            val transformation: Transformation.Leaf | Transformation.Merged = plan match {
+              case leaf: Plan.Leaf              => Transformation.fromLeaf(leaf)
+              case merged: Plan.Merged[Nothing] => fromMerged(merged)
+            }
+            name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
         }
-
-      this.copy(allFields = updatedFields, isModified = IsModified.Yes)
-    }
-
-    def update(name: String, f: Transformation[E] => Transformation[Err]): Named[Err] = {
-      val fieldTransformation =
-        this.allFields.andThen {
-          case (field = field @ OfField.FromSource(name, transformation)) =>
-            (field = field.copy(transformation = f(transformation)), removed = false)
-          case (field = OfField.FromModifier(_)) =>
-            (field = OfField.error(name, ErrorMessage.AlreadyConfigured(name)), removed = false)
-        }
-          .applyOrElse(name, name => (field = OfField.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
-      this.copy(
-        allFields = this.allFields.updated(name, fieldTransformation),
-        isModified = IsModified.Yes
+      Merged(
+        plan.mergees,
+        fields,
+        plan.calculateNamesTpe,
+        plan.calculateValuesTpe
       )
     }
 
-    def withModifiedFields(fields: VectorMap[String, Transformation.OfField[Err]]): Named[Err] =
-      this.copy(
-        allFields = this.allFields ++ fields.transform((_, v) => (field = v, removed = false)),
-        isModified = IsModified.Yes
-      )
+    def recurse(transformation: Plan[Nothing])(using Label[ErrorMessage]): Transformation =
+      transformation match {
+        // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
+        case plan if plan.isModified == IsModified.No =>
+          val tpe = plan.calculateTpe
+          Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
 
-    def withModifiedField(name: String, transformation: Transformation.OfField[Err]): Named[Err] =
-      // this will uhhh... create a new record if it doesn't exist
-      this.copy(
-        allFields = this.allFields.updated(name, (field = transformation, removed = false)),
-        isModified = IsModified.Yes
-      )
+        case p @ Plan.Named(source, fields, _) =>
+          Named(
+            source,
+            fields.transform((_, field) => transformField(field)),
+            p.calculateNamesTpe,
+            p.calculateValuesTpe
+          )
 
-    def withoutField(name: String): Named[Err] =
-      this.copy(
-        allFields = this.allFields.updatedWith(name) {
-          case Some((field = src)) => Some((field = src, removed = true))
-          case None                => Some((field = OfField.error(name, ErrorMessage.NoFieldFound(name)), removed = false))
-        },
-        isModified = IsModified.Yes
-      )
-  }
+        case p @ Plan.Tuple(source, fields, _) =>
+          Tuple(source, fields.map((idx, plan) => idx -> recurse(plan)), p.calculateTpe)
 
-  case class Tuple[+E <: Err](
-    source: Structure.Tuple,
-    private val allFields: SortedMap[Int, (transformation: Transformation[E], removed: Boolean)],
-    isModified: IsModified
-  ) extends Transformation[E]("tuple") {
-    final def _2 = fields
-    val fields = allFields.collect { case (idx, (transformation = t, removed = false)) => idx -> t }
+        case p @ Plan.Optional(source, paramTransformation, _) =>
+          Optional(source, recurse(paramTransformation), p.calculateTpe)
 
-    def calculateTpe(using Quotes): Type[? <: scala.Tuple] =
-      rollupTuple(fields.map { case (_, value) => value.calculateTpe.repr }.toVector)
+        case p @ Plan.Either(source, left, right, _) =>
+          EitherLike(source, recurse(left), recurse(right), p.calculateTpe)
 
-    def updateAll(f: Transformation[E] => Transformation[Err]): Tuple[Err] =
-      this.copy(
-        allFields = allFields.transform { case (_, (t, removed)) => (f(t), removed) },
-        isModified = IsModified.Yes
-      )
+        case p @ Plan.MapLike(source, key, value, _) =>
+          val tpe = p.calculateTpe
+          val factory = ((source.tycon, tpe): @unchecked) match {
+            case ('[type map[k, v]; map], '[collection.Map[key, value]]) =>
+              Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+          }
+          MapLike(source, recurse(key), recurse(value), factory, tpe)
 
-    def update(index: Int, f: Transformation[E] => Transformation[Err]): Tuple[Err] = {
-      val t =
-        allFields.andThen { case (transformation, _) => (transformation = f(transformation), removed = false) }
-          .applyOrElse(index, idx => (Transformation.Error(ErrorMessage.NoFieldAtIndexFound(idx)), false))
-      this.copy(allFields = allFields + (index -> t), isModified = IsModified.Yes)
-    }
+        case t @ Plan.IterLike(source, elem, _) =>
+          val tpe = t.calculateTpe
+          val factory = ((source.tycon, tpe): @unchecked) match {
+            case ('[type coll[a]; coll], '[Iterable[elem]]) =>
+              Expr.summon[Factory[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+          }
+          IterLike(source, recurse(elem), factory, tpe)
 
-    def withModifiedElement(idx: Int, transformation: Transformation[Err]): Tuple[Err] =
-      update(idx, _ => transformation)
+        case p: Plan.Merged[Nothing] =>
+          fromMerged(p)
 
-    def withoutField(index: Int): Tuple[Err] = {
-      val t: (transformation: Transformation[Err], removed: Boolean) =
-        allFields.applyOrElse(
-          index,
-          idx => (transformation = Transformation.Error(ErrorMessage.NoFieldAtIndexFound(idx)), removed = false)
-        )
-      this.copy(
-        allFields = allFields + (index -> (transformation = t.transformation, removed = true)),
-        isModified = IsModified.Yes
-      )
-    }
-  }
+        case leaf: Plan.Leaf =>
+          Transformation.fromLeaf(leaf)
 
-  case class Optional[+E <: Err](
-    source: Structure.Optional,
-    paramTransformation: Transformation[E],
-    isModified: IsModified
-  ) extends Transformation[E]("option") {
-    def calculateTpe(using Quotes): Type[? <: Option[?]] =
-      paramTransformation.calculateTpe match {
-        case '[tpe] => Type.of[Option[tpe]]
+        case Plan.ConfedUp(config, _) =>
+          ConfedUp(config)
       }
 
-    def update(f: Transformation[E] => Transformation[Err]): Optional[Err] =
-      this.copy(paramTransformation = f(paramTransformation), isModified = IsModified.Yes)
-
-  }
-
-  case class Either[+E <: Err](
-    source: Structure.Either,
-    left: Transformation[E],
-    right: Transformation[E],
-    isModified: IsModified
-  ) extends Transformation[E]("either") {
-    def calculateTpe(using Quotes): Type[? <: scala.Either[?, ?]] =
-      (left.calculateTpe, right.calculateTpe): @unchecked match {
-        case '[left] -> '[right] => Type.of[scala.Either[left, right]]
-      }
-
-    def updateLeft(f: Transformation[E] => Transformation[Err]): Either[Err] =
-      this.copy(left = f(left), isModified = IsModified.Yes)
-
-    def updateRight(f: Transformation[E] => Transformation[Err]): Either[Err] =
-      this.copy(right = f(right), isModified = IsModified.Yes)
-  }
-
-  case class Map[+E <: Err, F[k, v] <: collection.Map[k, v]](
-    source: Structure.Collection.Repr.Map[F],
-    key: Transformation[E],
-    value: Transformation[E],
-    isModified: IsModified
-  ) extends Transformation[E]("map") {
-    def calculateTpe(using Quotes): Type[?] = {
-      ((source.tycon, key.calculateTpe, value.calculateTpe): @unchecked) match {
-        case ('[type map[k, v]; map], '[key], '[value]) => Type.of[map[key, value]]
-      }
-    }
-
-    def updateKey(f: Transformation[E] => Transformation[Err]): Map[Err, F] =
-      this.copy(key = f(key), isModified = IsModified.Yes)
-
-    def updateValue(f: Transformation[E] => Transformation[Err]): Map[Err, F] =
-      this.copy(value = f(value), isModified = IsModified.Yes)
-  }
-
-  case class Iter[+E <: Err, F[elem] <: Iterable[elem]](
-    source: Structure.Collection.Repr.Iter[F],
-    elem: Transformation[E],
-    isModified: IsModified
-  ) extends Transformation[E]("iterable") {
-    def calculateTpe(using Quotes): Type[?] = {
-      ((source.tycon, elem.calculateTpe): @unchecked) match {
-        case ('[type coll[a]; coll], '[elem]) =>
-          Type.of[coll[elem]]
-      }
-    }
-
-    def update(f: Transformation[E] => Transformation[Err]): Iter[Err, F] =
-      this.copy(elem = f(elem), isModified = IsModified.Yes)
-  }
-
-  case class Leaf(output: Structure.Leaf) extends Transformation[Nothing]("ordinary value") {
-    def calculateTpe(using Quotes): Type[?] = output.tpe
-    val isModified = IsModified.No
-  }
-
-  // TODO: change this goofyahh name
-  case class ConfedUp(config: Configured, span: Span) extends Transformation[Nothing]("configured value") {
-    def calculateTpe(using Quotes): Type[?] = config.tpe
-    val isModified = IsModified.Yes
-  }
-
-  case class Error(message: ErrorMessage) extends Transformation[Err]("erroneous transformation") {
-    // TODO: make calculateTpe an extension on ModifiableTransformation[Nothing]
-    def calculateTpe(using Quotes): Type[? <: AnyKind] = Type.of[Nothing]
-
-    val isModified = IsModified.Yes
-  }
-
-  @nowarn("msg=unused implicit parameter")
-  enum OfField[+E <: Err] derives Debug {
-    case FromSource(name: String, transformation: Transformation[E]) extends OfField[E]
-    case FromModifier(modifier: Configured.NamedSpecific) extends OfField[Nothing]
-  }
-
-  object OfField {
-
-    extension [E <: Err](self: OfField[E]) {
-      def update(f: Transformation[E] => Transformation[Err]): OfField[Err] =
-        self match {
-          case src @ FromSource(transformation = t) => src.copy(transformation = f(t))
-          case mod: FromModifier                    => mod
-        }
-    }
-
-    def error(name: String, message: ErrorMessage): OfField[Err] =
-      OfField.FromSource(name, Transformation.Error(message))
-  }
-
-  private def rollupTuple(using Quotes)(elements: Vector[quotes.reflect.TypeRepr]) = {
-    import quotes.reflect.*
-
-    elements.size match {
-      case 0 => Type.of[EmptyTuple]
-      case 1 =>
-        elements.head.asType.match { case '[tpe] => Type.of[Tuple1[tpe]] }
-      case size if size <= 22 =>
-        defn
-          .TupleClass(size)
-          .typeRef
-          .appliedTo(elements.toList)
-          .asType
-          .match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
-      case _ =>
-        val TupleCons = TypeRepr.of[*:]
-        val tpe = elements.foldRight(TypeRepr.of[EmptyTuple])((curr, acc) => TupleCons.appliedTo(curr :: acc :: Nil))
-        tpe.asType.match { case '[type tpe <: scala.Tuple; tpe] => Type.of[tpe] }
+    boundary[Transformation | ErrorMessage](recurse(transformation)) match {
+      case transformation: Transformation => Right(transformation)
+      case error: ErrorMessage            => Left(error)
     }
   }
 
-  enum IsModified derives Debug {
-    case Yes, No
+  def fromLeaf(leaf: Plan.Leaf): Transformation.Leaf = Transformation.Leaf(leaf.output)
+
+  enum Field derives Debug {
+    case FromSource(name: String, transformation: Transformation)
+    case FromModifier(modifier: Configured.NamedSpecific)
+
   }
 
-  private def renameNamedNodes(
-    transformation: Transformation[Err],
-    rename: String => String,
-    kind: Modifier.Kind
-  ): Transformation[Err] = {
-    def recurse(curr: Transformation[Err]): Transformation[Err] = curr match {
-      case named: Transformation.Named[Err] =>
-        named.updateAll((name, field) => rename(name) -> field.update(recurse))
-      case tup: Transformation.Tuple[Err] =>
-        tup.updateAll(recurse)
-      case opt: Transformation.Optional[Err] =>
-        opt.update(recurse)
-      case either: Transformation.Either[Err] =>
-        either.updateLeft(recurse).updateRight(recurse)
-      case map: Transformation.Map[Err, scala.collection.Map] =>
-        map.updateKey(recurse).updateValue(recurse)
-      case iter: Transformation.Iter[Err, Iterable] =>
-        iter.update(recurse)
-      case leaf: Transformation.Leaf =>
-        leaf
-      case confed: Transformation.ConfedUp =>
-        confed
-      case err: Transformation.Error =>
-        err
+  object Merged {
+    enum Field derives Debug {
+      case FromPrimary(source: Structure.Named, underlying: Transformation.Field)
+      case FromSecondary(
+        name: String,
+        ref: Sources.Ref,
+        accessibleFrom: Set[Sources.Ref],
+        transformation: Leaf | Merged
+      )
     }
-
-    def locally(curr: Transformation[Err]): Transformation[Err] = curr match {
-      case named: Transformation.Named[Err] =>
-        named.updateAll((name, field) => rename(name) -> field)
-      case other => other
-    }
-
-    if kind.isLocal then locally(transformation) else recurse(transformation)
   }
 }

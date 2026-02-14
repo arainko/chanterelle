@@ -1,6 +1,6 @@
 package chanterelle.internal
 
-import chanterelle.internal.Transformation.ConfedUp
+import chanterelle.internal.Plan.ConfedUp
 
 import scala.quoted.*
 
@@ -20,7 +20,7 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class AlreadyConfigured(name: String) extends ErrorMessage {
+  case class AlreadyConfigured(name: String, override val span: Span) extends ErrorMessage {
     def render(using Quotes) = s"The field '$name' has already been configured"
 
   }
@@ -38,7 +38,7 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class UnexpectedTransformation(expected: String, actual: Transformation[Err], override val span: Span)
+  case class UnexpectedTransformation(expected: String, actual: Plan[Err], traversedPath: Path, override val span: Span)
       extends ErrorMessage {
     def render(using Quotes) = {
       val rendered =
@@ -48,7 +48,7 @@ private[chanterelle] object ErrorMessage {
           case other => other.readableName
         }
 
-      s"Couldn't traverse transformation plan, expected $expected but encountered $rendered"
+      s"Couldn't traverse transformation plan, expected $expected but encountered $rendered at ${traversedPath.render}"
     }
 
   }
@@ -60,5 +60,17 @@ private[chanterelle] object ErrorMessage {
       s"Couldn't find an implicit instance of Factory for ${tpe.repr.show(using Printer.TypeReprCode)}"
     }
 
+  }
+
+  case class CantModifySecondaryField(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String = {
+      s"Can't modify a field that has been overridden by a .merge"
+    }
+  }
+
+  case class CanOnlyMergeNamedTuples(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String = {
+      s"Merges can only happen between two named tuples"
+    }
   }
 }

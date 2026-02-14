@@ -21,14 +21,18 @@ object EntryPoint {
     val transformation = for {
       structure = Structure.toplevel[A]
       mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
-      transformation = Transformation.create(structure)
+      transformation = Plan.create(structure)
       given Span = Span.ofMacroExpansion
+      builder @ given Sources.Builder = Sources.newBuilder
       modifiers <- Modifier.parse(mods.toList).leftMap(ErrorsWithSpan)
       given Span = Span.minimalAvailable(modifiers.map(_.span))
-      modifiedTransformation = modifiers.foldLeft(transformation)((transformation, mod) => transformation.applyModifier(mod))
+      modifiedTransformation = modifiers.foldLeft[Plan[Err]](transformation)((transformation, mod) =>
+        transformation.applyModifier(mod)
+      )
       refinedTransformation <- modifiedTransformation.refine.leftMap(ErrorsWithSpan)
       interpretableTransformation <-
-        InterpretableTransformation.create(refinedTransformation).leftMap(err => ErrorsWithSpan(err :: Nil))
+        Transformation.create(refinedTransformation).leftMap(err => ErrorsWithSpan(err :: Nil))
+      given Sources = builder.build
     } yield Interpreter.runTransformation(tuple, interpretableTransformation)
 
     transformation match {

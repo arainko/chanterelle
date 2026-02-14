@@ -529,4 +529,291 @@ class ModifiersSpec extends ChanterelleSuite {
       )
     assertEquals(camelToSnakeToKebabToCamel, camel)
   }
+
+  test("toplevel .merge works") {
+    val tup = (
+      top1 = 1,
+      top2 = 2,
+      top3 = (
+        level1 = 1,
+        level2 = 2,
+        level3 = 3,
+        level4 = (
+          low1 = 1,
+          low2 = 2,
+          low3 = 3
+        )
+      )
+    )
+
+    val mergee = (
+      top1 = "1",
+      top3 = (
+        level1 = "1",
+        level4 = (low4 = 4),
+        level5 = 123
+      ),
+      additional = (asd = 1)
+    )
+
+    val mergee2 = (
+      top3 = (
+        level4 = (oneMore = 3)
+      )
+    )
+
+    val expected =
+      (
+        top1 = mergee.top1,
+        top2 = tup.top2,
+        top3 = (
+          level1 = mergee.top3.level1,
+          level2 = tup.top3.level2,
+          level3 = tup.top3.level3,
+          level4 = (
+            low1 = tup.top3.level4.low1,
+            low2 = tup.top3.level4.low2,
+            low3 = tup.top3.level4.low3,
+            low4 = mergee.top3.level4.low4,
+            oneMore = mergee2.top3.level4.oneMore
+          ),
+          level5 = mergee.top3.level5
+        ),
+        additional = mergee.additional
+      )
+
+    val actual =
+      tup.transform(
+        _.merge(mergee),
+        _.merge(mergee2)
+      )
+
+    assertEquals(expected, actual)
+  }
+
+  test("secondary merges can merge on top of each other") {
+    val empty = NamedTuple.Empty
+
+    val mergee = (
+      top1 = "1",
+      top3 = (
+        level1 = "1",
+        level4 = (low4 = 4),
+        level5 = 123
+      ),
+      additional = (asd = 1, dsa = 2)
+    )
+
+    val mergee2 = (
+      top3 = (
+        level4 = (awoo = 3)
+      )
+    )
+
+    val mergee3 = (additional = (asd = "OVERWRITTEN", moreFields = 3))
+
+    val actual =
+      empty.transform(_.merge(mergee), _.merge(mergee2), _.merge(mergee3))
+
+    val expected =
+      (
+        top1 = mergee.top1,
+        top3 = (
+          level1 = mergee.top3.level1,
+          level4 = (
+            low4 = mergee.top3.level4.low4,
+            awoo = mergee2.top3.level4.awoo
+          ),
+          level5 = mergee.top3.level5
+        ),
+        additional = (
+          asd = mergee3.additional.asd,
+          dsa = mergee.additional.dsa,
+          moreFields = mergee3.additional.moreFields
+        )
+      )
+
+    assertEquals(actual, expected)
+  }
+
+  test("merging an empty tuple -> identity") {
+    val tup = (field1 = 1, field2 = 2, nested = (one = 1, two = 2))
+    val actual = tup.transform(_.merge(NamedTuple.Empty))
+    assertEquals(actual, tup)
+  }
+
+  test("merging on top of an empty tuple -> mergee") {
+    val tup = NamedTuple.Empty
+    val mergee = (field1 = 1, field2 = 2, nested = (one = 1, two = 2))
+    val actual = tup.transform(_.merge(mergee))
+    assertEquals(actual, mergee)
+  }
+
+  test("merging on top of a removed field should not take it into consideration") {
+    val tup = (one = 1, two = 2, nested = (field1 = 1, field2 = 2))
+    val mergee = (nested = (mergedField1 = 3, mergedField2 = 4))
+    val actual = tup.transform(_.remove(_.nested), _.merge(mergee))
+    val expected = (
+      one = tup.one,
+      two = tup.two,
+      nested = (mergedField1 = mergee.nested.mergedField1, mergedField2 = mergee.nested.mergedField2)
+    )
+    assertEquals(actual, expected)
+  }
+
+  test("modifying fields that originate from a primary source is possible even when they are buried deep down in a Merged node") {
+    val tup = (
+      top1 = 1,
+      top2 = 2,
+      top3 = (
+        level1 = 1,
+        level2 = 2,
+        level3 = 3,
+        level4 = (
+          low1 = 1,
+          low2 = 2,
+          low3 = 3,
+          toBeModified = (field1 = 1)
+        )
+      )
+    )
+
+    val mergee = (
+      top1 = "1",
+      top3 = (
+        level1 = "1",
+        level4 = (low4 = 4),
+        level5 = 123
+      ),
+      additional = (asd = 1)
+    )
+
+    val mergee2 = (
+      top3 = (
+        level4 = (oneMore = 3)
+      )
+    )
+
+    val expected =
+      (
+        top1 = mergee.top1,
+        top2 = tup.top2,
+        top3 = (
+          level1 = mergee.top3.level1,
+          level2 = tup.top3.level2,
+          level3 = tup.top3.level3,
+          level4 = (
+            low1 = tup.top3.level4.low1,
+            low2 = tup.top3.level4.low2,
+            low3 = tup.top3.level4.low3,
+            toBeModified = (field1 = 101, newName = 20),
+            low4 = mergee.top3.level4.low4,
+            oneMore = mergee2.top3.level4.oneMore
+          ),
+          level5 = mergee.top3.level5
+        ),
+        additional = mergee.additional
+      )
+
+    val actual =
+      tup.transform(
+        _.merge(mergee),
+        _.merge(mergee2),
+        _.put(_.top3.level4.toBeModified)((newName = 20)),
+        _.update(_.top3.level4.toBeModified.field1)(_ + 100)
+      )
+
+    assertEquals(actual, expected)
+  }
+
+  test(".merge.regional works") {
+    val tup = (
+      top1 = 1,
+      top2 = 2,
+      top3 = (
+        level1 = 1,
+        level2 = 2,
+        level3 = 3,
+        level4 = (
+          low1 = 1,
+          low2 = 2,
+          low3 = 3
+        )
+      )
+    )
+
+    val mergee = (
+      level1 = "1",
+      level4 = (low4 = 4),
+      level5 = 123
+    )
+
+    val expected =
+      (
+        top1 = tup.top1,
+        top2 = tup.top2,
+        top3 = (
+          level1 = mergee.level1,
+          level2 = tup.top3.level2,
+          level3 = tup.top3.level3,
+          level4 = (
+            low1 = tup.top3.level4.low1,
+            low2 = tup.top3.level4.low2,
+            low3 = tup.top3.level4.low3,
+            low4 = mergee.level4.low4
+          ),
+          level5 = mergee.level5
+        )
+      )
+
+    val actual =
+      tup.transform(_.merge(mergee).regional(_.top3))
+
+    assertEquals(expected, actual)
+  }
+
+  test("a path with a weirdly constructed AST is parsed properly") {
+    val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
+
+    val mergee = (level1Field2 = (anotherField = 6))
+
+    val actual = tup.transform(_.merge(mergee).regional(_.field2))
+
+    val expected = (
+      field1 = tup.field1,
+      field2 = (
+        level1Field1 = tup.field2.level1Field1,
+        level1Field2 = (
+          level2Field = tup.field2.level1Field2.level2Field,
+          anotherField = mergee.level1Field2.anotherField
+        )
+      )
+    )
+
+    assertEquals(actual, expected)
+  }
+
+  test("_.merge.regional only works when targeting a named tuple (i.e. it errors out with a nice error message)") {
+
+    assertFailsToCompileWith {
+      """
+      val tup = (level1 = (name = 1), toplevel = 1)
+      val mergee = (merged = 2)
+    
+      tup.transform(_.merge(mergee).regional(_.toplevel))
+      """
+    }("Couldn't traverse transformation plan, expected named tuple but encountered ordinary value at _.toplevel")
+  }
+
+  test("modifying a field that has been overridden by a merge errors out in a nice way") {
+    assertFailsToCompileWith {
+      """
+      val tup = (field1 = 1, field2 = 2, field3 = 4)
+      val mergee = (field2 = "asd")
+      tup.transform(_.merge(mergee), _.update(_.field2)(_ + 1))
+      """
+    }("Can't modify a field that has been overridden by a .merge")
+
+  }
+
 }

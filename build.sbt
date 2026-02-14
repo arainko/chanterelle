@@ -13,7 +13,8 @@ ThisBuild / mimaBinaryIssueFilters ++= Seq(
   ProblemFilters.exclude[Problem]("chanterelle.internal.*"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.leftElement"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.rightElement"),
-  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.rename")
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.rename"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.merge")
 )
 
 ThisBuild / tlCiReleaseBranches := Seq("main")
