@@ -100,10 +100,10 @@ object TupleModifier {
     def rename(fieldName: FieldName => FieldName): TupleModifier[Tup] & Local[Tup] & Regional[Tup]
 
     /**
-     * Deeply merges named tuples. 
-     * 
-     * Named tuples are merged by field name, fields from the named tuple we merge with (the mergee) take precedence, nested named tuples (that don't come from modifications) and merged values are recursed, other values get completely overwritten using the value from the mergee. 
-     * 
+     * Deeply merges named tuples.
+     *
+     * Named tuples are merged by field name, fields from the named tuple we merge with (the mergee) take precedence, nested named tuples (that don't come from modifications) and merged values are recursed, other values get completely overwritten using the value from the mergee.
+     *
      * {{{
      * val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
      * val mergee = (field2 = (level1Field3 = 5, level1Field2 = (anotherField = 6)))
