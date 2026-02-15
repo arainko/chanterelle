@@ -119,7 +119,7 @@ private[chanterelle] object Transformation {
 
         case p @ Plan.MapLike(source, key, value, _) =>
           val tpe = p.calculateTpe
-          val factory = ((source.tycon, tpe): @unchecked) match {
+          val factory = (source.tycon, tpe).runtimeChecked match {
             case ('[type map[k, v]; map], '[collection.Map[key, value]]) =>
               Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
           }
@@ -127,7 +127,7 @@ private[chanterelle] object Transformation {
 
         case t @ Plan.IterLike(source, elem, _) =>
           val tpe = t.calculateTpe
-          val factory = ((source.tycon, tpe): @unchecked) match {
+          val factory = (source.tycon, tpe).runtimeChecked match {
             case ('[type coll[a]; coll], '[Iterable[elem]]) =>
               Expr.summon[Factory[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
           }

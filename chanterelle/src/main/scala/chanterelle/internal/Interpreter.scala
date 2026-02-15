@@ -37,14 +37,14 @@ private[chanterelle] object Interpreter {
 
     transformation match {
       case Transformation.Named(source, fields, namesTpe, valuesTpe) =>
-        (namesTpe, valuesTpe): @unchecked match {
+        (namesTpe, valuesTpe).runtimeChecked match {
           case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
             val args = fields.map((_, field) => handleField(source, field))
             val recreated = Expr.ofTupleFromSeq(args.toVector).asExprOf[values]
             '{ $recreated: NamedTuple[names, values] }
         }
       case Transformation.Tuple(source, fields, outputTpe) =>
-        (source.tpe, outputTpe): @unchecked match {
+        (source.tpe, outputTpe).runtimeChecked match {
           case '[source] -> '[output] =>
             val exprs = fields.map {
               case (idx, transformation) =>
@@ -53,14 +53,14 @@ private[chanterelle] object Interpreter {
             Expr.ofTupleFromSeq(exprs.toVector).asExprOf[output]
         }
       case Transformation.Optional(source, paramTransformation, outputTpe) =>
-        (source.tpe, outputTpe): @unchecked match {
+        (source.tpe, outputTpe).runtimeChecked match {
           case ('[Option[a]], '[Option[out]]) =>
             val optValue = primary.asExprOf[Option[a]]
             '{ $optValue.map[out](a => ${ runTransformation('a, paramTransformation).asExprOf[out] }) }
         }
 
       case Transformation.EitherLike(source, left, right, outputTpe) =>
-        (source.tpe, outputTpe): @unchecked match {
+        (source.tpe, outputTpe).runtimeChecked match {
           case ('[scala.Either[e, a]], '[scala.Either[outE, outA]]) =>
             val eitherValue = primary.asExprOf[scala.Either[e, a]]
             '{
@@ -77,7 +77,7 @@ private[chanterelle] object Interpreter {
         }
 
       case Transformation.IterLike(source, paramTransformation, factory, outputTpe) =>
-        (source.tycon, outputTpe, primary): @unchecked match {
+        (source.tycon, outputTpe, primary).runtimeChecked match {
           case (
                 '[type coll[a]; coll],
                 '[Iterable[elem]],
@@ -92,7 +92,7 @@ private[chanterelle] object Interpreter {
         }
 
       case Transformation.MapLike(source, keyTransformation, valueTransformation, fac, outputTpe) =>
-        (source.tycon, outputTpe, primary): @unchecked match {
+        (source.tycon, outputTpe, primary).runtimeChecked match {
           case (
                 '[type outMap[k, v]; outMap],
                 '[collection.Map[outKey, outValue]],
@@ -113,7 +113,7 @@ private[chanterelle] object Interpreter {
 
       case Transformation.Merged(mergees, fields, namesTpe, valuesTpe) =>
         Sources.current.withPrimary(primary) {
-          ((namesTpe, valuesTpe): @unchecked) match {
+          (namesTpe, valuesTpe).runtimeChecked match {
             case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
               val args = fields.map {
                 case (_, Transformation.Merged.Field.FromPrimary(source, field)) =>
