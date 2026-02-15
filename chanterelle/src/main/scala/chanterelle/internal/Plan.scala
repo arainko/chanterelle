@@ -262,7 +262,7 @@ private[chanterelle] object Plan {
     def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
       val values = calculateValuesTpe
       val names = calculateNamesTpe
-      ((names, values): @unchecked) match {
+      (names, values).runtimeChecked match {
         case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
           Type.of[NamedTuple.NamedTuple[names, values]]
       }
@@ -331,7 +331,7 @@ private[chanterelle] object Plan {
     def calculateTpe(using Quotes): Type[? <: NamedTuple.AnyNamedTuple] = {
       val values = calculateValuesTpe
       val names = calculateNamesTpe
-      ((names, values): @unchecked) match {
+      (names, values).runtimeChecked match {
         case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
           Type.of[NamedTuple.NamedTuple[names, values]]
       }
@@ -590,7 +590,7 @@ private[chanterelle] object Plan {
     isModified: IsModified
   ) extends Plan[E]("either") {
     def calculateTpe(using Quotes): Type[? <: scala.Either[?, ?]] =
-      (left.calculateTpe, right.calculateTpe): @unchecked match {
+      (left.calculateTpe, right.calculateTpe).runtimeChecked match {
         case '[left] -> '[right] => Type.of[scala.Either[left, right]]
       }
 
@@ -608,7 +608,7 @@ private[chanterelle] object Plan {
     isModified: IsModified
   ) extends Plan[E]("map") {
     def calculateTpe(using Quotes): Type[?] = {
-      ((source.tycon, key.calculateTpe, value.calculateTpe): @unchecked) match {
+      (source.tycon, key.calculateTpe, value.calculateTpe).runtimeChecked match {
         case ('[type map[k, v]; map], '[key], '[value]) => Type.of[map[key, value]]
       }
     }
@@ -626,7 +626,7 @@ private[chanterelle] object Plan {
     isModified: IsModified
   ) extends Plan[E]("iterable") {
     def calculateTpe(using Quotes): Type[?] = {
-      ((source.tycon, elem.calculateTpe): @unchecked) match {
+      (source.tycon, elem.calculateTpe).runtimeChecked match {
         case ('[type coll[a]; coll], '[elem]) =>
           Type.of[coll[elem]]
       }
