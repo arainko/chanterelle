@@ -11,9 +11,9 @@ private[chanterelle] enum Modifier derives Debug {
   def path: Path
   def span: Span
 
-  case Put(path: Path, valueStructure: Structure.Named.Singular, value: Expr[?], span: Span)
-  case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Expr[? => ?], span: Span)
-  case Update(path: Path, tpe: Type[?], function: Expr[? => ?], span: Span)
+  case Put(path: Path, valueStructure: Structure.Named.Singular, value: Sources.Ref, span: Span)
+  case Compute(path: Path, valueStructure: Structure.Named.Singular, value: Sources.Ref, span: Span)
+  case Update(path: Path, tpe: Type[?], function: Sources.Ref, span: Span)
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
   case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
@@ -49,7 +49,7 @@ private[chanterelle] object Modifier {
           .toplevel[v]
           .narrow[Structure.Named.Singular]
           .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
-          .map(valueStructure => Modifier.Put(path, valueStructure, value, Span.fromExpr(cfg)))
+          .map(valueStructure => Modifier.Put(path, valueStructure, sources.add(value), Span.fromExpr(cfg)))
 
       case cfg @ '{
             type selected <: AnyNamedTuple
@@ -60,12 +60,12 @@ private[chanterelle] object Modifier {
           .toplevel[v]
           .narrow[Structure.Named.Singular]
           .toRight(ErrorMessage.ExpectedSingletonNamedTuple(Type.of[v], Span.fromExpr(cfg)))
-          .map(valueStructure => Modifier.Compute(path, valueStructure, value, Span.fromExpr(cfg)))
+          .map(valueStructure => Modifier.Compute(path, valueStructure, sources.add(value), Span.fromExpr(cfg)))
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
             builder.update[selected](${ AsTerm(PathSelector(path)) })[newField]($fn)
           } =>
-        Right(Modifier.Update(path, Type.of[newField], fn, Span.fromExpr(cfg)))
+        Right(Modifier.Update(path, Type.of[newField], sources.add(fn), Span.fromExpr(cfg)))
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) => builder.remove[selected](${ AsTerm(PathSelector(path)) }) } =>
         path.stripLast.collect {
