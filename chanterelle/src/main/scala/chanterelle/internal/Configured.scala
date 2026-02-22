@@ -7,7 +7,7 @@ private[chanterelle] enum Configured derives Debug {
 
   case Update(
     tpe: Type[?],
-    fn: Expr[? => ?]
+    fn: Sources.Ref
   )
 }
 
@@ -19,7 +19,7 @@ private[chanterelle] object Configured {
   object NamedSpecific {
     case class Add(
       valueStructure: Structure.Named.Singular,
-      value: Expr[?]
+      value: Sources.Ref
     ) extends NamedSpecific {
       export valueStructure.fieldName
       export valueStructure.valueStructure.tpe
@@ -27,7 +27,7 @@ private[chanterelle] object Configured {
 
     case class Compute(
       valueStructure: Structure.Named.Singular,
-      fn: Expr[? => ?]
+      fn: Sources.Ref
     ) extends NamedSpecific {
       export valueStructure.fieldName
       export valueStructure.valueStructure.tpe
