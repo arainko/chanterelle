@@ -73,4 +73,10 @@ private[chanterelle] object ErrorMessage {
       s"Merges can only happen between two named tuples"
     }
   }
+
+  case class AmbiguousRename(ambs: Map[String, Vector[String]], override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String = {
+      s"Ambiguous field renames detected: ${System.lineSeparator()}${ambs.map((source, dest) => s"  * field '$source' maps to: ${dest.map(name => s"'$name'").mkString(", ")}").mkString(System.lineSeparator())}"
+    }
+  }
 }

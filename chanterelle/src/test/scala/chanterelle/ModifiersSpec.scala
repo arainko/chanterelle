@@ -816,4 +816,48 @@ class ModifiersSpec extends ChanterelleSuite {
 
   }
 
+  test("ambiguous renames error out (regional, named tuple)") {
+    assertFailsToCompileContains {
+      """
+      val tup = (field = "asd", FIELD = 2)
+      val res = tup.transform(_.rename(_.toUpperCase)) 
+      """
+    }("field 'FIELD' maps to: 'field', 'FIELD'")
+  }
+
+  test("ambiguous renames error out (local, named tuple)") {
+    assertFailsToCompileContains {
+      """
+      val tup = (field = "asd", FIELD = 2)
+      val res = tup.transform(_.rename(_.toUpperCase).local(a => a)) 
+      """
+    }("field 'FIELD' maps to: 'field', 'FIELD'")
+  }
+
+  test("ambiguous renames error out (regional, merged)") {
+    assertFailsToCompileContains {
+      """
+      val tup = (field = "asd", FIELD = 2)
+      val mergee = (additionalField = 2)
+      val res = tup.transform(
+        _.merge(mergee),
+        _.rename(_.toUpperCase)
+      )
+      """
+    }("field 'FIELD' maps to: 'field', 'FIELD'")
+  }
+
+  test("ambiguous renames error out (local, merged)") {
+    assertFailsToCompileContains {
+      """
+      val tup = (field = "asd", FIELD = 2)
+      val mergee = (additionalField = 2)
+      val res = tup.transform(
+        _.merge(mergee),
+        _.rename(_.toUpperCase).local(a => a)
+      )
+      """
+    }("field 'FIELD' maps to: 'field', 'FIELD'")
+  }
+
 }
