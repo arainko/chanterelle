@@ -5,6 +5,7 @@ import munit.FunSuite
 import scala.annotation.nowarn
 import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
+import scala.compiletime.ops.string.*
 
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
@@ -859,5 +860,102 @@ class ModifiersSpec extends ChanterelleSuite {
       """
     }("field 'FIELD' maps to: 'field', 'FIELD'")
   }
+
+  test(".transformViaType works") {
+    type RenameSpecific[Source <: String] <: String = Source match {
+      case "i_want_this_one_renamed" => "aight"
+      case "andThisOneToo"           => "thereYouGo"
+      case _                         => Source
+    }
+    val tup = (field = 1, i_want_this_one_renamed = 2, andThisOneToo = 3)
+    tup.transform(_.rename(_.transformViaType[RenameSpecific]))
+  }
+
+  test(".transformViaType works with a more complicated match type") {
+    val camel = (
+      simpleField = 1,
+      fieldWithNumber1 = 2,
+      field2WithNumber = 3,
+      _leadingUnderscore = 4,
+      trailingUnderscore_ = 5,
+      fieldWith123Numbers = 7
+    )
+    val expectedSnake = (
+      simple_field = 1,
+      field_with_number1 = 2,
+      field2_with_number = 3,
+      _leading_underscore = 4,
+      trailing_underscore_ = 5,
+      field_with123_numbers = 7
+    )
+    val snake = camel.transform(_.rename(_.transformViaType[SnakeCaseConverter.ToSnakeCase]))
+    assertEquals(snake, expectedSnake)
+  }
+
+  test(".transformViaType with a match type that fails to evaluate") {
+    assertFailsToCompileWith {
+      """
+      type RenameSpecific[Source <: String] <: String = Source match {
+        case "i_want_this_one_renamed" => "aight"
+        case "andThisOneToo" => "thereYouGo"
+      }
+      val tup = (field = 1, i_want_this_one_renamed = 2, andThisOneToo = 3)
+      tup.transform(_.rename(_.transformViaType[RenameSpecific]))
+      """
+    }("Couldn't evaluate match type over a field name: 'field'")
+  }
+}
+
+object SnakeCaseConverter {
+
+  type Uppercase = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" |
+    "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+
+  type ToLower[S <: String] <: String = S match
+    case "A" => "a"
+    case "B" => "b"
+    case "C" => "c"
+    case "D" => "d"
+    case "E" => "e"
+    case "F" => "f"
+    case "G" => "g"
+    case "H" => "h"
+    case "I" => "i"
+    case "J" => "j"
+    case "K" => "k"
+    case "L" => "l"
+    case "M" => "m"
+    case "N" => "n"
+    case "O" => "o"
+    case "P" => "p"
+    case "Q" => "q"
+    case "R" => "r"
+    case "S" => "s"
+    case "T" => "t"
+    case "U" => "u"
+    case "V" => "v"
+    case "W" => "w"
+    case "X" => "x"
+    case "Y" => "y"
+    case "Z" => "z"
+    case _   => S
+
+  type ToSnakeCase[S <: String] <: String =
+    Length[S] match
+      case 0 =>
+        ""
+      case _ =>
+        ToLower[Substring[S, 0, 1]] + SnakeStep[Substring[S, 1, Length[S]]]
+
+  type SnakeStep[S <: String] <: String =
+    Length[S] match
+      case 0 =>
+        ""
+      case _ =>
+        Substring[S, 0, 1] match
+          case Uppercase =>
+            "_" + ToLower[Substring[S, 0, 1]] + SnakeStep[Substring[S, 1, Length[S]]]
+          case _ =>
+            Substring[S, 0, 1] + SnakeStep[Substring[S, 1, Length[S]]]
 
 }
