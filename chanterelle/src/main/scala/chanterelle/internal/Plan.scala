@@ -129,7 +129,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
           Plan.ConfedUp(Configured.Update(m.tpe, m.function), m.span)
 
         case m: Modifier.Rename =>
-          Plan.renameNamedNodes(transformation, m.fieldName, m.kind)
+          Plan.renameNamedNodes(transformation, m.fieldName, m.kind, m.span)
 
         case m: Modifier.Merge =>
           transformation.narrow(
@@ -707,11 +707,18 @@ private[chanterelle] object Plan {
   private def renameNamedNodes(
     transformation: Plan[Err],
     rename: String => String,
-    kind: Modifier.Kind
+    kind: Modifier.Kind,
+    span: Span
   ): Plan[Err] = {
+    inline def checkAmbiguities(fields: VectorMap[String, ?])(inline ifNotAmb: Plan[Err]) = {
+      val ambiguities = fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
+      if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
+      else ifNotAmb
+    }
+
     def recurse(curr: Plan[Err]): Plan[Err] = curr match {
       case named: Plan.Named[Err] =>
-        named.updateAll((name, field) => rename(name) -> field.update(recurse))
+        checkAmbiguities(named.fields)(named.updateAll((name, field) => rename(name) -> field.update(recurse)))
       case tup: Plan.Tuple[Err] =>
         tup.updateAll(recurse)
       case opt: Plan.Optional[Err] =>
@@ -725,7 +732,7 @@ private[chanterelle] object Plan {
       case merged: Plan.Merged[Err] =>
         def update(merged: Plan.Merged[Err]): Plan.Merged[Err] =
           merged.updateAll(rename, _.update(recurse), update)
-        update(merged)
+        checkAmbiguities(merged.fields)(update(merged))
       case leaf: Plan.Leaf =>
         leaf
       case confed: Plan.ConfedUp =>
@@ -736,9 +743,9 @@ private[chanterelle] object Plan {
 
     def locally(curr: Plan[Err]): Plan[Err] = curr match {
       case named: Plan.Named[Err] =>
-        named.updateAll((name, field) => rename(name) -> field)
+        checkAmbiguities(named.fields)(named.updateAll((name, field) => rename(name) -> field))
       case merged: Plan.Merged[Err] =>
-        merged.updateAll(rename, identity, identity)
+        checkAmbiguities(merged.fields)(merged.updateAll(rename, identity, identity))
       case other => other
     }
 
