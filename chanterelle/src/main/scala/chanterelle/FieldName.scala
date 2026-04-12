@@ -72,7 +72,23 @@ sealed trait FieldName {
    */
   def capitalize: FieldName
 
-  def matchTyped[Trans[x <: String] <: String]: FieldName
+  /**
+   * Evaluate `Trans` over each field, yielding the new name.
+   * {{{
+   * type RenameSpecific[Source <: String] <: String = Source match {
+   *    case "i_want_this_one_renamed" => "aight"
+   *    case "andThisOneToo" => "thereYouGo"
+   *    case _ => Source
+   *  }
+   * val tup = (field = 1, i_want_this_one_renamed = 2, andThisOneToo = 3)
+   * tup.transform(_.rename(_.transformViaType[RenameSpecific])) // yields (field: Int, aight: Int, thereYouGo: Int)
+   * }}}
+   *
+   * Match types are turing-complete so you can do ANY transformation you desire here, this modifier serves as a fallback mechanism in case a specific name transformation isn't supported by other means.
+   *
+   * Note that this modifier will evaluate the match you provide multiple times (exactly once per each field) so keep that in mind - match type resolution is not the fastest thing in the world and you could damage your compiletimes.
+   */
+  def transformViaType[Trans[source <: String] <: String]: FieldName
 }
 
 object FieldName {
