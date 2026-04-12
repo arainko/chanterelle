@@ -711,9 +711,9 @@ private[chanterelle] object Plan {
     span: Span
   ): Plan[Err] = {
     inline def checkAmbiguities(fields: VectorMap[String, ?])(inline ifNotAmb: Plan[Err]) = {
-        val ambiguities = fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
-        if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
-        else ifNotAmb
+      val ambiguities = fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
+      if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
+      else ifNotAmb
     }
 
     def recurse(curr: Plan[Err]): Plan[Err] = curr match {
