@@ -86,7 +86,7 @@ sealed trait FieldName {
    *
    * Match types are turing-complete so you can do ANY transformation you desire here, this modifier serves as a fallback mechanism in case a specific name transformation isn't supported by other means.
    *
-   * Note that this modifier will evaluate the match you provide multiple times (exactly once per each field) so keep that in mind - match type resolution is not the fastest thing in the world and you could damage your compiletimes.
+   * Note that this modifier will evaluate the match type you provide multiple times (exactly once per each field) so keep that in mind - match type resolution is not the fastest thing in the world and you could damage your compiletimes.
    */
   def transformViaType[Trans[source <: String] <: String]: FieldName
 }
