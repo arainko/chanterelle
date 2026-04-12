@@ -79,8 +79,8 @@ private[chanterelle] object Structure {
 
   object Collection {
     enum Repr derives Debug {
-      case Map[F[k, v] <: scala.collection.Map[k, v]](tycon: Type[F], key: Structure, value: Structure)
-      case Iter[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
+      case MapLike[F[k, v] <: scala.collection.Map[k, v]](tycon: Type[F], key: Structure, value: Structure)
+      case IterLike[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
     }
   }
 
@@ -189,7 +189,7 @@ private[chanterelle] object Structure {
                     Structure.Collection(
                       tpe,
                       path,
-                      Structure.Collection.Repr.Map(
+                      Structure.Collection.Repr.MapLike(
                         Type.of[map],
                         Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
                         Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
@@ -206,7 +206,7 @@ private[chanterelle] object Structure {
                     Structure.Collection(
                       tpe,
                       path,
-                      Structure.Collection.Repr.Iter(
+                      Structure.Collection.Repr.IterLike(
                         Type.of[coll],
                         Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
                       )

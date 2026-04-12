@@ -1,6 +1,6 @@
 import com.typesafe.tools.mima.core._
 
-ThisBuild / scalaVersion := "3.7.4"
+ThisBuild / scalaVersion := "3.8.3"
 
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / organization := "io.github.arainko"
@@ -13,7 +13,8 @@ ThisBuild / mimaBinaryIssueFilters ++= Seq(
   ProblemFilters.exclude[Problem]("chanterelle.internal.*"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.leftElement"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.rightElement"),
-  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.rename")
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.rename"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.merge")
 )
 
 ThisBuild / tlCiReleaseBranches := Seq("main")
@@ -46,7 +47,7 @@ lazy val chanterelle =
         "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
       libraryDependencies ++= Seq(
-        "org.scalameta" %%% "munit" % "1.2.1" % Test
+        "org.scalameta" %%% "munit" % "1.2.4" % Test
       )
     )
     .jsSettings(

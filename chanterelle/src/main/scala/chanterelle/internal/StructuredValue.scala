@@ -45,7 +45,7 @@ private[chanterelle] object StructuredValue {
       if parentStructure.isPlain then accessFieldByName(s"_${index + 1}", parentStructure.elements(index).tpe).asExpr
       else
         val tpeAtIndex = parentStructure.elements(index).tpe
-        (expr, tpeAtIndex): @unchecked match {
+        (expr, tpeAtIndex).runtimeChecked match {
           case '{ $prod: scala.Product } -> '[tpe] => '{ $prod.productElement(${ Expr(index) }).asInstanceOf[tpe] }
         }
     }
