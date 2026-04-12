@@ -710,11 +710,15 @@ private[chanterelle] object Plan {
     kind: Modifier.Kind,
     span: Span
   ): Plan[Err] = {
+    inline def checkAmbiguities(fields: VectorMap[String, ?])(inline ifNotAmb: Plan[Err]) = {
+        val ambiguities = fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
+        if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
+        else ifNotAmb
+    }
+
     def recurse(curr: Plan[Err]): Plan[Err] = curr match {
       case named: Plan.Named[Err] =>
-        val ambiguities = named.fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
-        if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
-        else named.updateAll((name, field) => rename(name) -> field.update(recurse))
+        checkAmbiguities(named.fields)(named.updateAll((name, field) => rename(name) -> field.update(recurse)))
       case tup: Plan.Tuple[Err] =>
         tup.updateAll(recurse)
       case opt: Plan.Optional[Err] =>
@@ -728,10 +732,7 @@ private[chanterelle] object Plan {
       case merged: Plan.Merged[Err] =>
         def update(merged: Plan.Merged[Err]): Plan.Merged[Err] =
           merged.updateAll(rename, _.update(recurse), update)
-
-        val ambiguities = merged.fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
-        if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
-        else update(merged)
+        checkAmbiguities(merged.fields)(update(merged))
       case leaf: Plan.Leaf =>
         leaf
       case confed: Plan.ConfedUp =>
@@ -742,14 +743,9 @@ private[chanterelle] object Plan {
 
     def locally(curr: Plan[Err]): Plan[Err] = curr match {
       case named: Plan.Named[Err] =>
-        val ambiguities = named.fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
-        if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
-        else named.updateAll((name, field) => rename(name) -> field)
+        checkAmbiguities(named.fields)(named.updateAll((name, field) => rename(name) -> field))
       case merged: Plan.Merged[Err] =>
-        val ambiguities = merged.fields.keys.groupBy(rename).filter((_, ambs) => ambs.size > 1)
-        if ambiguities.nonEmpty then Plan.Error(ErrorMessage.AmbiguousRename(ambiguities, span))
-        else merged.updateAll(rename, identity, identity)
-
+        checkAmbiguities(merged.fields)(merged.updateAll(rename, identity, identity))
       case other => other
     }
 
