@@ -48,7 +48,7 @@ lazy val chanterelle =
         "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
       libraryDependencies ++= Seq(
-        "org.scalameta" %%% "munit" % "1.2.4" % Test
+        "org.scalameta" %%% "munit" % "1.3.0" % Test
       )
     )
     .jsSettings(
