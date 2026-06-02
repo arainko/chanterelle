@@ -5,6 +5,7 @@ import chanterelle.internal.Structure.Leaf
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
+import scala.deriving.Mirror
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -123,8 +124,13 @@ private[chanterelle] object Structure {
 
         // TODO: report to dotty: it's not possible to match on a NamedTuple type like this: 'case '[NamedTuple[names, values]] => ...', this match always fails, you need to decompose stuff like the below
         case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
-          val valuesTpe = Type.of[NamedTuple.DropNames[t]]
-          val namesTpe = Type.of[NamedTuple.Names[t]]
+          import quotes.reflect.*
+          Expr.summon[Mirror.ProductOf[t]] match {
+            case Some('{ $m: Mirror { type MirroredElemLabels = labels; } })
+          }
+          val (namesTpe, valuesTpe) = tpe.repr.dealias.simplified match {
+            case AppliedType(_, names :: values :: Nil) => names.asType.asInstanceOf[Type[? <: scala.Tuple]] -> values.asType.asInstanceOf[Type[? <: scala.Tuple]]
+          }
           val transformations =
             TupleTypes
               .unroll(valuesTpe)
@@ -141,7 +147,7 @@ private[chanterelle] object Structure {
           if transformations.size == 1 then
             val (fieldName, valueStructure) = transformations.head
             Structure.Named.Singular(tpe, namesTpe, valuesTpe, fieldName, valueStructure, path)
-          else Structure.Named.Freeform(tpe, namesTpe, valuesTpe, path, transformations)
+          else Structure.Named.Freeform(tpe.repr.simplified.dealias.asType.asInstanceOf[Type[? <: NamedTuple.AnyNamedTuple]], namesTpe, valuesTpe.repr.simplified.asType.asInstanceOf[Type[? <: scala.Tuple]], path, transformations)
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =

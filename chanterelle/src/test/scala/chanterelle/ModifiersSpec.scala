@@ -904,6 +904,27 @@ class ModifiersSpec extends ChanterelleSuite {
       """
     }("Couldn't evaluate match type over a field name: 'field'")
   }
+
+  test("operating on NamedTuple.From works") {
+    case class Track(
+      title: String,
+      isrc: String,
+    )
+
+    type Identity[A] = A match {
+      case NamedTuple.NamedTuple[a, b] => NamedTuple.NamedTuple[a, b]
+    }
+
+    val a: Identity[NamedTuple.From[Track]] = ???
+
+    // val d = a.toTuple
+
+    // val b = chanterelle.hidden.Tuples.valuesOf(a)
+
+    chanterelle.internal.Logger.locally {
+      a.transform(_.remove(_.title))
+    }
+  }
 }
 
 object SnakeCaseConverter {

@@ -21,12 +21,22 @@ private[chanterelle] object StructuredValue {
 
     private def namedTupleToTuple(structure: Structure.Named)(using Quotes) = {
       import quotes.reflect.*
-      val TuplesCompanion = '{ Tuples }.asTerm
-      Select
-        .unique(TuplesCompanion, "valuesOf")
-        .appliedToTypes(structure.namesTpe.repr :: structure.valuesTpe.repr :: Nil)
-        .appliedTo(expr.asTerm)
-        .asExpr
+      // NamedTuple.toTuple[("i", "b"), (Int, Int)]((i = 1, b = 2))
+      // val TuplesCompanion = '{ NamedTuple }.asTerm
+      (structure.namesTpe, structure.valuesTpe).runtimeChecked match {
+        case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
+          '{
+            $expr.asInstanceOf[values]
+            // NamedTuple.toTuple(${ expr.asExprOf[NamedTuple.NamedTuple[names, values]] }): values
+            // .toTuple
+          }
+      }
+     
+      // Select
+      //   .unique(TuplesCompanion, "toTuple")
+      //   .appliedToTypes(structure.namesTpe.repr :: structure.valuesTpe.repr :: Nil)
+      //   .appliedTo(expr.asTerm)
+      //   .asExpr
     }
 
     private def accessNamedTupleFieldByName(name: String, structure: Structure.Named)(using Quotes) = {

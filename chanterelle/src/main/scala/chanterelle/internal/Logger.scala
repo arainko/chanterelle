@@ -12,7 +12,7 @@ private[chanterelle] object Logger {
   }
 
   // Logger Config
-  private[chanterelle] transparent inline given level: Level = Level.Off
+  private[chanterelle] transparent inline given level: Level = Level.Info
 
   @scala.annotation.publicInBinary
   private[Logger] val output = Output.StdOut
