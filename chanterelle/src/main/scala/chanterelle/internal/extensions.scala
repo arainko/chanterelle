@@ -6,7 +6,10 @@ extension (tpe: Type[? <: AnyKind]) {
   def assertBoundedBy[A: Type as A](using Quotes): Type[? <: A] =
     tpe match {
       case tpe @ '[A] => tpe
-      case _ => quotes.reflect.report.errorAndAbort(s"${Type.show(using tpe)} is not bounded by ${Type.show[A]}. This is a bug in chanterelle.")
+      case _          =>
+        quotes.reflect.report.errorAndAbort(
+          s"${Type.show(using tpe)} is not bounded by ${Type.show[A]}. This is a bug in chanterelle."
+        )
     }
 
   private[chanterelle] def fullName(using Quotes): String = {
