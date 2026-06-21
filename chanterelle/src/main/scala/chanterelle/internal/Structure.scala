@@ -123,31 +123,52 @@ private[chanterelle] object Structure {
         case SupportedCollection(structure) => structure
 
         // TODO: report to dotty: it's not possible to match on a NamedTuple type like this: 'case '[NamedTuple[names, values]] => ...', this match always fails, you need to decompose stuff like the below
-        case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
+        case '[type t <: NamedTuple.AnyNamedTuple; t] =>
           import quotes.reflect.*
           Expr.summon[Mirror.ProductOf[t]] match {
-            case Some('{ $m: Mirror { type MirroredElemLabels = labels; } })
-          }
-          val (namesTpe, valuesTpe) = tpe.repr.dealias.simplified match {
-            case AppliedType(_, names :: values :: Nil) => names.asType.asInstanceOf[Type[? <: scala.Tuple]] -> values.asType.asInstanceOf[Type[? <: scala.Tuple]]
-          }
-          val transformations =
-            TupleTypes
-              .unroll(valuesTpe)
-              .lazyZip(TupleTypes.unrollStrings(namesTpe.repr))
-              .map((tpe, name) =>
-                name -> (tpe.asType match {
-                  case '[tpe] =>
-                    Structure.of[tpe](
-                      path.appended(Path.Segment.Field(Type.of[tpe], name))
-                    )
-                })
-              )(using VectorMap)
+            case Some('{
+                  type labels <: scala.Tuple
+                  type tpes <: scala.Tuple
+                  type tpe <:  NamedTuple.AnyNamedTuple
+                  $m: Mirror { type MirroredElemLabels = `labels`; type MirroredElemTypes = `tpes`; type MirroredType = `tpe` }
+                }) =>
 
-          if transformations.size == 1 then
-            val (fieldName, valueStructure) = transformations.head
-            Structure.Named.Singular(tpe, namesTpe, valuesTpe, fieldName, valueStructure, path)
-          else Structure.Named.Freeform(tpe.repr.simplified.dealias.asType.asInstanceOf[Type[? <: NamedTuple.AnyNamedTuple]], namesTpe, valuesTpe.repr.simplified.asType.asInstanceOf[Type[? <: scala.Tuple]], path, transformations)
+
+              // val (namesTpe, valuesTpe) = tpe.repr.dealias.simplified match {
+              //   case AppliedType(_, names :: values :: Nil) =>
+              //     names.asType.asInstanceOf[Type[? <: scala.Tuple]] -> values.asType.asInstanceOf[Type[? <: scala.Tuple]]
+              // }
+              // val namesTpe = 
+              val (namesTpe, valuesTpe) = (Type.of[labels], Type.of[tpes])
+              val tpe = Type.of[tpe]
+              val unrolledValues = TupleTypes.unroll(valuesTpe)
+              val unrolledNames = TupleTypes.unrollStrings(namesTpe.repr)
+              val rolledUpNamedTuple = TupleTypes.rollupNamedTuple(unrolledNames.zip(unrolledValues)).asInstanceOf[Type[? <: NamedTuple.AnyNamedTuple]]
+              val transformations =
+                unrolledValues
+                  .lazyZip(unrolledNames)
+                  .map((tpe, name) =>
+                    name -> (tpe.asType match {
+                      case '[tpe] =>
+                        Structure.of[tpe](
+                          path.appended(Path.Segment.Field(Type.of[tpe], name))
+                        )
+                    })
+                  )(using VectorMap)
+
+              if transformations.size == 1 then
+                val (fieldName, valueStructure) = transformations.head
+                Structure.Named.Singular(rolledUpNamedTuple, namesTpe, valuesTpe, fieldName, valueStructure, path)
+              else
+                Structure.Named.Freeform(
+                  // TupleTypes.rollup()
+                  rolledUpNamedTuple,
+                  namesTpe,
+                  valuesTpe,
+                  path,
+                  transformations
+                )
+          }
 
         case tpe @ '[Any *: scala.Tuple] if !tpe.repr.isTupleN => // let plain tuples be caught later on
           val elements =

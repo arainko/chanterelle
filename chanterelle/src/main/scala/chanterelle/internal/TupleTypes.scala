@@ -75,4 +75,12 @@ private[chanterelle] object TupleTypes {
         tpe.asType
     }
   }
+
+  def rollupNamedTuple(using Quotes)(fields: Vector[(String, quotes.reflect.TypeRepr)]) = {
+    import quotes.reflect.*
+    val (names, values) = fields.unzip
+    (rollup(names.map(str => ConstantType(StringConstant(str)))) -> rollup(values)).runtimeChecked match {
+      case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] => Type.of[NamedTuple.NamedTuple[names, values]]
+    }
+  }
 }

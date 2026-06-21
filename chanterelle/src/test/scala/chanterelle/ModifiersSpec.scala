@@ -915,7 +915,7 @@ class ModifiersSpec extends ChanterelleSuite {
       case NamedTuple.NamedTuple[a, b] => NamedTuple.NamedTuple[a, b]
     }
 
-    val a: Identity[NamedTuple.From[Track]] = ???
+    val a: Identity[NamedTuple.From[Track]] = (title = "asd", isrc = "asd")
 
     // val d = a.toTuple
 

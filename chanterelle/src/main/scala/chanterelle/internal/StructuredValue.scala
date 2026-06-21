@@ -22,21 +22,22 @@ private[chanterelle] object StructuredValue {
     private def namedTupleToTuple(structure: Structure.Named)(using Quotes) = {
       import quotes.reflect.*
       // NamedTuple.toTuple[("i", "b"), (Int, Int)]((i = 1, b = 2))
-      // val TuplesCompanion = '{ NamedTuple }.asTerm
-      (structure.namesTpe, structure.valuesTpe).runtimeChecked match {
-        case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
-          '{
-            $expr.asInstanceOf[values]
-            // NamedTuple.toTuple(${ expr.asExprOf[NamedTuple.NamedTuple[names, values]] }): values
-            // .toTuple
-          }
-      }
-     
-      // Select
-      //   .unique(TuplesCompanion, "toTuple")
-      //   .appliedToTypes(structure.namesTpe.repr :: structure.valuesTpe.repr :: Nil)
-      //   .appliedTo(expr.asTerm)
-      //   .asExpr
+      val TuplesCompanion = '{ Tuples }.asTerm
+      // (structure.namesTpe, structure.valuesTpe).runtimeChecked match {
+      //   case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
+      //     '{
+      //       // $expr.asInstanceOf[values]
+      //       NamedTuple.toTuple(${ expr.asExprOf[NamedTuple.NamedTuple[names, values]] }): values
+      //       // .toTuple
+      //     }
+      // }
+      Typed(
+        Select
+          .unique(TuplesCompanion, "valuesOf")
+          .appliedToTypes(structure.namesTpe.repr :: structure.valuesTpe.repr :: Nil)
+          .appliedTo(expr.asTerm),
+        TypeTree.of(using structure.valuesTpe)
+      ).asExpr
     }
 
     private def accessNamedTupleFieldByName(name: String, structure: Structure.Named)(using Quotes) = {
@@ -52,8 +53,11 @@ private[chanterelle] object StructuredValue {
     }
 
     private def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
-      if parentStructure.isPlain then accessFieldByName(s"_${index + 1}", parentStructure.elements(index).tpe).asExpr
-      else
+      // parentStructure.tpe.repr.typeSymbol.declaredField()
+      // if parentStructure.isPlain then accessFieldByName(s"_${index + 1}", parentStructure.elements(index).tpe).asExpr
+      // else
+        // Tuple
+        // (1, 2, 3).apply()
         val tpeAtIndex = parentStructure.elements(index).tpe
         (expr, tpeAtIndex).runtimeChecked match {
           case '{ $prod: scala.Product } -> '[tpe] => '{ $prod.productElement(${ Expr(index) }).asInstanceOf[tpe] }
