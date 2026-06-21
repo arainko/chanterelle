@@ -3,6 +3,15 @@ package chanterelle.internal
 import scala.quoted.*
 
 extension (tpe: Type[? <: AnyKind]) {
+  def assertBoundedBy[A: Type as A](using Quotes): Type[? <: A] =
+    tpe match {
+      case tpe @ '[A] => tpe
+      case _          =>
+        quotes.reflect.report.errorAndAbort(
+          s"${Type.show(using tpe)} is not bounded by ${Type.show[A]}. This is a bug in chanterelle."
+        )
+    }
+
   private[chanterelle] def fullName(using Quotes): String = {
     import quotes.reflect.*
 
@@ -51,3 +60,8 @@ extension [A](self: List[A]) {
 private[chanterelle] type None = None.type
 
 private[chanterelle] inline def when[A](using DummyImplicit)[B](inline f: A => B) = f
+
+extension (self: Type.type) {
+  private[chanterelle] def normalized[A](using q: Quotes, tpe: Type[A]): Type[?] =
+    tpe.repr.simplified.dealias.asType
+}

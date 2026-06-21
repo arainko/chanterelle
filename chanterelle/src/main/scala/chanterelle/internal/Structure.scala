@@ -26,7 +26,7 @@ private[chanterelle] object Structure {
     def valuesTpe: Type[? <: scala.Tuple]
     def path: Path
     def fields: VectorMap[String, Structure]
-    final def asTuple: Structure.Tuple = Tuple(valuesTpe, path, fields.values.toVector, fields.size < 23)
+    final def asTuple: Structure.Tuple = Tuple(valuesTpe, path, fields.values.toVector)
   }
 
   object Named {
@@ -54,8 +54,7 @@ private[chanterelle] object Structure {
   case class Tuple(
     tpe: Type[? <: scala.Tuple],
     path: Path,
-    elements: Vector[Structure],
-    isPlain: Boolean
+    elements: Vector[Structure]
   ) extends Structure
 
   case class Optional(
@@ -123,8 +122,8 @@ private[chanterelle] object Structure {
 
         // TODO: report to dotty: it's not possible to match on a NamedTuple type like this: 'case '[NamedTuple[names, values]] => ...', this match always fails, you need to decompose stuff like the below
         case tpe @ '[type t <: NamedTuple.AnyNamedTuple; t] =>
-          val valuesTpe = Type.of[NamedTuple.DropNames[t]]
-          val namesTpe = Type.of[NamedTuple.Names[t]]
+          val valuesTpe = Type.normalized[NamedTuple.DropNames[t]].assertBoundedBy[scala.Tuple]
+          val namesTpe = Type.normalized[NamedTuple.Names[t]].assertBoundedBy[scala.Tuple]
           val transformations =
             TupleTypes
               .unroll(valuesTpe)
@@ -154,7 +153,7 @@ private[chanterelle] object Structure {
                     )
                 }
               }
-          Structure.Tuple(tpe, path, elements, isPlain = false)
+          Structure.Tuple(tpe, path, elements)
 
         case tpe @ '[types & scala.Tuple] if tpe.repr.isTupleN =>
           val transformations =
@@ -169,7 +168,7 @@ private[chanterelle] object Structure {
               }
             )
 
-          Structure.Tuple(tpe, path, transformations, isPlain = true)
+          Structure.Tuple(tpe, path, transformations)
 
         case '[tpe] =>
           Structure.Leaf(Type.of[A], path)

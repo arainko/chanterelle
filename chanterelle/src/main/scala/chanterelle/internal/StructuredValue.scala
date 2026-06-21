@@ -42,7 +42,9 @@ private[chanterelle] object StructuredValue {
     }
 
     private def accesFieldByIndex(index: Int, parentStructure: Structure.Tuple)(using Quotes): Expr[Any] = {
-      if parentStructure.isPlain then accessFieldByName(s"_${index + 1}", parentStructure.elements(index).tpe).asExpr
+      val fieldName = s"_${index + 1}"
+      if parentStructure.tpe.repr.typeSymbol.fieldMember(fieldName).exists then
+        accessFieldByName(s"_${index + 1}", parentStructure.elements(index).tpe).asExpr
       else
         val tpeAtIndex = parentStructure.elements(index).tpe
         (expr, tpeAtIndex).runtimeChecked match {

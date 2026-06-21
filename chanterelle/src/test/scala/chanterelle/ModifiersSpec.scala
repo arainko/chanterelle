@@ -904,6 +904,47 @@ class ModifiersSpec extends ChanterelleSuite {
       """
     }("Couldn't evaluate match type over a field name: 'field'")
   }
+
+  test("operating on `NamedTuple.From` works") {
+    case class Track(
+      title: String,
+      isrc: String
+    )
+    val tup: NamedTuple.From[Track] = (title = "title", isrc = "isrc")
+
+    val actual = tup.transform(_.put(a => a)((smh = 1)))
+
+    assertEquals((title = "title", isrc = "isrc", smh = 1), actual)
+  }
+
+  test("operating on results of match types works") {
+    type UnwrapOption[A] = A match {
+      case Option[a] => UnwrapOption[a]
+      case _         => A
+    }
+
+    type Tup = (one: Option[Int], two: Int, three: Option[Option[Int]], four: List[Int])
+
+    val tup: NamedTuple.Map[Tup, UnwrapOption] = (
+      one = 1,
+      two = 2,
+      three = 3,
+      four = List(4)
+    )
+
+    val actual = tup.transform(_.put(a => a)((newField = 5)))
+
+    assertEquals(
+      (
+        one = 1,
+        two = 2,
+        three = 3,
+        four = List(4),
+        newField = 5
+      ),
+      actual
+    )
+  }
 }
 
 object SnakeCaseConverter {
