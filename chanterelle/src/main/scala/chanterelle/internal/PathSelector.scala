@@ -6,6 +6,10 @@ import scala.quoted.*
 private[chanterelle] object PathSelector {
 
   def unapply(using outer: Quotes)(expr: quotes.reflect.Term): Some[Path] = {
+    import quotes.reflect.*
+
+    val NamedTupleCompanion = Symbol.requiredModule("scala.NamedTuple")
+
     @tailrec
     def recurse(using
       Quotes
@@ -66,11 +70,11 @@ private[chanterelle] object PathSelector {
 
         case Apply(
               Apply(
-                TypeApply(Select(Ident("NamedTuple"), "apply") | Ident("apply"), List(namesTpe, _)),
+                TypeApply(Select(ident, "apply"), List(namesTpe, _)),
                 tree :: Nil
               ),
               Literal(IntConstant(idx)) :: Nil
-            ) =>
+            ) if ident.symbol == NamedTupleCompanion =>
           Logger.debug(s"Matching NamedTuple#apply at index ($idx)")
           val names = TupleTypes.unrollStrings(namesTpe.tpe)
           // widen here because we're dealing with a singleton type of the lambda param, eg. '_$4'
