@@ -4,6 +4,7 @@ import chanterelle.FieldName
 
 import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
+import scala.annotation.targetName
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -153,6 +154,18 @@ object TupleModifier {
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
   }
 
+  object Builder {
+    extension [Tup <: Tuple](self: Builder[Tup]) {
+      def map[B](f: Tuple.Union[Tup] => B): TupleModifier[Tup] = ???
+    }
+
+    extension [Tup <: NamedTuple.AnyNamedTuple](self: Builder[Tup]) {
+      @targetName("mapToplevelNamedTuple")
+      def map[B](f: Tuple.Union[NamedTuple.DropNames[Tup]] => B): TupleModifier[Tup] = ???
+    }
+
+  }
+
   sealed trait Local[Tup]
 
   object Local {
@@ -171,4 +184,12 @@ object TupleModifier {
     }
   }
 
+}
+
+object syntaxTest {
+  def modifierOf[A](value: A): TupleModifier.Builder[A] = ???
+
+  modifierOf((int = 1, str = 2, int2 = 3)).map(_ + 1)
+
+  modifierOf((1, 2, 3, 4)).map(_ + 1)
 }
