@@ -44,3 +44,23 @@ extension [Names <: Tuple, Values <: Tuple, Tup <: NamedTuple.NamedTuple[Names, 
   ): NamedTuple[Names, Tuple.Map[Values, Mapped[U, B]]] =
     (self: Tup).map[Tuples.Mapped[U, B]](Tuples.Mapped(f))
 }
+
+type Traverse[Tup <: NamedTuple.AnyNamedTuple, F[_], G[_]] =
+  G[NamedTuple.NamedTuple[NamedTuple.Names[Tup], Tuple.Map[Tuple.InverseMap[NamedTuple.DropNames[Tup], G], F]]]
+
+type Sequence[Tup <: NamedTuple.AnyNamedTuple, F[_]] =
+  Traverse[Tup, [a] =>> a, F]
+
+// as all things in life - breaks down with unmatchables like opaque types (i.e. named tuple smh)
+type InverseWrapped[X <: Tuple, F[_]] <: Tuple = X match {
+  case F[x] *: t  => x *: InverseWrapped[t, F]
+  case a *: t     => a *: InverseWrapped[t, F]
+  case EmptyTuple => EmptyTuple
+}
+
+type SequenceSome[Tup <: NamedTuple.AnyNamedTuple, F[_]] =
+  F[NamedTuple.NamedTuple[NamedTuple.Names[Tup], InverseWrapped[NamedTuple.DropNames[Tup], F]]]
+
+type Seqd = SequenceSome[(int: Option[Int], str: Option[String], arrr: Option[(nest: String)]), Option]
+
+val a: Option[(int: Int, str: String, arrr: (nest: String))] = ??? : Seqd
