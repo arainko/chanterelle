@@ -5,6 +5,7 @@ import chanterelle.FieldName
 import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
 import scala.annotation.targetName
+import chanterelle.Mode
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -152,16 +153,16 @@ object TupleModifier {
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
+
+    def falliblePut[F[+_], Value <: NamedTuple.AnyNamedTuple](
+      value: Value
+    )(using Mode[F], Tuple.IsMappedBy[F][NamedTuple.DropNames[Value]]): TupleModifier[Tup] & Fallible[Tup]
   }
 
   object Builder {
-    extension [Tup <: Tuple](self: Builder[Tup]) {
-      def map[B](f: Tuple.Union[Tup] => B): TupleModifier[Tup] = ???
-    }
 
-    extension [Tup <: NamedTuple.AnyNamedTuple](self: Builder[Tup]) {
-      @targetName("mapToplevelNamedTuple")
-      def map[B](f: Tuple.Union[NamedTuple.DropNames[Tup]] => B): TupleModifier[Tup] = ???
+    extension [Tup <: Tuple | NamedTuple.AnyNamedTuple](self: Builder[Tup]) {
+      def map[B](using union: Union[Tup])(f: union.Result => B): TupleModifier[Tup] = ???
     }
 
   }
@@ -184,12 +185,46 @@ object TupleModifier {
     }
   }
 
+  sealed trait Fallible[Tup]
+
+  object Fallible {
+    extension [Tup](self: TupleModifier[Tup] & Fallible[Tup]) {
+      // @compileTimeOnly("Only usable as part of the .transform DSL")
+      def ? : TupleModifier[Tup] = ???
+    }
+
+  }
+
+}
+
+sealed trait Union[Tup] { type Result }
+
+object Union extends Union[EmptyTuple] {
+  type Result = Nothing
+
+  given tuple[A <: Tuple]: (Union[A] { type Result = Tuple.Union[A] }) = this.asInstanceOf
+  given namedTuple[A <: NamedTuple.AnyNamedTuple](using DummyImplicit): (Union[A] {
+    type Result = Tuple.Union[NamedTuple.DropNames[A]]
+  }) =
+    this.asInstanceOf
 }
 
 object syntaxTest {
   def modifierOf[A](value: A): TupleModifier.Builder[A] = ???
 
-  modifierOf((int = 1, str = 2, int2 = 3)).map(_ + 1)
+  val a = summon[Union[(Int, String, Int)]]
+
+  def someDef[F[_], Value](using
+    Mode[F]
+  )(value: Value)(using (Value <:< F[Any]) | Tuple.IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
+
+  val mode: Mode.FailFast[Option] = ???
+
+  mode.locally {
+    val a = someDef((int = Option(1)))
+    modifierOf((int = 1, str = 2, int2 = 3)).falliblePut((int = Option(1))).?
+  }
 
   modifierOf((1, 2, 3, 4)).map(_ + 1)
+
 }
