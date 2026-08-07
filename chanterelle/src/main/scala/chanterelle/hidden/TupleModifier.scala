@@ -6,6 +6,7 @@ import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
 import scala.annotation.targetName
 import chanterelle.Mode
+import scala.collection.generic.IsMap
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -154,9 +155,17 @@ object TupleModifier {
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
 
-    def falliblePut[F[+_], Value <: NamedTuple.AnyNamedTuple](
+    def falliblePut[F[_], Value <: NamedTuple.AnyNamedTuple](
       value: Value
-    )(using Mode[F], Tuple.IsMappedBy[F][NamedTuple.DropNames[Value]]): TupleModifier[Tup] & Fallible[Tup]
+    )(using Mode[F], IsMappedBy[F][NamedTuple.DropNames[Value]]): TupleModifier[Tup] & Fallible[Tup]
+
+    def traverseEach[F[_], B](using mode: Mode[F], union: Union[Tup])(f: union.Result => F[B]): TupleModifier[Tup] & Fallible[Tup]
+
+    def sequenceEach[F[_]](using
+      F: Mode[F],
+      Values: Values[Tup],
+      ev: Tuple.IsMappedBy[F][Values.Result]
+    ): TupleModifier[Tup] & Fallible[Tup]
   }
 
   object Builder {
@@ -203,11 +212,25 @@ object Union extends Union[EmptyTuple] {
   type Result = Nothing
 
   given tuple[A <: Tuple]: (Union[A] { type Result = Tuple.Union[A] }) = this.asInstanceOf
-  given namedTuple[A <: NamedTuple.AnyNamedTuple](using DummyImplicit): (Union[A] {
+  given namedTuple[A <: NamedTuple.AnyNamedTuple]: (Union[A] {
     type Result = Tuple.Union[NamedTuple.DropNames[A]]
   }) =
     this.asInstanceOf
 }
+
+sealed trait Values[Tup] { type Result <: Tuple }
+
+object Values extends Union[EmptyTuple] {
+  type Result = EmptyTuple
+
+  given tuple[A <: Tuple]: (Values[A] { type Result = A }) = this.asInstanceOf
+  given namedTuple[A <: NamedTuple.AnyNamedTuple]: (Values[A] {
+    type Result = NamedTuple.DropNames[A]
+  }) =
+    this.asInstanceOf
+}
+
+type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F], F]
 
 object syntaxTest {
   def modifierOf[A](value: A): TupleModifier.Builder[A] = ???
@@ -216,13 +239,16 @@ object syntaxTest {
 
   def someDef[F[_], Value](using
     Mode[F]
-  )(value: Value)(using (Value <:< F[Any]) | Tuple.IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
+  )(value: Value)(using IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
 
   val mode: Mode.FailFast[Option] = ???
 
   mode.locally {
-    val a = someDef((int = Option(1)))
-    modifierOf((int = 1, str = 2, int2 = 3)).falliblePut((int = Option(1))).?
+    val a = someDef((int = Some(1), str = 1))
+
+    modifierOf((int = 1, str = 2, int2 = 3)).traverseEach(_.toString.toLongOption).?
+
+    modifierOf((Option(1), Option(2), Option(3))).sequenceEach
   }
 
   modifierOf((1, 2, 3, 4)).map(_ + 1)
