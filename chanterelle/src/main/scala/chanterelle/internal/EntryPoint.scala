@@ -19,6 +19,7 @@ object EntryPoint {
     import quotes.reflect.*
 
     val transformation = for {
+      given Context = Context.create
       structure = Structure.toplevel[A]
       mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
       transformation = Plan.create(structure)

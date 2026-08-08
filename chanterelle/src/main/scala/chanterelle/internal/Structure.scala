@@ -5,6 +5,7 @@ import chanterelle.internal.Structure.Leaf
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
+import chanterelle.Mode
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -83,19 +84,29 @@ private[chanterelle] object Structure {
     }
   }
 
+  case class Wrapped[F[_]](
+    tpe: Type[? <: F[Any]],
+    wrapper: WrapperType[F],
+    path: Path,
+    underlying: Structure
+  ) extends Structure
+
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
     def calculateTpe(using Quotes): Type[?] = tpe
   }
 
-  def toplevel[A: Type](using Quotes): Structure =
+  def toplevel[A: Type](using Quotes, Context): Structure =
     Structure.of[A](Path.empty(Type.of[A]))
 
-  def of[A: Type](path: Path)(using Quotes): Structure = {
+  def of[A: Type](path: Path)(using Quotes, Context): Structure = {
     given Path = path // just for SupportedCollection, maybe come up with something nicer?
     Logger.loggedInfo("Structure"):
       Type.of[A] match {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
+  
+        case WrappedType(mode = mode, wrapper = wrapper, wrapped = wrapped) => 
+          quotes.reflect.report.errorAndAbort(Type.show(using wrapper.wrapper) + Type.show(using wrapped))
 
         case tpe @ '[Option[param]] =>
           Structure.Optional(
@@ -176,7 +187,7 @@ private[chanterelle] object Structure {
   }
 
   private object SupportedCollection {
-    def unapply(tpe: Type[?])(using q: Quotes, path: Path): Option[Structure.Collection] = {
+    def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context): Option[Structure.Collection] = {
       import quotes.reflect.*
       tpe match {
         case tpe @ '[Iterable[param]] =>
@@ -218,5 +229,15 @@ private[chanterelle] object Structure {
         case _ => None
       }
     }
+  }
+
+  private object WrappedType {
+    def unapply(tpe: Type[?])(using q: Quotes, context: Context) = 
+      context match {
+        case Context.Total => None
+        case Context.PossiblyFallible(mode, wrapperType) =>
+          wrapperType.unapply(tpe).map((wrapper, wrapped) => (mode = mode, wrapper = wrapper, wrapped = wrapped))
+      }
+
   }
 }

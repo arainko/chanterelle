@@ -195,28 +195,16 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 }
 
 private[chanterelle] object Plan {
-  type Exact[Struct <: Structure] <: Plan[Nothing] =
-    Struct match {
-      case Structure.Named      => Plan.Named[Nothing]
-      case Structure.Tuple      => Plan.Tuple[Nothing]
-      case Structure.Optional   => Plan.Optional[Nothing]
-      case Structure.Either     => Plan.Either[Nothing]
-      case Structure.Collection =>
-        Plan.MapLike[Nothing, scala.collection.Map] | Plan.IterLike[Nothing, Iterable]
-      case Structure.Leaf => Leaf
-    }
-
   given Debug[Plan[Err]] = Debug.derived
 
-  def create(structure: Structure): Plan[Nothing] = createExact(structure)
 
-  def createExact(structure: Structure): Plan.Exact[structure.type] = {
+  def create(structure: Structure): Plan[Nothing] = {
     structure match {
       case named: Structure.Named =>
         Named(
           named,
           named.fields.map { (name, field) =>
-            name -> (field = Plan.Field.FromSource(name, createExact(field)), removed = false)
+            name -> (field = Plan.Field.FromSource(name, create(field)), removed = false)
           },
           IsModified.No
         )
@@ -224,22 +212,22 @@ private[chanterelle] object Plan {
       case tuple: Structure.Tuple =>
         Tuple(
           tuple,
-          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = createExact(t), removed = false)).to(SortedMap),
+          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = create(t), removed = false)).to(SortedMap),
           IsModified.No
         )
 
       case optional: Structure.Optional =>
-        Optional(optional, createExact(optional.paramStruct), IsModified.No)
+        Optional(optional, create(optional.paramStruct), IsModified.No)
 
       case either: Structure.Either =>
-        Either(either, createExact(either.left), createExact(either.right), IsModified.No)
+        Either(either, create(either.left), create(either.right), IsModified.No)
 
       case coll: Structure.Collection =>
         coll.repr match
           case source @ Structure.Collection.Repr.MapLike(tycon, key, value) =>
-            Plan.MapLike(source, createExact(key), createExact(value), IsModified.No)
+            Plan.MapLike(source, create(key), create(value), IsModified.No)
           case source @ Structure.Collection.Repr.IterLike(tycon, element) =>
-            Plan.IterLike(source, createExact(element), IsModified.No)
+            Plan.IterLike(source, create(element), IsModified.No)
       case leaf: Structure.Leaf =>
         Leaf(leaf)
     }

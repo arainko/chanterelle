@@ -22,7 +22,7 @@ private[chanterelle] enum Modifier derives Debug {
 private[chanterelle] object Modifier {
   def parse[A](
     mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]]
-  )(using sources: Sources.Builder, quotes: Quotes): Either[List[ErrorMessage], List[Modifier]] = {
+  )(using sources: Sources.Builder, quotes: Quotes, context: Context): Either[List[ErrorMessage], List[Modifier]] = {
     import quotes.reflect.*
 
     def parseMerged[Mergee: Type](path: Path, mergee: Expr[Mergee], cfgSpan: Span)(using

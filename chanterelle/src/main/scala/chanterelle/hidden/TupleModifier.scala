@@ -241,14 +241,16 @@ object syntaxTest {
     Mode[F]
   )(value: Value)(using IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
 
-  val mode: Mode.FailFast[Option] = ???
+  val mode: Mode.FailFast[[a] =>> Either[String, a]] = ???
+
+  import chanterelle.*
 
   mode.locally {
-    val a = someDef((int = Some(1), str = 1))
+    (int = Right(1)).transform()
+    // val b = summon[Mode[?]]
+    // modifierOf((int = 1, str = 2, int2 = 3)).traverseEach(_.toString.toLongOption).?
 
-    modifierOf((int = 1, str = 2, int2 = 3)).traverseEach(_.toString.toLongOption).?
-
-    modifierOf((Option(1), Option(2), Option(3))).sequenceEach
+    // modifierOf((Option(1), Option(2), Option(3))).sequenceEach
   }
 
   modifierOf((1, 2, 3, 4)).map(_ + 1)
