@@ -161,11 +161,7 @@ object TupleModifier {
 
     def traverseEach[F[_], B](using mode: Mode[F], union: Union[Tup])(f: union.Result => F[B]): TupleModifier[Tup] & Fallible[Tup]
 
-    def sequenceEach[F[_]](using
-      F: Mode[F],
-      Values: Values[Tup],
-      ev: Tuple.IsMappedBy[F][Values.Result]
-    ): TupleModifier[Tup] & Fallible[Tup]
+    def sequence[F[_]](using Mode[F]): TupleModifier[Tup] & Fallible[Tup]
   }
 
   object Builder {
