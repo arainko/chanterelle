@@ -6,6 +6,7 @@ import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
 import chanterelle.Mode
+import scala.annotation.unused
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -85,10 +86,10 @@ private[chanterelle] object Structure {
   }
 
   case class Wrapped[F[_]](
-    tpe: Type[? <: F[Any]],
+    tpe: Type[?], // <-- it's supposed to be F[underlying.tpe]
     wrapper: WrapperType[F],
     path: Path,
-    underlying: Structure
+    wrapped: Structure
   ) extends Structure
 
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
@@ -104,9 +105,15 @@ private[chanterelle] object Structure {
       Type.of[A] match {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
-  
-        case WrappedType(mode = mode, wrapper = wrapper, wrapped = wrapped) => 
-          quotes.reflect.report.errorAndAbort(Type.show(using wrapper.wrapper) + Type.show(using wrapped))
+
+        case tpe @ WrappedType(mode = mode, wrapper = wrapper: WrapperType[f], wrapped = '[wrapped]) =>
+          @unused given Type[f] = wrapper.wrapper
+          Structure.Wrapped[f](
+            Type.of[f[wrapped]],
+            wrapper,
+            path,
+            Structure.of[wrapped](path.appended(Path.Segment.Element(Type.of[wrapped])))
+          )
 
         case tpe @ '[Option[param]] =>
           Structure.Optional(
@@ -232,9 +239,9 @@ private[chanterelle] object Structure {
   }
 
   private object WrappedType {
-    def unapply(tpe: Type[?])(using q: Quotes, context: Context) = 
+    def unapply(tpe: Type[?])(using q: Quotes, context: Context) =
       context match {
-        case Context.Total => None
+        case Context.Total                               => None
         case Context.PossiblyFallible(mode, wrapperType) =>
           wrapperType.unapply(tpe).map((wrapper, wrapped) => (mode = mode, wrapper = wrapper, wrapped = wrapped))
       }

@@ -60,6 +60,12 @@ private[chanterelle] enum Transformation derives Debug {
     namesTpe: Type[? <: scala.Tuple],
     valuesTpe: Type[? <: scala.Tuple]
   )
+
+  case Wrapped[F[_]](
+    source: Structure.Wrapped[F],
+    wrapped: Transformation,
+    outputTpe: Type[?]
+  )
 }
 
 private[chanterelle] object Transformation {
@@ -135,6 +141,9 @@ private[chanterelle] object Transformation {
 
         case p: Plan.Merged[Nothing] =>
           fromMerged(p)
+
+        case p: Plan.Wrapped[Nothing, f] =>
+          Transformation.Wrapped(p.source, recurse(p.wrapped), p.calculateTpe)
 
         case leaf: Plan.Leaf =>
           Transformation.fromLeaf(leaf)

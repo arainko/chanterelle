@@ -134,6 +134,9 @@ private[chanterelle] object Interpreter {
               '{ $recreated: NamedTuple[names, values] }
           }
 
+        case Transformation.Wrapped(source, wrapped, outputTpe) =>
+          primary // TODO: ACTUAL IMPL!!!
+
         case Transformation.Leaf(_) => primary
       }
     }

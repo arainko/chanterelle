@@ -8,6 +8,7 @@ import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 
 import Plan.Error
+import scala.annotation.unused
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -184,6 +185,8 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
               recurse(tail, acc)
             case Plan.ConfedUp(config, span) =>
               recurse(tail, acc)
+            case Plan.Wrapped(wrapped = plan) =>
+              recurse(plan :: tail, acc)
             case err @ Plan.Error(message) =>
               recurse(tail, err.message :: acc)
 
@@ -196,7 +199,6 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
 private[chanterelle] object Plan {
   given Debug[Plan[Err]] = Debug.derived
-
 
   def create(structure: Structure): Plan[Nothing] = {
     structure match {
@@ -228,6 +230,10 @@ private[chanterelle] object Plan {
             Plan.MapLike(source, create(key), create(value), IsModified.No)
           case source @ Structure.Collection.Repr.IterLike(tycon, element) =>
             Plan.IterLike(source, create(element), IsModified.No)
+
+      case wrapped: Structure.Wrapped[f] =>
+        Plan.Wrapped(wrapped, Plan.create(wrapped.wrapped), IsModified.No)
+
       case leaf: Structure.Leaf =>
         Leaf(leaf)
     }
@@ -624,6 +630,23 @@ private[chanterelle] object Plan {
       this.copy(elem = f(elem), isModified = IsModified.Yes)
   }
 
+  case class Wrapped[+E <: Err, F[_]](
+    source: Structure.Wrapped[F],
+    wrapped: Plan[E],
+    isModified: IsModified
+  ) extends Plan[E]("wrapped") {
+    def calculateTpe(using Quotes): Type[? <: AnyKind] = {
+      @unused given Type[F] = source.wrapper.wrapper
+      (wrapped.calculateTpe).runtimeChecked match {
+        case '[tpe] => Type.of[F[tpe]]
+      }
+    }
+
+    def update(f: Plan[E] => Plan[Err]): Wrapped[Err, F] =
+      this.copy(wrapped = f(wrapped), isModified = IsModified.Yes)
+
+  }
+
   case class Leaf(output: Structure.Leaf) extends Plan[Nothing]("ordinary value") {
     def calculateTpe(using Quotes): Type[?] = output.tpe
     val isModified = IsModified.No
@@ -721,6 +744,8 @@ private[chanterelle] object Plan {
         def update(merged: Plan.Merged[Err]): Plan.Merged[Err] =
           merged.updateAll(rename, _.update(recurse), update)
         checkAmbiguities(merged.fields)(update(merged))
+      case wrapped: Plan.Wrapped[Err, f] =>
+        wrapped.update(recurse)
       case leaf: Plan.Leaf =>
         leaf
       case confed: Plan.ConfedUp =>
