@@ -18,7 +18,7 @@ private[chanterelle] enum Modifier derives Debug {
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
   case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
-  case Sequence(path: Path, span: Span)
+  case Sequence[F[_]](path: Path, span: Span, wrapperType: WrapperType[F])
 }
 
 private[chanterelle] object Modifier {
@@ -118,8 +118,9 @@ private[chanterelle] object Modifier {
             type f[_]
             (builder: TupleModifier.Builder[tup]) => builder.sequence[f](using $mode: Mode[f])
           } =>
-
-        report.errorAndAbort("MATCHED SEQUENCE")
+        Right(
+          Modifier.Sequence(Path.empty(Type.of[Any]), Span.fromExpr(cfg), WrapperType.create[f])
+        )
 
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")

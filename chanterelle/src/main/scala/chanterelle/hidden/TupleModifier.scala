@@ -228,7 +228,7 @@ object Values extends Union[EmptyTuple] {
 
 type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F], F]
 
-object syntaxTest {
+@main def syntaxTest = {
   def modifierOf[A](value: A): TupleModifier.Builder[A] = ???
 
   val a = summon[Union[(Int, String, Int)]]
@@ -237,18 +237,18 @@ object syntaxTest {
     Mode[F]
   )(value: Value)(using IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
 
-  val mode: Mode.FailFast[[a] =>> Either[String, a]] = ???
+  val mode: Mode.FailFast[[a] =>> Either[String, a]] = new {
+    def flatMap[A, B](fa: Either[String, A], f: A => Either[String, B]): Either[String, B] = fa.flatMap(f)
+    def map[A, B](fa: Either[String, A], f: A => B): Either[String, B] = fa.map(f)
+    def pure[A](value: A): Either[String, A] = Right(value)
+  }
 
   import chanterelle.*
 
-  mode.locally {
-    (int = Right(1), str = Right("asd")).transform(_.sequence)
-    // val b = summon[Mode[?]]
-    // modifierOf((int = 1, str = 2, int2 = 3)).traverseEach(_.toString.toLongOption).?
-
-    // modifierOf((Option(1), Option(2), Option(3))).sequenceEach
+  val b = mode.locally {
+    (Right(1), Right("asd")).transform(_.sequence)
   }
 
-  modifierOf((1, 2, 3, 4)).map(_ + 1)
+  println(b)
 
 }

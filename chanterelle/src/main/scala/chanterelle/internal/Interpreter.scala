@@ -9,10 +9,11 @@ import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
 import NamedTuple.*
+import chanterelle.Mode
 
 private[chanterelle] object Interpreter {
 
-  def runTransformation(primary: Expr[Any], transformation: Transformation)(using Sources, Quotes): Expr[?] = {
+  def runTransformation(primary: Expr[Any], transformation: Transformation)(using Sources, Quotes, Context): Expr[?] = {
     def handleField(source: Structure.Named, field: Transformation.Field)(using Sources, Sources.Scope, Quotes) =
       field match {
         case Field.FromSource(srcName, transformation) =>
@@ -76,6 +77,27 @@ private[chanterelle] object Interpreter {
           config match {
             case Configured.Update(fn = fn) =>
               Sources.current.get(fn) match { case '{ $fn: (src => out) } => '{ $fn(${ primary.asExprOf[src] }) } }
+
+            case Configured.Sequence(tpe, source, unwrappedDest) =>
+              summon[Context] match {
+                case ctx: Context.PossiblyFallible[f] =>
+                  given Type[f] = ctx.wrapperType.wrapper
+                  val mode = ctx.mode.asExprOf[Mode.FailFast[f]]
+                  val prim = StructuredValue.of(source, primary)
+                  val fields = (0 until source.elements.size).map(idx =>
+                    new FieldValue.Wrapped[f](
+                      idx,
+                      source.elements(idx).asInstanceOf[Structure.Wrapped[f]].wrapped.tpe,
+                      prim.elementValue(idx).asExprOf[f[Any]]
+                    )
+                  )
+                  val res = unwrappedDest match {
+                    case '[dest] =>
+                      ProductBinder.nestFlatMapsAndConstruct[f, dest](mode, Nil, fields.toList, ProductConstructor.Tuple(source))
+                  }
+                  res
+                case _ => ???
+              }
           }
 
         case Transformation.IterLike(source, paramTransformation, factory, outputTpe) =>

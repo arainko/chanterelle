@@ -8,7 +8,7 @@ import chanterelle.hidden.Tuples
 import scala.annotation.nowarn
 import chanterelle.hidden.Tuples.Mapped
 
-extension [Tup <: AnyNamedTuple](self: Tup) {
+extension [Tup <: AnyNamedTuple | Tuple](self: Tup) {
 
   /**
    * Transforms a named tuple with one of the supported modifiers
