@@ -6,6 +6,7 @@ import chanterelle.hidden.TupleModifier
 import scala.quoted.*
 
 import NamedTuple.AnyNamedTuple
+import chanterelle.Mode
 
 private[chanterelle] enum Modifier derives Debug {
   def path: Path
@@ -17,6 +18,7 @@ private[chanterelle] enum Modifier derives Debug {
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
   case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
+  case Sequence(path: Path, span: Span)
 }
 
 private[chanterelle] object Modifier {
@@ -111,6 +113,13 @@ private[chanterelle] object Modifier {
             (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergee).regional(${ AsTerm(PathSelector(path)) })
           } =>
         parseMerged(path, mergee.asExprOf[a], Span.fromExpr(cfg))
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.sequence[f](using $mode: Mode[f])
+          } =>
+
+        report.errorAndAbort("MATCHED SEQUENCE")
 
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")

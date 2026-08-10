@@ -137,6 +137,13 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
             when[Plan.Named[Err]](transformation => Plan.Merged.create(transformation, m.valueStructure, m.ref)),
             when[Plan.Merged[Err]](_.merge(m.valueStructure, m.ref))
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
+
+        case m: Modifier.Sequence =>
+          ???
+        // transformation.narrow(
+        //   when[Plan.Named[Err]](t => Plan.ConfedUp(Configured.Sequence())),
+        //   when[Plan.Tuple[Err]](t => t.)
+        // )
       }
     }
     recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this)
