@@ -148,6 +148,14 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
               )
             )
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
+
+        case m: Modifier.Hoist[f] =>
+          transformation.narrow(
+            when[Plan.Wrapped[Err, f]](
+              _.hoisted
+            ) // TODO: this might not be the correct way of encoding this, maybe I need to change the encoding of .sequence
+          )(other => ErrorMessage.UnexpectedTransformation("wrapped value", other, traversedPath, modifier.span))
+
       }
     }
     recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this)
@@ -243,7 +251,7 @@ private[chanterelle] object Plan {
             Plan.IterLike(source, create(element), IsModified.No)
 
       case wrapped: Structure.Wrapped[f] =>
-        Plan.Wrapped(wrapped, Plan.create(wrapped.wrapped), IsModified.No)
+        Plan.Wrapped(wrapped, Plan.create(wrapped.wrapped), IsModified.No, IsHoisted.No)
 
       case leaf: Structure.Leaf =>
         Leaf(leaf)
@@ -644,18 +652,20 @@ private[chanterelle] object Plan {
   case class Wrapped[+E <: Err, F[_]](
     source: Structure.Wrapped[F],
     wrapped: Plan[E],
-    isModified: IsModified
+    isModified: IsModified,
+    isHoisted: IsHoisted
   ) extends Plan[E]("wrapped") {
     def calculateTpe(using Quotes): Type[? <: AnyKind] = {
       @unused given Type[F] = source.wrapper.wrapper
-      (wrapped.calculateTpe).runtimeChecked match {
-        case '[tpe] => Type.of[F[tpe]]
-      }
+      if isHoisted == IsHoisted.Yes then wrapped.calculateTpe
+      else (wrapped.calculateTpe).runtimeChecked match { case '[tpe] => Type.of[F[tpe]] }
     }
 
     def update(f: Plan[E] => Plan[Err]): Wrapped[Err, F] =
       this.copy(wrapped = f(wrapped), isModified = IsModified.Yes)
 
+    def hoisted: Wrapped[Err, F] =
+      this.copy(isHoisted = IsHoisted.Yes, isModified = IsModified.Yes)
   }
 
   case class Leaf(output: Structure.Leaf) extends Plan[Nothing]("ordinary value") {
@@ -723,6 +733,10 @@ private[chanterelle] object Plan {
   }
 
   enum IsModified derives Debug {
+    case Yes, No
+  }
+
+  enum IsHoisted derives Debug {
     case Yes, No
   }
 

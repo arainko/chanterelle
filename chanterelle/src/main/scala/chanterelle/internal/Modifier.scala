@@ -19,6 +19,7 @@ private[chanterelle] enum Modifier derives Debug {
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
   case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
   case Sequence[F[_]](path: Path, span: Span, wrapperType: WrapperType[F])
+  case Hoist[F[_]](path: Path, span: Span, wrapperType: WrapperType[F])
 }
 
 private[chanterelle] object Modifier {
@@ -116,12 +117,19 @@ private[chanterelle] object Modifier {
 
       case cfg @ '{
             type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.sequence[f](using $mode: Mode[f])
+            (builder: TupleModifier.Builder[tup]) => builder.sequence[f](using $mode)
           } =>
         Right(
           Modifier.Sequence(Path.empty(Type.of[Any]), Span.fromExpr(cfg), WrapperType.create[f])
         )
 
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.?[f, selected](using $mode)(${ AsTerm(PathSelector(path)) })
+          } =>
+        Right(
+          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f])
+        )
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
         report.errorAndAbort(s"Couldn't parse '${CodePrinter.codeAtSpan(Span.fromExpr(other))}' as a valid modifier", other)

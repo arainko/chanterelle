@@ -7,6 +7,7 @@ import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
+import chanterelle.internal.Plan.IsHoisted
 
 private[chanterelle] enum Transformation derives Debug {
   case Named(
@@ -64,7 +65,8 @@ private[chanterelle] enum Transformation derives Debug {
   case Wrapped[F[_]](
     source: Structure.Wrapped[F],
     wrapped: Transformation,
-    outputTpe: Type[?]
+    outputTpe: Type[?],
+    isHoisted: IsHoisted
   )
 }
 
@@ -143,7 +145,7 @@ private[chanterelle] object Transformation {
           fromMerged(p)
 
         case p: Plan.Wrapped[Nothing, f] =>
-          Transformation.Wrapped(p.source, recurse(p.wrapped), p.calculateTpe)
+          Transformation.Wrapped(p.source, recurse(p.wrapped), p.calculateTpe, p.isHoisted)
 
         case leaf: Plan.Leaf =>
           Transformation.fromLeaf(leaf)
