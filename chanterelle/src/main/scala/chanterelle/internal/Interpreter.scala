@@ -10,11 +10,12 @@ import scala.quoted.*
 
 import NamedTuple.*
 import chanterelle.Mode
+import chanterelle.internal.Debug.AST
 
 private[chanterelle] object Interpreter {
 
-  def runTransformation(primary: Expr[Any], transformation: Transformation)(using Sources, Quotes, Context): Expr[?] = {
-    def handleField(source: Structure.Named, field: Transformation.Field)(using Sources, Sources.Scope, Quotes) =
+  def runTransformation(primary: Expr[Any], transformation: Transformation[Nothing])(using Sources, Quotes, Context.Of[Nothing]): Expr[?] = {
+    def handleField(source: Structure.Named, field: Transformation.Field[Nothing])(using Sources, Sources.Scope, Quotes) =
       field match {
         case Field.FromSource(srcName, transformation) =>
           runTransformation(StructuredValue.of(source, primary).fieldValue(srcName), transformation)
@@ -146,7 +147,7 @@ private[chanterelle] object Interpreter {
                     case Transformation.Leaf(output) =>
                       val value = Sources.current.get(ref)
                       StructuredValue.of(mergees(ref), value).fieldValue(name)
-                    case merged: Transformation.Merged =>
+                    case merged: Transformation.Merged[Nothing] =>
                       given Sources = Sources.current.advance(mergees, field)
                       val nextPrimary = Sources.current.get(Sources.Ref.Primary)
                       runTransformation(nextPrimary, merged)
@@ -167,11 +168,59 @@ private[chanterelle] object Interpreter {
   extension (sources: Sources)
     private def advance(
       mergees: VectorMap[Sources.Ref, Structure.Named],
-      field: Transformation.Merged.Field.FromSecondary
+      field: Transformation.Merged.Field.FromSecondary[Nothing]
     )(using Sources.Scope, Quotes): Sources =
       field.accessibleFrom.foldLeft(sources) { (acc, ref) =>
         val struct = mergees(ref)
         val value = sources.get(ref)
         acc.updated(ref, StructuredValue.of(struct, value).fieldValue(field.name))
       }
+
+  enum TransformationMode[F[x]] {
+    def value: Expr[Mode[F]]
+
+    case Accumulating(value: Expr[Mode.Accumulating[F]])
+    case FailFast(value: Expr[Mode.FailFast[F]])
+  }
+
+  object TransformationMode {
+    def create[F[x]: Type](expr: Expr[Mode[F]])(using Quotes): TransformationMode[F] =
+      expr match
+        case '{ $acc: Mode.Accumulating[F] } =>
+          Accumulating(acc)
+        case '{ $ff: Mode.FailFast[F] } =>
+          FailFast(ff)
+        case _ =>
+          quotes.reflect.report.errorAndAbort(
+            "Couldn't determine the transformation mode, make sure an instance of either Mode.FailFast[F] or Mode.Accumulating[F] is in implicit scope"
+          )
+
+    given Debug[TransformationMode[?]] with {
+      def astify(self: TransformationMode[?])(using Quotes): AST =
+        self match
+          case Accumulating(value) => AST.Text("Accumulating")
+          case FailFast(value)     => AST.Text("FailFast")
+
+    }
+  }
+  private enum Value[F[x]] {
+    final def wrapped[A](F: TransformationMode[F], tpe: Type[A])(using Quotes, Type[F]): Expr[F[A]] = {
+      given Type[A] = tpe
+
+      this match
+        case Unwrapped(value) =>
+          '{ ${ F.value }.pure[A](${ value.asExprOf[A] }) }
+        case Wrapped(value) =>
+          value.asExprOf[F[A]]
+    }
+
+    final def asFieldValue(index: Int, tpe: Type[?]): scala.Either[FieldValue.Unwrapped, FieldValue.Wrapped[F]] =
+      this match {
+        case unw: Unwrapped[F]   => Left(new FieldValue.Unwrapped(index, tpe, unw.value))
+        case wrapped: Wrapped[F] => Right(new FieldValue.Wrapped(index, tpe, wrapped.value))
+      }
+
+    case Unwrapped(value: Expr[Any])
+    case Wrapped(value: Expr[F[Any]])
+  }
 }
