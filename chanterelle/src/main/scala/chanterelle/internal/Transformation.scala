@@ -66,13 +66,19 @@ private[chanterelle] enum Transformation[+F <: Fallible] derives Debug {
     source: Structure.Wrapped[G],
     wrapped: Transformation[F],
     outputTpe: Type[?],
-    isHoisted: IsHoisted
+    isHoisted: Transformation.IsHoisted[F]
   ) extends Transformation[F]
+
 }
 
 private[chanterelle] object Transformation {
-
-  def create[F <: Fallible](transformation: Plan[Nothing])(using Quotes, Context.Of[F]): scala.Either[ErrorMessage, Transformation[F]] = {
+  enum IsHoisted[+F <: Fallible] derives Debug {
+    case Yes extends IsHoisted[Fallible]
+    case No extends IsHoisted[Nothing]
+  }
+  def create[F <: Fallible](
+    transformation: Plan[Nothing]
+  )(using Quotes, Context.Of[F]): scala.Either[ErrorMessage, Transformation[F]] = {
     def transformField[F <: Fallible](field: Plan.Field[Nothing])(using Label[ErrorMessage], Context.Of[F]): Field[F] =
       field match {
         case Plan.Field.FromSource(srcName, plan) =>
@@ -81,7 +87,9 @@ private[chanterelle] object Transformation {
           Field.FromModifier(mod)
       }
 
-    def fromMerged[F <: Fallible](plan: Plan.Merged[Nothing])(using Quotes, Label[ErrorMessage], Context.Of[F]): Transformation.Merged[F] = {
+    def fromMerged[F <: Fallible](
+      plan: Plan.Merged[Nothing]
+    )(using Quotes, Label[ErrorMessage], Context.Of[F]): Transformation.Merged[F] = {
       val fields =
         plan.fields.collect {
           case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
@@ -145,7 +153,24 @@ private[chanterelle] object Transformation {
           fromMerged(p)
 
         case p: Plan.Wrapped[Nothing, f] =>
-          Transformation.Wrapped(p.source, recurse(p.wrapped), p.calculateTpe, p.isHoisted)
+          Context.current match {
+            case _: Context.Total.type =>
+              Transformation.Wrapped(
+                p.source,
+                recurse(p.wrapped),
+                p.calculateTpe,
+                Transformation.IsHoisted.No
+              ) // TODO: kinda dumb because you cant even get a Transformation.Wrapped with a Context.Total... Maybe there's an even better encoding there somewhere
+            case ctx @ given Context.PossiblyFallible[f] =>
+              def yes = ctx.reify[Transformation.IsHoisted, F](Transformation.IsHoisted.Yes)
+              Transformation.Wrapped(
+                p.source,
+                recurse(p.wrapped),
+                p.calculateTpe,
+                if p.isHoisted == Plan.IsHoisted.Yes then yes else Transformation.IsHoisted.No
+              )
+
+          }
 
         case leaf: Plan.Leaf =>
           Transformation.fromLeaf(leaf)
@@ -156,7 +181,7 @@ private[chanterelle] object Transformation {
 
     boundary[Transformation[F] | ErrorMessage](recurse(transformation)) match {
       case transformation: Transformation[F] => Right(transformation)
-      case error: ErrorMessage            => Left(error)
+      case error: ErrorMessage               => Left(error)
     }
   }
 

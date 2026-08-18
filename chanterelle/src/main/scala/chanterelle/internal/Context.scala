@@ -10,14 +10,13 @@ private[chanterelle] type Fallible = Fallible.type
 private[chanterelle] sealed trait Context {
   type F <: Fallible
 
-
-  final def reify[FF <: Fallible](value: Transformation[F])(using ev: Transformation[F] =:= Transformation[FF]) =
+  final def reify[G[+x <: Fallible], FF <: Fallible](value: G[F])(using ev: G[F] =:= G[FF]) =
     ev(value)
 
 }
 
 private[chanterelle] object Context {
-  type Of[FF <: Fallible]  = Context { type F = FF }
+  type Of[FF <: Fallible] = Context { type F = FF }
 
   transparent inline def current(using ctx: Context): ctx.type = ctx
 
