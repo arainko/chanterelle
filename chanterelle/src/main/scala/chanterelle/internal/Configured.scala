@@ -3,19 +3,19 @@ package chanterelle.internal
 import scala.quoted.*
 import scala.collection.immutable.SortedMap
 
-private[chanterelle] enum Configured derives Debug {
+private[chanterelle] enum Configured[+F <: Fallible] derives Debug {
   def tpe: Type[?]
 
   case Update(
     tpe: Type[?],
     fn: Sources.Ref
-  )
+  ) extends Configured[Nothing]
 
   case Sequence(
     tpe: Type[?],
     source: Structure.Tuple,
     unwrappedDest: Type[?]
-  )
+  ) extends Configured[Fallible]
 }
 
 private[chanterelle] object Configured {

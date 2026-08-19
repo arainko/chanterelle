@@ -9,6 +9,8 @@ import scala.quoted.*
 
 import Plan.Error
 import scala.annotation.unused
+import scala.util.boundary.Label
+import scala.util.boundary
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -43,7 +45,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
     def recurse(
       segments: List[Path.Segment],
       traversed: Path
-    )(curr: Plan[Err])(using Quotes): Plan[Err] = {
+    )(curr: Plan[Err])(using Quotes, Label[ErrorMessage]): Plan[Err] = {
       segments match {
         case (seg @ Path.Segment.Field(name = name)) :: next =>
           val traversedPath = traversed :+ seg
@@ -158,7 +160,12 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
       }
     }
-    recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this)
+
+    boundary[ErrorMessage | Plan[Err]] { recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this) } match {
+      case plan: Plan[Err]   => plan
+      case err: ErrorMessage => Plan.Error(err)
+    }
+
   }
 
   def refine: Either[List[ErrorMessage], Plan[Nothing]] = {
@@ -674,7 +681,7 @@ private[chanterelle] object Plan {
   }
 
   // TODO: change this goofyahh name
-  case class ConfedUp(config: Configured, span: Span) extends Plan[Nothing]("configured value") {
+  case class ConfedUp(config: Configured[?], span: Span) extends Plan[Nothing]("configured value") {
     def calculateTpe(using Quotes): Type[?] = config.tpe
     val isModified = IsModified.Yes
   }

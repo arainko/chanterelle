@@ -248,7 +248,7 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
   import chanterelle.*
 
   val b = mode.locally {
-    (Right(1), Right("asd")).transform(_.sequence)
+    // (Right(1), Right("asd")).transform(_.sequence)
   }
 
   println(b)

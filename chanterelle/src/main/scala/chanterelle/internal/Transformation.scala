@@ -8,6 +8,8 @@ import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
 import chanterelle.internal.Plan.IsHoisted
+import chanterelle.internal.Context.Total
+import chanterelle.internal.Context.PossiblyFallible
 
 private[chanterelle] enum Transformation[+F <: Fallible] derives Debug {
   case Named(
@@ -53,7 +55,7 @@ private[chanterelle] enum Transformation[+F <: Fallible] derives Debug {
 
   case Leaf(output: Structure.Leaf) extends Transformation[Nothing]
 
-  case ConfedUp(config: Configured) extends Transformation[Nothing]
+  case ConfedUp(config: Configured[F])
 
   case Merged(
     mergees: VectorMap[Sources.Ref, Structure.Named],
@@ -66,16 +68,16 @@ private[chanterelle] enum Transformation[+F <: Fallible] derives Debug {
     source: Structure.Wrapped[G],
     wrapped: Transformation[F],
     outputTpe: Type[?],
-    isHoisted: Transformation.IsHoisted[F]
-  ) extends Transformation[F]
+    isHoisted: Transformation.IsHoisted
+  ) extends Transformation[Fallible]
 
 }
 
 private[chanterelle] object Transformation {
-  enum IsHoisted[+F <: Fallible] derives Debug {
-    case Yes extends IsHoisted[Fallible]
-    case No extends IsHoisted[Nothing]
+  enum IsHoisted derives Debug {
+    case Yes, No
   }
+
   def create[F <: Fallible](
     transformation: Plan[Nothing]
   )(using Quotes, Context.Of[F]): scala.Either[ErrorMessage, Transformation[F]] = {
@@ -154,20 +156,14 @@ private[chanterelle] object Transformation {
 
         case p: Plan.Wrapped[Nothing, f] =>
           Context.current match {
-            case _: Context.Total.type =>
-              Transformation.Wrapped(
-                p.source,
-                recurse(p.wrapped),
-                p.calculateTpe,
-                Transformation.IsHoisted.No
-              ) // TODO: kinda dumb because you cant even get a Transformation.Wrapped with a Context.Total... Maybe there's an even better encoding there somewhere
+            case Context.Total =>
+              boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
             case ctx @ given Context.PossiblyFallible[f] =>
-              def yes = ctx.reify[Transformation.IsHoisted, F](Transformation.IsHoisted.Yes)
               Transformation.Wrapped(
                 p.source,
                 recurse(p.wrapped),
                 p.calculateTpe,
-                if p.isHoisted == Plan.IsHoisted.Yes then yes else Transformation.IsHoisted.No
+                if p.isHoisted == Plan.IsHoisted.Yes then Transformation.IsHoisted.Yes else Transformation.IsHoisted.No
               )
 
           }
@@ -176,7 +172,17 @@ private[chanterelle] object Transformation {
           Transformation.fromLeaf(leaf)
 
         case Plan.ConfedUp(config, _) =>
-          ConfedUp(config)
+          Context.current match {
+            case Context.Total =>
+              config match {
+                case update: Configured.Update =>
+                  ConfedUp(update)
+                case _: Configured.Sequence =>
+                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
+              }
+            case Context.PossiblyFallible(mode, wrapperType) =>
+              ConfedUp(config)
+          }
       }
 
     boundary[Transformation[F] | ErrorMessage](recurse(transformation)) match {

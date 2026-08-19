@@ -21,7 +21,7 @@ object EntryPoint {
     import quotes.reflect.*
 
     val transformation = for {
-      given Context = Context.create
+      given Context.Any = Context.create
       structure = Structure.toplevel[A]
       mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
       plan = Plan.create(structure)
@@ -42,7 +42,10 @@ object EntryPoint {
             .map(Interpreter.runTransformation(tuple, _))
 
         case ctx @ given Context.PossiblyFallible[f] =>
-          ???
+          Transformation
+            .create(refinedPlan)
+            .leftMap(err => ErrorsWithSpan(err :: Nil))
+            .map(FallibleInterpreter.run(_, tuple))
       }
     } yield expr
 

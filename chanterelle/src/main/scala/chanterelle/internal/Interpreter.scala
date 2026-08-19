@@ -14,7 +14,11 @@ import chanterelle.internal.Debug.AST
 
 private[chanterelle] object Interpreter {
 
-  def runTransformation(primary: Expr[Any], transformation: Transformation[Nothing])(using Sources, Quotes, Context.Of[Nothing]): Expr[?] = {
+  def runTransformation(primary: Expr[Any], transformation: Transformation[Nothing])(using
+    Sources,
+    Quotes,
+    Context.Of[Nothing]
+  ): Expr[?] = {
     def handleField(source: Structure.Named, field: Transformation.Field[Nothing])(using Sources, Sources.Scope, Quotes) =
       field match {
         case Field.FromSource(srcName, transformation) =>
@@ -80,7 +84,7 @@ private[chanterelle] object Interpreter {
               Sources.current.get(fn) match { case '{ $fn: (src => out) } => '{ $fn(${ primary.asExprOf[src] }) } }
 
             case Configured.Sequence(tpe, source, unwrappedDest) =>
-              summon[Context] match {
+              Context.current match {
                 case ctx: Context.PossiblyFallible[f] =>
                   given Type[f] = ctx.wrapperType.wrapper
                   val mode = ctx.mode.asExprOf[Mode.FailFast[f]]
@@ -175,52 +179,4 @@ private[chanterelle] object Interpreter {
         val value = sources.get(ref)
         acc.updated(ref, StructuredValue.of(struct, value).fieldValue(field.name))
       }
-
-  enum TransformationMode[F[x]] {
-    def value: Expr[Mode[F]]
-
-    case Accumulating(value: Expr[Mode.Accumulating[F]])
-    case FailFast(value: Expr[Mode.FailFast[F]])
-  }
-
-  object TransformationMode {
-    def create[F[x]: Type](expr: Expr[Mode[F]])(using Quotes): TransformationMode[F] =
-      expr match
-        case '{ $acc: Mode.Accumulating[F] } =>
-          Accumulating(acc)
-        case '{ $ff: Mode.FailFast[F] } =>
-          FailFast(ff)
-        case _ =>
-          quotes.reflect.report.errorAndAbort(
-            "Couldn't determine the transformation mode, make sure an instance of either Mode.FailFast[F] or Mode.Accumulating[F] is in implicit scope"
-          )
-
-    given Debug[TransformationMode[?]] with {
-      def astify(self: TransformationMode[?])(using Quotes): AST =
-        self match
-          case Accumulating(value) => AST.Text("Accumulating")
-          case FailFast(value)     => AST.Text("FailFast")
-
-    }
-  }
-  private enum Value[F[x]] {
-    final def wrapped[A](F: TransformationMode[F], tpe: Type[A])(using Quotes, Type[F]): Expr[F[A]] = {
-      given Type[A] = tpe
-
-      this match
-        case Unwrapped(value) =>
-          '{ ${ F.value }.pure[A](${ value.asExprOf[A] }) }
-        case Wrapped(value) =>
-          value.asExprOf[F[A]]
-    }
-
-    final def asFieldValue(index: Int, tpe: Type[?]): scala.Either[FieldValue.Unwrapped, FieldValue.Wrapped[F]] =
-      this match {
-        case unw: Unwrapped[F]   => Left(new FieldValue.Unwrapped(index, tpe, unw.value))
-        case wrapped: Wrapped[F] => Right(new FieldValue.Wrapped(index, tpe, wrapped.value))
-      }
-
-    case Unwrapped(value: Expr[Any])
-    case Wrapped(value: Expr[F[Any]])
-  }
 }

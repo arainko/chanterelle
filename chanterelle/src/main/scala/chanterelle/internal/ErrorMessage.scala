@@ -79,4 +79,8 @@ private[chanterelle] object ErrorMessage {
       s"Ambiguous field renames detected: ${System.lineSeparator()}${ambs.map((source, dest) => s"  * field '$source' maps to: ${dest.map(name => s"'$name'").mkString(", ")}").mkString(System.lineSeparator())}"
     }
   }
+
+  case object CantSequenceWithoutFallibleContext extends ErrorMessage {
+    def render(using Quotes): String = "Can't use fallible transformations without providing Mode[F] in scope"
+  }
 }
