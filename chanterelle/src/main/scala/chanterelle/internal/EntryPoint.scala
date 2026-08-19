@@ -21,7 +21,7 @@ object EntryPoint {
     import quotes.reflect.*
 
     val transformation = for {
-      given Context = Context.create
+      ctx @ given Context.Any = Context.create
       structure = Structure.toplevel[A]
       mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
       plan = Plan.create(structure)
@@ -30,17 +30,17 @@ object EntryPoint {
       modifiers <- Modifier.parse(mods.toList).leftMap(ErrorsWithSpan)
       given Span = Span.minimalAvailable(modifiers.map(_.span))
       refinedPlan <- modifiers
-        .foldLeft[Plan[Err]](plan)((transformation, mod) => transformation.applyModifier(mod))
+        .foldLeft[Plan[Err, ?]](plan)((transformation, mod) => transformation.applyModifier(mod))
         .refine
         .leftMap(ErrorsWithSpan)
       given Sources = builder.build
       expr <- Context.current match {
         case ctx @ given Context.Total.type =>
-          Transformation
-            .create(refinedPlan)
-            .leftMap(err => ErrorsWithSpan(err :: Nil))
-            .map(Interpreter.runTransformation(tuple, _))
-
+          // Transformation
+          //   .create(refinedPlan)
+          //   .leftMap(err => ErrorsWithSpan(err :: Nil))
+          //   .map(Interpreter.runTransformation(tuple, _))
+          Right(???)
         case ctx @ given Context.PossiblyFallible[f] =>
           ???
       }

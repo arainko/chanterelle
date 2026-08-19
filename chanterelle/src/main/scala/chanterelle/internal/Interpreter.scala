@@ -14,7 +14,11 @@ import chanterelle.internal.Debug.AST
 
 private[chanterelle] object Interpreter {
 
-  def runTransformation(primary: Expr[Any], transformation: Transformation[Nothing])(using Sources, Quotes, Context.Of[Nothing]): Expr[?] = {
+  def runTransformation(primary: Expr[Any], transformation: Transformation[Nothing])(using
+    Sources,
+    Quotes,
+    Context.Of[Nothing]
+  ): Expr[?] = {
     def handleField(source: Structure.Named, field: Transformation.Field[Nothing])(using Sources, Sources.Scope, Quotes) =
       field match {
         case Field.FromSource(srcName, transformation) =>
@@ -80,7 +84,7 @@ private[chanterelle] object Interpreter {
               Sources.current.get(fn) match { case '{ $fn: (src => out) } => '{ $fn(${ primary.asExprOf[src] }) } }
 
             case Configured.Sequence(tpe, source, unwrappedDest) =>
-              summon[Context] match {
+              Context.current match {
                 case ctx: Context.PossiblyFallible[f] =>
                   given Type[f] = ctx.wrapperType.wrapper
                   val mode = ctx.mode.asExprOf[Mode.FailFast[f]]

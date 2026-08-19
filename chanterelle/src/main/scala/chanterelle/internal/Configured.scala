@@ -3,27 +3,27 @@ package chanterelle.internal
 import scala.quoted.*
 import scala.collection.immutable.SortedMap
 
-private[chanterelle] enum Configured derives Debug {
+private[chanterelle] enum Configured[+F <: Fallible] derives Debug {
   def tpe: Type[?]
 
   case Update(
     tpe: Type[?],
     fn: Sources.Ref
-  )
+  ) extends Configured[Nothing]
 
   case Sequence(
     tpe: Type[?],
     source: Structure.Tuple,
     unwrappedDest: Type[?]
-  )
+  ) extends Configured[Fallible]
 }
 
 private[chanterelle] object Configured {
 
   object Sequence {
-    def fromTuple[F[_]](plan: Plan.Tuple[Err], modifier: Modifier.Sequence[F])(using
+    def fromTuple[F[_]](plan: Plan.Tuple[Err, Fallible], modifier: Modifier.Sequence[F])(using
       Quotes
-    ): Either[ErrorMessage, Configured.Sequence] = {
+    ): Either[ErrorMessage, Configured[Fallible]] = {
       val (other, unwrappeds) = plan.fields.partitionMap {
         case (idx, p: Plan.Wrapped[Err, f]) => Right(idx -> p.wrapped)
         case (idx, other)                   => Left(idx -> other)

@@ -96,10 +96,10 @@ private[chanterelle] object Structure {
     def calculateTpe(using Quotes): Type[?] = tpe
   }
 
-  def toplevel[A: Type](using Quotes, Context): Structure =
+  def toplevel[A: Type](using Quotes, Context.Any): Structure =
     Structure.of[A](Path.empty(Type.of[A]))
 
-  def of[A: Type](path: Path)(using Quotes, Context): Structure = {
+  def of[A: Type](path: Path)(using Quotes, Context.Any): Structure = {
     given Path = path // just for SupportedCollection, maybe come up with something nicer?
     Logger.loggedInfo("Structure"):
       Type.of[A] match {
@@ -194,7 +194,7 @@ private[chanterelle] object Structure {
   }
 
   private object SupportedCollection {
-    def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context): Option[Structure.Collection] = {
+    def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context.Any): Option[Structure.Collection] = {
       import quotes.reflect.*
       tpe match {
         case tpe @ '[Iterable[param]] =>
@@ -239,7 +239,7 @@ private[chanterelle] object Structure {
   }
 
   private object WrappedType {
-    def unapply(tpe: Type[?])(using q: Quotes, context: Context) =
+    def unapply(tpe: Type[?])(using q: Quotes, context: Context.Any) =
       context match {
         case Context.Total                               => None
         case Context.PossiblyFallible(mode, wrapperType) =>

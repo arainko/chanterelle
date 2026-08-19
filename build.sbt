@@ -44,6 +44,7 @@ lazy val chanterelle =
         "-preview",
         "-Wunused:all",
         "-WunstableInlineAccessors",
+        "-Xkind-projector:underscores",
         "-Xcheck-macros",
         "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),

@@ -38,7 +38,7 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class UnexpectedTransformation(expected: String, actual: Plan[Err], traversedPath: Path, override val span: Span)
+  case class UnexpectedTransformation(expected: String, actual: Plan[Err, Fallible], traversedPath: Path, override val span: Span)
       extends ErrorMessage {
     def render(using Quotes) = {
       val rendered =

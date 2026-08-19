@@ -53,7 +53,7 @@ private[chanterelle] enum Transformation[+F <: Fallible] derives Debug {
 
   case Leaf(output: Structure.Leaf) extends Transformation[Nothing]
 
-  case ConfedUp(config: Configured) extends Transformation[Nothing]
+  case ConfedUp[+F <: Fallible](config: Configured[F]) extends Transformation[F]
 
   case Merged(
     mergees: VectorMap[Sources.Ref, Structure.Named],
@@ -77,9 +77,9 @@ private[chanterelle] object Transformation {
     case No extends IsHoisted[Nothing]
   }
   def create[F <: Fallible](
-    transformation: Plan[Nothing]
+    transformation: Plan[Nothing, F]
   )(using Quotes, Context.Of[F]): scala.Either[ErrorMessage, Transformation[F]] = {
-    def transformField[F <: Fallible](field: Plan.Field[Nothing])(using Label[ErrorMessage], Context.Of[F]): Field[F] =
+    def transformField[F <: Fallible](field: Plan.Field[Nothing, F])(using Label[ErrorMessage], Context.Of[F]): Field[F] =
       field match {
         case Plan.Field.FromSource(srcName, plan) =>
           Field.FromSource(srcName, recurse(plan))
@@ -88,7 +88,7 @@ private[chanterelle] object Transformation {
       }
 
     def fromMerged[F <: Fallible](
-      plan: Plan.Merged[Nothing]
+      plan: Plan.Merged[Nothing, F]
     )(using Quotes, Label[ErrorMessage], Context.Of[F]): Transformation.Merged[F] = {
       val fields =
         plan.fields.collect {
@@ -96,8 +96,8 @@ private[chanterelle] object Transformation {
             name -> Transformation.Merged.Field.FromPrimary(source, transformField(field))
           case (name, Plan.Merged.Field.FromSecondary(secName, ref, accessibleFrom, plan)) =>
             val transformation: Transformation.Leaf | Transformation.Merged[F] = plan match {
-              case leaf: Plan.Leaf              => Transformation.fromLeaf(leaf)
-              case merged: Plan.Merged[Nothing] => fromMerged(merged)
+              case leaf: Plan.Leaf                 => Transformation.fromLeaf(leaf)
+              case merged: Plan.Merged[Nothing, F] => fromMerged(merged)
             }
             name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
         }
@@ -109,7 +109,7 @@ private[chanterelle] object Transformation {
       )
     }
 
-    def recurse[F <: Fallible](transformation: Plan[Nothing])(using Label[ErrorMessage], Context.Of[F]): Transformation[F] =
+    def recurse[F <: Fallible](transformation: Plan[Nothing, F])(using Label[ErrorMessage], Context.Of[F]): Transformation[F] =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
         case plan if plan.isModified == IsModified.No =>
@@ -149,7 +149,7 @@ private[chanterelle] object Transformation {
           }
           IterLike(source, recurse(elem), factory, tpe)
 
-        case p: Plan.Merged[Nothing] =>
+        case p: Plan.Merged[Nothing, F] =>
           fromMerged(p)
 
         case p: Plan.Wrapped[Nothing, f] =>
@@ -162,12 +162,12 @@ private[chanterelle] object Transformation {
                 Transformation.IsHoisted.No
               ) // TODO: kinda dumb because you cant even get a Transformation.Wrapped with a Context.Total... Maybe there's an even better encoding there somewhere
             case ctx @ given Context.PossiblyFallible[f] =>
-              def yes = ctx.reify[Transformation.IsHoisted, F](Transformation.IsHoisted.Yes)
+              // def yes = ctx.reify[F](Transformation.IsHoisted.Yes)
               Transformation.Wrapped(
                 p.source,
                 recurse(p.wrapped),
                 p.calculateTpe,
-                if p.isHoisted == Plan.IsHoisted.Yes then yes else Transformation.IsHoisted.No
+                if p.isHoisted == Plan.IsHoisted.Yes then Transformation.IsHoisted.Yes else Transformation.IsHoisted.No
               )
 
           }
@@ -176,7 +176,14 @@ private[chanterelle] object Transformation {
           Transformation.fromLeaf(leaf)
 
         case Plan.ConfedUp(config, _) =>
-          ConfedUp(config)
+          Context.current match {
+            case ctx @ given Context.Total.type =>
+              ConfedUp(config)
+            case ctx @ given Context.PossiblyFallible[f] =>
+              ???
+
+          }
+        // ConfedUp(config)
       }
 
     boundary[Transformation[F] | ErrorMessage](recurse(transformation)) match {
