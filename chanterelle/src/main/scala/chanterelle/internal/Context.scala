@@ -7,7 +7,11 @@ import scala.quoted.Quotes
 private[chanterelle] object Fallible
 private[chanterelle] type Fallible = Fallible.type
 
-private[chanterelle] sealed trait Context[+F <: Fallible]
+private[chanterelle] sealed trait Context[+F <: Fallible] {
+  def asTotal: Context.Total.type = Context.Total
+
+  inline def locally[A](inline f: Context[F] ?=> A): A = f(using this)
+}
 
 private[chanterelle] object Context {
   type Of[FF <: Fallible] = Context[FF]

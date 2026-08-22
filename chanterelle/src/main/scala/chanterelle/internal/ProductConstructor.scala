@@ -7,11 +7,11 @@ private[chanterelle] sealed trait ProductConstructor {
 }
 
 private[chanterelle] object ProductConstructor {
-  final class Primary(structure: Structure.Named) extends ProductConstructor {
+  final class Primary(tpe: Type[?]) extends ProductConstructor {
     def apply(fields: Seq[Expr[Any]])(using Quotes): Expr[Any] = {
       import quotes.reflect.*
 
-      Typed(Expr.ofTupleFromSeq(fields).asTerm, TypeTree.of(using structure.tpe)).asExpr
+      Typed(Expr.ofTupleFromSeq(fields).asTerm, TypeTree.of(using tpe)).asExpr
     }
   }
 

@@ -11,34 +11,40 @@ import chanterelle.internal.Plan.IsHoisted
 import chanterelle.internal.Context.Total
 import chanterelle.internal.Context.PossiblyFallible
 
-private[chanterelle] enum Transformation[+F <: Fallible] derives Debug {
-  case Named(
+private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
+
+  def outputTpe: Type[?]
+}
+
+object Transformation {
+  case class Named[+F <: Fallible](
     source: Structure.Named,
     fields: VectorMap[String, Transformation.Field[F]],
     namesTpe: Type[? <: scala.Tuple],
-    valuesTpe: Type[? <: scala.Tuple]
-  )
+    valuesTpe: Type[? <: scala.Tuple],
+    outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
+  ) extends Transformation[F]
 
-  case Tuple(
+  case class Tuple[+F <: Fallible](
     source: Structure.Tuple,
     fields: SortedMap[Int, Transformation[F]],
     outputTpe: Type[?]
-  )
+  ) extends Transformation[F]
 
-  case Optional(
+  case class Optional[+F <: Fallible](
     source: Structure.Optional,
     paramTransformation: Transformation[F],
     outputTpe: Type[? <: Option[?]]
-  )
+  ) extends Transformation[F]
 
-  case EitherLike(
+  case class EitherLike[+F <: Fallible](
     source: Structure.Either,
     left: Transformation[F],
     right: Transformation[F],
     outputTpe: Type[? <: scala.Either[?, ?]]
-  )
+  ) extends Transformation[F]
 
-  case MapLike[+F <: Fallible, map[k, v] <: collection.Map[k, v]](
+  case class MapLike[+F <: Fallible, map[k, v] <: collection.Map[k, v]](
     source: Structure.Collection.Repr.MapLike[map],
     key: Transformation[F],
     value: Transformation[F],
@@ -46,34 +52,36 @@ private[chanterelle] enum Transformation[+F <: Fallible] derives Debug {
     outputTpe: Type[?]
   ) extends Transformation[F]
 
-  case IterLike[+F <: Fallible, iter[elem] <: Iterable[elem]](
+  case class IterLike[+F <: Fallible, iter[elem] <: Iterable[elem]](
     source: Structure.Collection.Repr.IterLike[iter],
     elem: Transformation[F],
     factory: Expr[Factory[?, ?]],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
-  case Leaf(output: Structure.Leaf) extends Transformation[Nothing]
+  case class Leaf(output: Structure.Leaf) extends Transformation[Nothing] {
+    export output.tpe as outputTpe
+  }
 
-  case ConfedUp(config: Configured[F])
+  case class ConfedUp[+F <: Fallible](config: Configured[F]) extends Transformation[F] {
+    export config.tpe as outputTpe
+  }
 
-  case Merged(
+  case class Merged[+F <: Fallible](
     mergees: VectorMap[Sources.Ref, Structure.Named],
     fields: VectorMap[String, Transformation.Merged.Field[F]],
     namesTpe: Type[? <: scala.Tuple],
-    valuesTpe: Type[? <: scala.Tuple]
-  )
+    valuesTpe: Type[? <: scala.Tuple],
+    outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
+  ) extends Transformation[F]
 
-  case Wrapped[+F <: Fallible, G[_]](
+  case class Wrapped[G[_]](
     source: Structure.Wrapped[G],
-    wrapped: Transformation[F],
+    wrapped: Transformation[Fallible],
     outputTpe: Type[?],
     isHoisted: Transformation.IsHoisted
   ) extends Transformation[Fallible]
 
-}
-
-private[chanterelle] object Transformation {
   enum IsHoisted derives Debug {
     case Yes, No
   }
@@ -103,12 +111,18 @@ private[chanterelle] object Transformation {
             }
             name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
         }
-      Merged(
-        plan.mergees,
-        fields,
-        plan.calculateNamesTpe,
-        plan.calculateValuesTpe
-      )
+      (plan.calculateNamesTpe, plan.calculateValuesTpe).runtimeChecked match {
+        case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
+          Merged(
+            plan.mergees,
+            fields,
+            Type.of[names],
+            Type.of[values],
+            Type.of[NamedTuple.NamedTuple[names, values]]
+          )
+
+      }
+
     }
 
     def recurse[F <: Fallible](transformation: Plan[Nothing])(using Label[ErrorMessage], Context.Of[F]): Transformation[F] =
@@ -119,12 +133,17 @@ private[chanterelle] object Transformation {
           Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
 
         case p @ Plan.Named(source, fields, _) =>
-          Named(
-            source,
-            fields.transform((_, field) => transformField(field)),
-            p.calculateNamesTpe,
-            p.calculateValuesTpe
-          )
+          (p.calculateNamesTpe, p.calculateValuesTpe).runtimeChecked match {
+            case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
+              Named(
+                source,
+                fields.transform((_, field) => transformField(field)),
+                Type.of[names],
+                Type.of[values],
+                Type.of[NamedTuple.NamedTuple[names, values]]
+              )
+
+          }
 
         case p @ Plan.Tuple(source, fields, _) =>
           Tuple(source, fields.map((idx, plan) => idx -> recurse(plan)), p.calculateTpe)
@@ -162,7 +181,7 @@ private[chanterelle] object Transformation {
               Transformation.Wrapped(
                 p.source,
                 recurse(p.wrapped),
-                p.calculateTpe,
+                if p.hoisted == Plan.IsHoisted.Yes then p.wrapped.calculateTpe else p.calculateTpe,
                 if p.isHoisted == Plan.IsHoisted.Yes then Transformation.IsHoisted.Yes else Transformation.IsHoisted.No
               )
 

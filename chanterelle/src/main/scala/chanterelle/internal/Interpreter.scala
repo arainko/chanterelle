@@ -44,7 +44,7 @@ private[chanterelle] object Interpreter {
 
     Sources.current.withPrimary(primary) {
       transformation match {
-        case Transformation.Named(source, fields, namesTpe, valuesTpe) =>
+        case Transformation.Named(source, fields, namesTpe, valuesTpe, _) =>
           (namesTpe, valuesTpe).runtimeChecked match {
             case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
               val args = fields.map((_, field) => handleField(source, field))
@@ -140,7 +140,7 @@ private[chanterelle] object Interpreter {
               }
           }
 
-        case Transformation.Merged(mergees, fields, namesTpe, valuesTpe) =>
+        case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, _) =>
           (namesTpe, valuesTpe).runtimeChecked match {
             case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
               val args = fields.map {

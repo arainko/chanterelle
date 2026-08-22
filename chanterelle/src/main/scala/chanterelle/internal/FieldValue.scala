@@ -6,7 +6,7 @@ private[chanterelle] enum FieldValue {
   def index: Int
   def tpe: Type[?]
 
-  case Wrapped[F[x]](index: Int, tpe: Type[?], value: Expr[F[Any]])
+  case Wrapped[F[x]](index: Int, tpe: Type[?], value: Expr[Any])
   case Unwrapped(index: Int, tpe: Type[?], value: Expr[Any])
 }
 
