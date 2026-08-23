@@ -43,14 +43,12 @@ private[chanterelle] object FallibleInterpreter {
           case Transformation.Wrapped(srcTpe, wrapped, outputTpe, IsHoisted.Yes)   =>
             // outputTpe is the unwrapped type, but the source is very much an F[a]
             (srcTpe.tpe, outputTpe).runtimeChecked match {
-              case '[F[src]] -> '[a] =>
+              case '[F[src]] -> '[out] =>
                 val src = source.asExprOf[F[src]]
-                // Value.Wrapped { '{ ${ F.value }.map[src, a]($src, src => ${  }) } }
-                ???
+                Value.Wrapped { src }
             }
-          case Transformation.Wrapped(source, wrapped, outputTpe, IsHoisted.No) =>
-
-            ???
+          case Transformation.Wrapped(srcTpe, wrapped, outputTpe, IsHoisted.No) =>
+            Value.Unwrapped(source)
         }
     }
   }

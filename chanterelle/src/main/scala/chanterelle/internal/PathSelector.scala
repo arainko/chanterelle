@@ -70,11 +70,11 @@ private[chanterelle] object PathSelector {
 
         case Apply(
               Apply(
-                TypeApply(Select(ident, "apply"), List(namesTpe, _)),
+                TypeApply(Select("NamedTuple", "apply") | Ident("apply"), List(namesTpe, _)),
                 tree :: Nil
               ),
               Literal(IntConstant(idx)) :: Nil
-            ) if ident.symbol == NamedTupleCompanion =>
+            ) =>
           Logger.debug(s"Matching NamedTuple#apply at index ($idx)")
           val names = TupleTypes.unrollStrings(namesTpe.tpe)
           // widen here because we're dealing with a singleton type of the lambda param, eg. '_$4'
@@ -98,7 +98,8 @@ private[chanterelle] object PathSelector {
           Logger.debug(s"Matched an unexpected term: ${Printer.TreeStructure.show(other)}")
           val pos = expr.pos
           val code = pos.sourceCode.mkString
-          outer.reflect.report.errorAndAbort(s"Couldn't parse '$code' as a valid path selector", pos)
+          outer.reflect.report
+            .errorAndAbort(s"Couldn't parse '${Printer.TreeStructure.show(other)}' as a valid path selector", pos)
       }
     }
 
