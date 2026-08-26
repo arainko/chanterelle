@@ -6,6 +6,7 @@ import scala.quoted.Type
 import chanterelle.internal.Debug.AST
 import chanterelle.internal.Transformation.IsHoisted
 import chanterelle.internal.Transformation.Field
+import scala.reflect.TypeTest
 
 private[chanterelle] object FallibleInterpreter {
   def run[F[_]](transformation: Transformation[Fallible], source: Expr[Any])(using
@@ -40,15 +41,22 @@ private[chanterelle] object FallibleInterpreter {
             Value.Unwrapped(source)
           case Transformation.ConfedUp(config)                                     => ???
           case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, outTpe) => ???
-          case Transformation.Wrapped(srcTpe, wrapped, outputTpe, IsHoisted.Yes)   =>
-            // outputTpe is the unwrapped type, but the source is very much an F[a]
-            (srcTpe.tpe, outputTpe).runtimeChecked match {
-              case '[F[src]] -> '[out] =>
-                val src = source.asExprOf[F[src]]
-                Value.Wrapped { src }
+          case t: Transformation.Wrapped[fallible, f]                              =>
+            t.isHoisted match {
+              case IsHoisted.Yes =>
+
+                // outputTpe is the unwrapped type, but the source is very much an F[a]
+                (t.source.tpe, t.outputTpe).runtimeChecked match {
+                  case '[F[src]] -> '[out] =>
+                    // to be able to advance with 'wrapped' that's fallible the 'mode' needs to be Mode.FailFast otherwise we can only .map the transformation
+                    val src = source.asExprOf[F[src]]
+                    Value.Wrapped { src }
+                }
+              case IsHoisted.No =>
+                summon[t.wrapped.type <:< Transformation[Nothing]]
+                // now that we know that t.wrapped is a non-fallible transformation this becomes trivial because we can just map over whatever is inside and use the non-fallible interpreter
+                Value.Unwrapped(source)
             }
-          case Transformation.Wrapped(srcTpe, wrapped, outputTpe, IsHoisted.No) =>
-            Value.Unwrapped(source)
         }
     }
   }

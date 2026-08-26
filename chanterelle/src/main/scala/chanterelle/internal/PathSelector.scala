@@ -42,8 +42,19 @@ private[chanterelle] object PathSelector {
               TypeApply(Select(Ident(_), "element"), elemTpe :: Nil),
               tree :: Nil
             ) =>
+          Logger
+            .debug(
+              s"Matched 'Apply(TypeApply(...)) (matching .element)'",
+              elemTpe.tpe.asType
+            )
+          recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
+
+        case Apply(
+              Apply(TypeApply(Select(Ident(_), "element"), wrapperTpe :: elemTpe :: Nil), _),
+              tree :: Nil
+            ) =>
           Logger.debug(
-            s"Matched 'Apply(TypeApply(...)) (matching .element)'",
+            s"Matched 'Apply(Apply((TypeApply(...)))) (matching .element on a Wrapped node)'",
             elemTpe.tpe.asType
           )
           recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)

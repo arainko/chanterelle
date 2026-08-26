@@ -75,15 +75,17 @@ object Transformation {
     outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
   ) extends Transformation[F]
 
-  case class Wrapped[G[_]](
+  case class Wrapped[F <: Fallible, G[_]](
     source: Structure.Wrapped[G],
-    wrapped: Transformation[Fallible],
+    wrapped: Transformation[F],
     outputTpe: Type[?],
-    isHoisted: Transformation.IsHoisted
+    isHoisted: Transformation.IsHoisted[F]
   ) extends Transformation[Fallible]
 
-  enum IsHoisted derives Debug {
-    case Yes, No
+  enum IsHoisted[F <: Fallible] derives Debug {
+    type FF = F
+    case Yes extends IsHoisted[Fallible]
+    case No extends IsHoisted[Nothing]
   }
 
   def create[F <: Fallible](
@@ -178,12 +180,22 @@ object Transformation {
             case Context.Total =>
               boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
             case ctx @ given Context.PossiblyFallible[f] =>
-              Transformation.Wrapped(
-                p.source,
-                recurse(p.wrapped),
-                if p.hoisted == Plan.IsHoisted.Yes then p.wrapped.calculateTpe else p.calculateTpe,
-                if p.isHoisted == Plan.IsHoisted.Yes then Transformation.IsHoisted.Yes else Transformation.IsHoisted.No
-              )
+              p.isHoisted match
+                case chanterelle.internal.Plan.IsHoisted.Yes =>
+                  Transformation.Wrapped(
+                    p.source,
+                    recurse(p.wrapped),
+                    p.wrapped.calculateTpe,
+                    Transformation.IsHoisted.Yes
+                  )
+
+                case chanterelle.internal.Plan.IsHoisted.No =>
+                  Transformation.Wrapped(
+                    p.source,
+                    Context.current.asTotal.locally(recurse(p.wrapped)),
+                    p.calculateTpe,
+                    Transformation.IsHoisted.No
+                  )
 
           }
 

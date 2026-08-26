@@ -37,6 +37,19 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
       case other => Error(errorMessage(other))
     }
 
+  @nowarn("msg=Unreachable")
+  final inline def narrow[A <: Plan[Err], B <: Plan[Err], C <: Plan[Err]](
+    inline fnA: A => Plan[Err],
+    inline fnB: B => Plan[Err],
+    inline fnC: C => Plan[Err]
+  )(inline errorMessage: Plan[Err] => ErrorMessage): Plan[Err] =
+    this match {
+      case a: A  => fnA(a)
+      case b: B  => fnB(b)
+      case c: C  => fnC(c)
+      case other => Error(errorMessage(other))
+    }
+
   def calculateTpe(using Quotes): Type[?]
 
   def isModified: IsModified
@@ -79,7 +92,12 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
           curr.narrow(
             when[Plan.Optional[Err]](_.update(recurse(next, traversedPath))),
-            when[Plan.IterLike[Err, ?]](_.update(recurse(next, traversedPath)))
+            when[Plan.IterLike[Err, ?]](_.update(recurse(next, traversedPath))),
+            when[Plan.Wrapped[Err, ?]] { plan =>
+              val updated = plan.update(recurse(next, traversedPath))
+              // hoist all plans on a path of a hoist, otherwise hoisting fields nested within other wrapped fields is dumb
+              if modifier.isInstanceOf[Modifier.Hoist[?]] then updated.hoisted else updated
+            }
           )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, traversedPath, modifier.span))
 
         case (elem @ Path.Segment.LeftElement(tpe)) :: next =>
