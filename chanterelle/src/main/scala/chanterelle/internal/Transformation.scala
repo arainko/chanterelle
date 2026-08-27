@@ -10,6 +10,8 @@ import scala.util.boundary.Label
 import chanterelle.internal.Plan.IsHoisted
 import chanterelle.internal.Context.Total
 import chanterelle.internal.Context.PossiblyFallible
+import chanterelle.Mode
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
@@ -77,15 +79,20 @@ object Transformation {
 
   case class Wrapped[F <: Fallible, G[_]](
     source: Structure.Wrapped[G],
-    wrapped: Transformation[F],
+    wrapped: ElemTransformation[F],
     outputTpe: Type[?],
-    isHoisted: Transformation.IsHoisted[F]
+    isHoisted: Transformation.IsHoisted
   ) extends Transformation[Fallible]
 
-  enum IsHoisted[F <: Fallible] derives Debug {
-    type FF = F
-    case Yes extends IsHoisted[Fallible]
-    case No extends IsHoisted[Nothing]
+  enum ElemTransformation[F <: Fallible] {
+    case NonFallible(transformation: Transformation[Nothing]) extends ElemTransformation[Nothing]
+    case PossiblyFallible[F[_]](transforamtion: Transformation[Fallible], mode: Expr[Mode.FailFast[F]])
+        extends ElemTransformation[Fallible]
+  }
+
+  enum IsHoisted derives Debug {
+    case Yes extends IsHoisted
+    case No extends IsHoisted
   }
 
   def create[F <: Fallible](
@@ -180,19 +187,27 @@ object Transformation {
             case Context.Total =>
               boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
             case ctx @ given Context.PossiblyFallible[f] =>
-              p.isHoisted match
-                case chanterelle.internal.Plan.IsHoisted.Yes =>
+              (p.isHoisted, ctx.mode) match
+                case Plan.IsHoisted.Yes -> (TransformationMode.FailFast(mode)) =>
                   Transformation.Wrapped(
                     p.source,
-                    recurse(p.wrapped),
+                    ElemTransformation.PossiblyFallible(recurse(p.wrapped), mode),
                     p.wrapped.calculateTpe,
                     Transformation.IsHoisted.Yes
                   )
 
-                case chanterelle.internal.Plan.IsHoisted.No =>
+                case Plan.IsHoisted.Yes -> _ =>
                   Transformation.Wrapped(
                     p.source,
-                    Context.current.asTotal.locally(recurse(p.wrapped)),
+                    Context.current.asTotal.locally(ElemTransformation.NonFallible(recurse(p.wrapped))),
+                    p.wrapped.calculateTpe,
+                    Transformation.IsHoisted.Yes
+                  )
+
+                case Plan.IsHoisted.No -> _ =>
+                  Transformation.Wrapped(
+                    p.source,
+                    Context.current.asTotal.locally(ElemTransformation.NonFallible(recurse(p.wrapped))),
                     p.calculateTpe,
                     Transformation.IsHoisted.No
                   )

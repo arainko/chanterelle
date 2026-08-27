@@ -3,6 +3,7 @@ package chanterelle.internal
 import scala.quoted.Expr
 import chanterelle.Mode
 import scala.quoted.Quotes
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 private[chanterelle] object Fallible
 private[chanterelle] type Fallible = Fallible.type
@@ -22,9 +23,11 @@ private[chanterelle] object Context {
   def create(using Quotes): Context.Any =
     Expr
       .summon[Mode[?]]
-      .map { case '{ type f[_]; $mode: Mode[f] } => Context.PossiblyFallible(mode, WrapperType.create[f]) }
+      .map {
+        case '{ type f[_]; $mode: Mode[f] } => Context.PossiblyFallible(TransformationMode.create(mode), WrapperType.create[f])
+      }
       .getOrElse(Context.Total)
 
   case object Total extends Context[Nothing]
-  case class PossiblyFallible[G[_]](mode: Expr[Mode[G]], wrapperType: WrapperType[G]) extends Context[Fallible]
+  case class PossiblyFallible[G[_]](mode: TransformationMode[G], wrapperType: WrapperType[G]) extends Context[Fallible]
 }
