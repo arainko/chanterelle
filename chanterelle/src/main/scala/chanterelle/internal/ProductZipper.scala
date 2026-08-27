@@ -41,7 +41,7 @@ private[chanterelle] object ProductZipper {
       (accumulated -> current).runtimeChecked match {
         case '{ $accumulated: F[a] } -> '{ $current: F[b] } =>
           '{ $F.zip[`b`, `a`]($current, $accumulated) }
-            .asInstanceOf[Expr[F[Any]]] // TODO: just to make it compile for a moment DEAL WITH THAT LATER PLEASE
+        // .asInstanceOf[Expr[F[Any]]] // TODO: just to make it compile for a moment DEAL WITH THAT LATER PLEASE
       }: @nowarn("msg=unused local definition")
     }
     alignOwner(zipped).asExprOf[F[Any]]

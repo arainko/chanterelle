@@ -7,6 +7,7 @@ import chanterelle.internal.Debug.AST
 import chanterelle.internal.Transformation.IsHoisted
 import chanterelle.internal.Transformation.Field
 import scala.reflect.TypeTest
+import chanterelle.internal.Transformation.ElemTransformation
 
 private[chanterelle] object FallibleInterpreter {
   def run[F[_]](transformation: Transformation[Fallible], source: Expr[Any])(using
@@ -15,7 +16,7 @@ private[chanterelle] object FallibleInterpreter {
     Context.PossiblyFallible[F]
   ): Expr[Any] = {
     given Type[F] = Context.current.wrapperType.wrapper
-    val mode = TransformationMode.create[F](Context.current.mode)
+    val mode = Context.current.mode
     recurse(transformation, source, mode).wrapped(mode)
   }
 
@@ -42,41 +43,43 @@ private[chanterelle] object FallibleInterpreter {
           case Transformation.ConfedUp(config)                                     => ???
           case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, outTpe) => ???
           case t: Transformation.Wrapped[fallible, f]                              =>
-            t.isHoisted match {
-              case IsHoisted.Yes =>
-                // outputTpe is the unwrapped type, but the source is very much an F[a]
-                (t.source.tpe) match {
-                  case '[F[src]] =>
-                    val src = source.asExprOf[F[src]]
+            (t.source.tpe, t.outputTpe).runtimeChecked match {
+              case '[F[src]] -> '[out] =>
+                val src = source.asExprOf[F[src]]
+                (t.isHoisted -> t.wrapped) match {
+                  case IsHoisted.Yes -> Transformation.ElemTransformation.PossiblyFallible(wrapped, mode) =>
+                    val failFast = mode.asExprOf[Mode.FailFast[F]]
+                    Value.Wrapped {
+                      '{
 
-                    FallibilityRefiner.run(t.wrapped) match {
-                      case nonfallible: Transformation[Nothing] =>
-                        Value.Wrapped {
-                          '{
-                            ${ F.value }
-                              .map(
-                                $src,
-                                src => ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, nonfallible)) }
-                              )
-                          }
-                        }
-
-                      case None =>
+                        $failFast
+                          .flatMap(
+                            $src,
+                            src => ${ recurse[F](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
+                          )
+                      }
                     }
-                    // to be able to advance with 'wrapped' that's fallible the 'mode' needs to be Mode.FailFast otherwise we can only .map the transformation
-
-                    Value.Wrapped { src }
-                }
-              case IsHoisted.No =>
-                t.source.tpe match {
-                  case '[F[src]] =>
-                    val src = source.asExprOf[F[src]]
+                  case IsHoisted.Yes -> Transformation.ElemTransformation.NonFallible(wrapped) =>
+                    Value.Wrapped {
+                      '{
+                        ${ F.value }
+                          .map($src, src => ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)) })
+                      }
+                    }
+                    // case IsHoisted.No -> Transformation.ElemTransformation.PossiblyFallible(wrapped, mode) =>
+                    // t.wrapped match {
+                    // case ElemTransformation.NonFallible(_) => ???
+                    // }
+                    // This case is illegal - come up with a way of expressing that
+                    ???
+                  case IsHoisted.No -> Transformation.ElemTransformation.NonFallible(wrapped) =>
                     Value.Unwrapped {
                       '{
                         ${ F.value }
-                          .map($src, src => ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, t.wrapped)) })
+                          .map($src, src => ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)) })
                       }
                     }
+
                 }
             }
         }

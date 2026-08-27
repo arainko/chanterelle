@@ -77,6 +77,11 @@ object Transformation {
     outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
   ) extends Transformation[F]
 
+  // OK so, small invariant:
+  // * hoisting a wrapped node hoists all encountered wrapped nodes on its way
+  // * this means that if we encounter a transformation with IsHoisted == No we can be sure that __THERE ARE NO__ fallible nodes in 'wrapped'
+  // * type enforcement should be: if IsHoisted == No then ElemTransformation.NonFallible, every other combo is possible when IsHoisted.Yes.
+  // TODO: sooo given the above, isHoisted and wrapped form a 3 arm enum? NonHoisted(Transformation[Fallible]), Hoisted(NonFallible), Hoisted(Fallible)
   case class Wrapped[F <: Fallible, G[_]](
     source: Structure.Wrapped[G],
     wrapped: ElemTransformation[F],

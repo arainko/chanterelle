@@ -245,12 +245,14 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
     def pure[A](value: A): Either[String, A] = Right(value)
   }
 
+  val acc: Mode.Accumulating[[a] =>> Either[String, a]] = ???
+
   import chanterelle.*
 
   val b = mode.locally {
-    (int = Right(1), str = Right("asd"), int2 = 2, nest = (int = Right(1)))
+    (int = Right((int = 1)), str = Right("asd"), int2 = 2, nest = (int = Right(1)))
       .transform(
-        // _.?(_.int.element),
+        _.?(_.int),
         _.?(_.int),
         _.?(_.str),
         _.?(_.nest.int)
