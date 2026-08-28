@@ -82,22 +82,16 @@ object Transformation {
   // * this means that if we encounter a transformation with IsHoisted == No we can be sure that __THERE ARE NO__ fallible nodes in 'wrapped'
   // * type enforcement should be: if IsHoisted == No then ElemTransformation.NonFallible, every other combo is possible when IsHoisted.Yes.
   // TODO: sooo given the above, isHoisted and wrapped form a 3 arm enum? NonHoisted(Transformation[Fallible]), Hoisted(NonFallible), Hoisted(Fallible)
-  case class Wrapped[F <: Fallible, G[_]](
-    source: Structure.Wrapped[G],
-    wrapped: ElemTransformation[F],
-    outputTpe: Type[?],
-    isHoisted: Transformation.IsHoisted
+  case class Wrapped[F[_]](
+    source: Structure.Wrapped[F],
+    wrapped: ElemTransformation,
+    outputTpe: Type[?]
   ) extends Transformation[Fallible]
 
-  enum ElemTransformation[F <: Fallible] {
-    case NonFallible(transformation: Transformation[Nothing]) extends ElemTransformation[Nothing]
-    case PossiblyFallible[F[_]](transforamtion: Transformation[Fallible], mode: Expr[Mode.FailFast[F]])
-        extends ElemTransformation[Fallible]
-  }
-
-  enum IsHoisted derives Debug {
-    case Yes extends IsHoisted
-    case No extends IsHoisted
+  enum ElemTransformation {
+    case HoistedFallible[F[_]](transformation: Transformation[Fallible], mode: Expr[Mode.FailFast[F]])
+    case HoistedNonFallible(transformation: Transformation[Nothing])
+    case NonHoisted(transformation: Transformation[Nothing])
   }
 
   def create[F <: Fallible](
@@ -196,25 +190,22 @@ object Transformation {
                 case Plan.IsHoisted.Yes -> (TransformationMode.FailFast(mode)) =>
                   Transformation.Wrapped(
                     p.source,
-                    ElemTransformation.PossiblyFallible(recurse(p.wrapped), mode),
-                    p.wrapped.calculateTpe,
-                    Transformation.IsHoisted.Yes
+                    ElemTransformation.HoistedFallible(recurse(p.wrapped), mode),
+                    p.wrapped.calculateTpe
                   )
 
                 case Plan.IsHoisted.Yes -> _ =>
                   Transformation.Wrapped(
                     p.source,
-                    Context.current.asTotal.locally(ElemTransformation.NonFallible(recurse(p.wrapped))),
-                    p.wrapped.calculateTpe,
-                    Transformation.IsHoisted.Yes
+                    Context.current.asTotal.locally(ElemTransformation.HoistedNonFallible(recurse(p.wrapped))),
+                    p.wrapped.calculateTpe
                   )
 
                 case Plan.IsHoisted.No -> _ =>
                   Transformation.Wrapped(
                     p.source,
-                    Context.current.asTotal.locally(ElemTransformation.NonFallible(recurse(p.wrapped))),
-                    p.calculateTpe,
-                    Transformation.IsHoisted.No
+                    Context.current.asTotal.locally(ElemTransformation.NonHoisted(recurse(p.wrapped))),
+                    p.calculateTpe
                   )
 
           }

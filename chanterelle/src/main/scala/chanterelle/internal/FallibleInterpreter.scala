@@ -1,13 +1,11 @@
 package chanterelle.internal
 
-import scala.quoted.*
 import chanterelle.Mode
-import scala.quoted.Type
 import chanterelle.internal.Debug.AST
-import chanterelle.internal.Transformation.IsHoisted
-import chanterelle.internal.Transformation.Field
+import chanterelle.internal.Transformation.{ ElemTransformation, Field }
+
+import scala.quoted.*
 import scala.reflect.TypeTest
-import chanterelle.internal.Transformation.ElemTransformation
 
 private[chanterelle] object FallibleInterpreter {
   def run[F[_]](transformation: Transformation[Fallible], source: Expr[Any])(using
@@ -31,9 +29,21 @@ private[chanterelle] object FallibleInterpreter {
       case None =>
         transformation match {
           case t @ Transformation.Named(_, fields, namesTpe, valuesTpe, outTpe) =>
-            namedTransformation(t, source, F)
-          case Transformation.Tuple(source, fields, outputTpe) =>
-            ???
+            val (unwrappeds, wrappeds) = t.fields.zipWithIndex.partitionMap {
+              case (_, Field.FromSource(name, transformation)) -> idx =>
+                val fieldValue = StructuredValue.of(t.source, source).fieldValue(name)
+                recurse(transformation, fieldValue, F).asFieldValue(idx, transformation.outputTpe)
+              case (fieldName, Field.FromModifier(modifier)) -> idx => ???
+            }
+            handleTransformation(F, t, unwrappeds, wrappeds, ProductConstructor.Primary(t.outputTpe))
+
+          case t @ Transformation.Tuple(src, fields, outputTpe) =>
+            val (unwrappeds, wrappeds) = fields.partitionMap { (idx, transformation) =>
+              val fieldValue = StructuredValue.of(t.source, source).elementValue(idx)
+              recurse(transformation, fieldValue, F).asFieldValue(idx, transformation.outputTpe)
+            }
+            handleTransformation(F, t, unwrappeds, wrappeds, ProductConstructor.Tuple(src))
+
           case Transformation.Optional(source, paramTransformation, outputTpe) => ???
           case Transformation.EitherLike(source, left, right, outputTpe)       => ???
           case Transformation.MapLike(source, key, value, factory, outputTpe)  => ???
@@ -42,16 +52,15 @@ private[chanterelle] object FallibleInterpreter {
             Value.Unwrapped(source)
           case Transformation.ConfedUp(config)                                     => ???
           case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, outTpe) => ???
-          case t: Transformation.Wrapped[fallible, f]                              =>
+          case t: Transformation.Wrapped[f]                                        =>
             (t.source.tpe, t.outputTpe).runtimeChecked match {
               case '[F[src]] -> '[out] =>
                 val src = source.asExprOf[F[src]]
-                (t.isHoisted -> t.wrapped) match {
-                  case IsHoisted.Yes -> Transformation.ElemTransformation.PossiblyFallible(wrapped, mode) =>
+                (t.wrapped) match {
+                  case ElemTransformation.HoistedFallible(wrapped, mode) =>
                     val failFast = mode.asExprOf[Mode.FailFast[F]]
                     Value.Wrapped {
                       '{
-
                         $failFast
                           .flatMap(
                             $src,
@@ -59,20 +68,14 @@ private[chanterelle] object FallibleInterpreter {
                           )
                       }
                     }
-                  case IsHoisted.Yes -> Transformation.ElemTransformation.NonFallible(wrapped) =>
+                  case ElemTransformation.HoistedNonFallible(wrapped) =>
                     Value.Wrapped {
                       '{
                         ${ F.value }
                           .map($src, src => ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)) })
                       }
                     }
-                    // case IsHoisted.No -> Transformation.ElemTransformation.PossiblyFallible(wrapped, mode) =>
-                    // t.wrapped match {
-                    // case ElemTransformation.NonFallible(_) => ???
-                    // }
-                    // This case is illegal - come up with a way of expressing that
-                    ???
-                  case IsHoisted.No -> Transformation.ElemTransformation.NonFallible(wrapped) =>
+                  case ElemTransformation.NonHoisted(wrapped) =>
                     Value.Unwrapped {
                       '{
                         ${ F.value }
@@ -86,22 +89,15 @@ private[chanterelle] object FallibleInterpreter {
     }
   }
 
-  private def namedTransformation[F[_]: Type](t: Transformation.Named[Fallible], src: Expr[Any], F: TransformationMode[F])(using
-    Quotes,
-    Sources,
-    Context.PossiblyFallible[F]
-  ) = {
-    val (unwrappeds, wrappeds) = t.fields.zipWithIndex.partitionMap {
-      case (fieldName, field) -> idx =>
-        field match
-          case Field.FromSource(name, transformation) =>
-            val fieldValue = StructuredValue.of(t.source, src).fieldValue(name)
-            recurse(transformation, fieldValue, F).asFieldValue(idx, transformation.outputTpe)
-          case Field.FromModifier(modifier) => ???
-    }
-    t.outputTpe match {
+  private def handleTransformation[F[_]](
+    F: TransformationMode[F],
+    transformation: Transformation[Fallible],
+    unwrappeds: Iterable[FieldValue.Unwrapped],
+    wrappeds: Iterable[FieldValue.Wrapped[F]],
+    construct: ProductConstructor
+  )(using Type[F], Quotes): Value[F] =
+    transformation.outputTpe match {
       case '[dest] =>
-
         F match {
           case TransformationMode.Accumulating(value) =>
             NonEmptyList
@@ -109,23 +105,22 @@ private[chanterelle] object FallibleInterpreter {
               .map(wrappeds =>
                 Value.Wrapped(
                   ProductZipper.zipAndConstruct[F, dest](value, wrappeds, unwrappeds.toList)(
-                    ProductConstructor.Primary(t.outputTpe)
+                    construct
                   )
                 )
               )
-              .getOrElse(Value.Unwrapped(ProductConstructor.Primary(t.outputTpe)(unwrappeds.map(_.value).toSeq)))
+              .getOrElse(Value.Unwrapped(construct(unwrappeds.map(_.value).toSeq)))
           case TransformationMode.FailFast(value) =>
             Value.Wrapped[F] {
               ProductBinder.nestFlatMapsAndConstruct[F, dest](
                 value,
                 unwrappeds.toList,
                 wrappeds.toList,
-                ProductConstructor.Primary(t.outputTpe)
+                construct
               )
             }
         }
     }
-  }
 
   enum TransformationMode[F[x]] {
     def value: Expr[Mode[F]]
