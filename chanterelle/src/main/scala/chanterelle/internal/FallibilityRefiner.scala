@@ -22,7 +22,6 @@ private[chanterelle] object FallibilityRefiner {
         case Transformation.Optional(source, paramTransformation, outputTpe) =>
           recurse(paramTransformation)
         case Transformation.EitherLike(source, left, right, outputTpe) =>
-          recurse(left)
           recurse(right)
         case Transformation.MapLike(source, key, value, factory, outputTpe) =>
           recurse(key)

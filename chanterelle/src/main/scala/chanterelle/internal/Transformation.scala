@@ -41,7 +41,7 @@ object Transformation {
 
   case class EitherLike[+F <: Fallible](
     source: Structure.Either,
-    left: Transformation[F],
+    left: Transformation[Nothing],
     right: Transformation[F],
     outputTpe: Type[? <: scala.Either[?, ?]]
   ) extends Transformation[F]
@@ -136,10 +136,10 @@ object Transformation {
     def recurse[F <: Fallible](transformation: Plan[Nothing])(using Label[ErrorMessage], Context.Of[F]): Transformation[F] =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
-        case plan if plan.isModified == IsModified.No =>
-          val tpe = plan.calculateTpe
-          Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
-
+        // case plan if plan.isModified == IsModified.No =>
+        //   val tpe = plan.calculateTpe
+        //   Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
+        //
         case p @ Plan.Named(source, fields, _) =>
           (p.calculateNamesTpe, p.calculateValuesTpe).runtimeChecked match {
             case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
@@ -160,7 +160,7 @@ object Transformation {
           Optional(source, recurse(paramTransformation), p.calculateTpe)
 
         case p @ Plan.Either(source, left, right, _) =>
-          EitherLike(source, recurse(left), recurse(right), p.calculateTpe)
+          EitherLike(source, Context.current.asTotal.locally(recurse(left)), recurse(right), p.calculateTpe)
 
         case p @ Plan.MapLike(source, key, value, _) =>
           val tpe = p.calculateTpe

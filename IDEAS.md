@@ -55,3 +55,26 @@ val res: Either[Err, (int: Either[Err, (nest1: Int)])] =
 
 ^ feels kinda dumb doesn't it? Does that mean we need to mark ALL wrappeds on a path (_.int.nest) as hoisted?
 I think so - there's no point in doing the opposite because we'd need to .flatMap a bunch of shit to traverse the path anyway.
+
+### What do we do about Optional, EitherLike and IterLike?
+
+```scala
+val tup = (int = Some(Right(1)))
+```
+
+^ forms an Optional(Wrapped(Leaf[Int]))
+
+When the wrapped node IS NOT hoisted:
+
+```scala
+(int = tup.int.map(_.map(int => <transform int>)))
+```
+
+```scala
+val i = tup.int match {
+  case Some(right) => right.map(Some.apply)
+  case None => Right(None)
+}
+
+i.map(int => (int = int))
+```

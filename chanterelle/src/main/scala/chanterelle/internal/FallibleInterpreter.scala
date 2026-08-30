@@ -44,11 +44,24 @@ private[chanterelle] object FallibleInterpreter {
             }
             handleTransformation(F, t, unwrappeds, wrappeds, ProductConstructor.Tuple(src))
 
-          case Transformation.Optional(source, paramTransformation, outputTpe) => ???
-          case Transformation.EitherLike(source, left, right, outputTpe)       => ???
-          case Transformation.MapLike(source, key, value, factory, outputTpe)  => ???
-          case Transformation.IterLike(source, elem, factory, outputTpe)       => ???
-          case Transformation.Leaf(output)                                     =>
+          case Transformation.Optional(sourceStruct, paramTransformation, outputTpe) =>
+            (sourceStruct.tpe, paramTransformation.outputTpe).runtimeChecked match {
+              case '[Option[src]] -> '[out] =>
+                val src = source.asExprOf[Option[src]]
+                Value.Wrapped {
+                  '{
+                    $src match {
+                      case Some(value) =>
+                        ${ F.value }.map(${ recurse(paramTransformation, 'value, F).wrapped(F).asExprOf[F[out]] }, Some.apply)
+                      case None => ${ F.value }.pure(None)
+                    }
+                  }
+                }
+            }
+          case Transformation.EitherLike(source, left, right, outputTpe)      => ???
+          case Transformation.MapLike(source, key, value, factory, outputTpe) => ???
+          case Transformation.IterLike(source, elem, factory, outputTpe)      => ???
+          case Transformation.Leaf(output)                                    =>
             Value.Unwrapped(source)
           case Transformation.ConfedUp(config)                                     => ???
           case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, outTpe) => ???
@@ -72,17 +85,27 @@ private[chanterelle] object FallibleInterpreter {
                     Value.Wrapped {
                       '{
                         ${ F.value }
-                          .map($src, src => ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)) })
+                          .map(
+                            $src,
+                            src =>
+                              ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
+                          )
                       }
                     }
                   case ElemTransformation.NonHoisted(wrapped) =>
-                    Value.Unwrapped {
-                      '{
-                        ${ F.value }
-                          .map($src, src => ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)) })
-                      }
+                    wrapped.outputTpe match {
+                      case '[out] =>
+                        Value.Unwrapped {
+                          '{
+                            ${ F.value }
+                              .map(
+                                $src,
+                                src =>
+                                  ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
+                              )
+                          }
+                        }
                     }
-
                 }
             }
         }
