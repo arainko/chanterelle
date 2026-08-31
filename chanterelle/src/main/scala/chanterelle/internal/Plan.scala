@@ -96,7 +96,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
             when[Plan.Wrapped[Err, ?]] { plan =>
               val updated = plan.update(recurse(next, traversedPath))
               // hoist all plans on a path of a hoist, otherwise hoisting fields nested within other wrapped fields is dumb
-              if modifier.isInstanceOf[Modifier.Hoist[?]] then updated.hoisted else updated
+              if modifier.isInstanceOf[Modifier.Hoist[?]] then updated.passthroughHoisted else updated
             }
           )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, traversedPath, modifier.span))
 
@@ -276,7 +276,7 @@ private[chanterelle] object Plan {
             Plan.IterLike(source, create(element), IsModified.No)
 
       case wrapped: Structure.Wrapped[f] =>
-        Plan.Wrapped(wrapped, Plan.create(wrapped.wrapped), IsModified.No, IsHoisted.No)
+        Plan.Wrapped(wrapped, Plan.create(wrapped.wrapped), IsModified.No, Hoist.No)
 
       case leaf: Structure.Leaf =>
         Leaf(leaf)
@@ -678,11 +678,11 @@ private[chanterelle] object Plan {
     source: Structure.Wrapped[F],
     wrapped: Plan[E],
     isModified: IsModified,
-    isHoisted: IsHoisted
+    isHoisted: Hoist
   ) extends Plan[E]("wrapped") {
     def calculateTpe(using Quotes): Type[? <: AnyKind] = {
       @unused given Type[F] = source.wrapper.wrapper
-      if isHoisted == IsHoisted.Yes then wrapped.calculateTpe
+      if isHoisted == Hoist.Yes then wrapped.calculateTpe
       else (wrapped.calculateTpe).runtimeChecked match { case '[tpe] => Type.of[F[tpe]] }
     }
 
@@ -690,7 +690,10 @@ private[chanterelle] object Plan {
       this.copy(wrapped = f(wrapped), isModified = IsModified.Yes)
 
     def hoisted: Wrapped[Err, F] =
-      this.copy(isHoisted = IsHoisted.Yes, isModified = IsModified.Yes)
+      this.copy(isHoisted = Hoist.Yes, isModified = IsModified.Yes)
+
+    def passthroughHoisted: Wrapped[Err, F] =
+      this.copy(isHoisted = Hoist.Passthrough, isModified = IsModified.Yes)
   }
 
   case class Leaf(output: Structure.Leaf) extends Plan[Nothing]("ordinary value") {
@@ -761,8 +764,8 @@ private[chanterelle] object Plan {
     case Yes, No
   }
 
-  enum IsHoisted derives Debug {
-    case Yes, No
+  enum Hoist derives Debug {
+    case Yes, No, Passthrough
   }
 
   private def renameNamedNodes(

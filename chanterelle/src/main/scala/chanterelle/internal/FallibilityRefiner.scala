@@ -40,7 +40,7 @@ private[chanterelle] object FallibilityRefiner {
             case (_, Merged.Field.FromPrimary(underlying = Field.FromSource(transformation = t))) => t
             case (_, Merged.Field.FromSecondary(transformation = t))                              => t
           })
-        case Transformation.Wrapped(source, wrapped, outputTpe) =>
+        case Transformation.Hoisted(source, wrapped, outputTpe) =>
           boundary.break(None)
 
     }

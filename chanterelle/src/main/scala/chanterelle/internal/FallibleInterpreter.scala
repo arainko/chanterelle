@@ -65,7 +65,7 @@ private[chanterelle] object FallibleInterpreter {
             Value.Unwrapped(source)
           case Transformation.ConfedUp(config)                                     => ???
           case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, outTpe) => ???
-          case t: Transformation.Wrapped[f]                                        =>
+          case t: Transformation.Hoisted[f]                                        =>
             (t.source.tpe, t.outputTpe).runtimeChecked match {
               case '[F[src]] -> '[out] =>
                 val src = source.asExprOf[F[src]]
@@ -91,20 +91,6 @@ private[chanterelle] object FallibleInterpreter {
                               ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
                           )
                       }
-                    }
-                  case ElemTransformation.NonHoisted(wrapped) =>
-                    wrapped.outputTpe match {
-                      case '[out] =>
-                        Value.Unwrapped {
-                          '{
-                            ${ F.value }
-                              .map(
-                                $src,
-                                src =>
-                                  ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
-                              )
-                          }
-                        }
                     }
                 }
             }
