@@ -63,9 +63,10 @@ private[chanterelle] object FallibleInterpreter {
           case Transformation.IterLike(source, elem, factory, outputTpe)      => ???
           case Transformation.Leaf(output)                                    =>
             Value.Unwrapped(source)
-          case Transformation.ConfedUp(config)                                     => ???
-          case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, outTpe) => ???
-          case t: Transformation.Hoisted[f]                                        =>
+          case Transformation.ConfedUp(config) => ???
+          case merged: Transformation.Merged   =>
+            Value.Unwrapped(Context.current.asTotal.locally(Interpreter.runTransformation(source, merged)))
+          case t: Transformation.Hoisted[f] =>
             (t.source.tpe, t.outputTpe).runtimeChecked match {
               case '[F[src]] -> '[out] =>
                 val src = source.asExprOf[F[src]]

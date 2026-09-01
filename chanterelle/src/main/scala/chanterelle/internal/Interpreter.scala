@@ -11,6 +11,7 @@ import scala.quoted.*
 import NamedTuple.*
 import chanterelle.Mode
 import chanterelle.internal.Debug.AST
+import scala.annotation.unused
 
 private[chanterelle] object Interpreter {
 
@@ -106,6 +107,14 @@ private[chanterelle] object Interpreter {
             // }
           }
 
+        case mapped: Transformation.Mapped[f] =>
+          @unused given Type[f] = mapped.source.wrapper.wrapper
+          (mapped.source.tpe, mapped.wrapped.outputTpe).runtimeChecked match {
+            case '[`f`[a]] -> '[b] =>
+              val src = primary.asExprOf[f[a]]
+              '{ ${ mapped.mode }.map[a, b]($src, a => ${ runTransformation('a, mapped.wrapped).asExprOf[b] }) }
+          }
+
         case Transformation.IterLike(source, paramTransformation, factory, outputTpe) =>
           (source.tycon, outputTpe, primary).runtimeChecked match {
             case (
@@ -152,7 +161,7 @@ private[chanterelle] object Interpreter {
                     case Transformation.Leaf(output) =>
                       val value = Sources.current.get(ref)
                       StructuredValue.of(mergees(ref), value).fieldValue(name)
-                    case merged: Transformation.Merged[Nothing] =>
+                    case merged: Transformation.Merged =>
                       given Sources = Sources.current.advance(mergees, field)
                       val nextPrimary = Sources.current.get(Sources.Ref.Primary)
                       runTransformation(nextPrimary, merged)
@@ -170,7 +179,7 @@ private[chanterelle] object Interpreter {
   extension (sources: Sources)
     private def advance(
       mergees: VectorMap[Sources.Ref, Structure.Named],
-      field: Transformation.Merged.Field.FromSecondary[Nothing]
+      field: Transformation.Merged.Field.FromSecondary
     )(using Sources.Scope, Quotes): Sources =
       field.accessibleFrom.foldLeft(sources) { (acc, ref) =>
         val struct = mergees(ref)

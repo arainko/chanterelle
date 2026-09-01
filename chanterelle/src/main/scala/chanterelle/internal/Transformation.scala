@@ -69,13 +69,13 @@ object Transformation {
     export config.tpe as outputTpe
   }
 
-  case class Merged[+F <: Fallible](
+  case class Merged(
     mergees: VectorMap[Sources.Ref, Structure.Named],
-    fields: VectorMap[String, Transformation.Merged.Field[F]],
+    fields: VectorMap[String, Transformation.Merged.Field],
     namesTpe: Type[? <: scala.Tuple],
     valuesTpe: Type[? <: scala.Tuple],
     outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
-  ) extends Transformation[F]
+  ) extends Transformation[Nothing]
 
   // OK so, small invariant:
   // * hoisting a wrapped node hoists all encountered wrapped nodes on its way
@@ -111,33 +111,34 @@ object Transformation {
           Field.FromModifier(mod)
       }
 
-    def fromMerged[F <: Fallible](
+    def fromMerged(
       plan: Plan.Merged[Nothing]
-    )(using Quotes, Label[ErrorMessage], Context.Of[F]): Transformation.Merged[F] = {
-      val fields =
-        plan.fields.collect {
-          case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
-            name -> Transformation.Merged.Field.FromPrimary(source, transformField(field))
-          case (name, Plan.Merged.Field.FromSecondary(secName, ref, accessibleFrom, plan)) =>
-            val transformation: Transformation.Leaf | Transformation.Merged[F] = plan match {
-              case leaf: Plan.Leaf              => Transformation.fromLeaf(leaf)
-              case merged: Plan.Merged[Nothing] => fromMerged(merged)
-            }
-            name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
+    )(using Quotes, Label[ErrorMessage], Context.Any): Transformation.Merged =
+      Context.current.asTotal.locally {
+        val fields =
+          plan.fields.collect {
+            case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
+              name -> Transformation.Merged.Field.FromPrimary(source, transformField(field))
+            case (name, Plan.Merged.Field.FromSecondary(secName, ref, accessibleFrom, plan)) =>
+              val transformation: Transformation.Leaf | Transformation.Merged = plan match {
+                case leaf: Plan.Leaf              => Transformation.fromLeaf(leaf)
+                case merged: Plan.Merged[Nothing] => fromMerged(merged)
+              }
+              name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
+          }
+        (plan.calculateNamesTpe, plan.calculateValuesTpe).runtimeChecked match {
+          case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
+            Merged(
+              plan.mergees,
+              fields,
+              Type.of[names],
+              Type.of[values],
+              Type.of[NamedTuple.NamedTuple[names, values]]
+            )
+
         }
-      (plan.calculateNamesTpe, plan.calculateValuesTpe).runtimeChecked match {
-        case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
-          Merged(
-            plan.mergees,
-            fields,
-            Type.of[names],
-            Type.of[values],
-            Type.of[NamedTuple.NamedTuple[names, values]]
-          )
 
       }
-
-    }
 
     def recurse[F <: Fallible](transformation: Plan[Nothing])(using Label[ErrorMessage], Context.Of[F]): Transformation[F] =
       transformation match {
@@ -193,12 +194,15 @@ object Transformation {
               boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
             case ctx @ given Context.PossiblyFallible[`f`] =>
               (p.isHoisted, ctx.mode) match
-                case Plan.Hoist.Yes -> (TransformationMode.FailFast(mode)) =>
+                case Plan.Hoist.Passthrough -> (TransformationMode.FailFast(mode)) =>
                   Transformation.Hoisted(
                     p.source,
                     ElemTransformation.HoistedFallible(recurse(p.wrapped), mode),
                     p.wrapped.calculateTpe
                   )
+
+                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_) =>
+                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
 
                 case Plan.Hoist.Yes -> _ =>
                   Transformation.Hoisted(
@@ -249,13 +253,13 @@ object Transformation {
   }
 
   object Merged {
-    enum Field[+F <: Fallible] derives Debug {
-      case FromPrimary(source: Structure.Named, underlying: Transformation.Field[F])
+    enum Field derives Debug {
+      case FromPrimary(source: Structure.Named, underlying: Transformation.Field[Nothing])
       case FromSecondary(
         name: String,
         ref: Sources.Ref,
         accessibleFrom: Set[Sources.Ref],
-        transformation: Leaf | Merged[F]
+        transformation: Leaf | Merged
       )
     }
   }

@@ -30,6 +30,8 @@ private[chanterelle] object FallibilityRefiner {
           recurse(elem)
         case Transformation.Leaf(output) =>
           ()
+        case Transformation.Mapped(_, _, _, _) =>
+          ()
         case Transformation.ConfedUp(config) =>
           config match
             case Configured.Update(tpe, fn)                      => ()
