@@ -39,13 +39,19 @@ object EntryPoint {
           Transformation
             .create(refinedPlan)
             .leftMap(err => ErrorsWithSpan(err :: Nil))
-            .map(Interpreter.runTransformation(tuple, _))
+            .map { trans =>
+              // Logger.info("Infallible transformation", trans)
+              Interpreter.runTransformation(tuple, trans)
+            }
 
         case ctx @ given Context.PossiblyFallible[f] =>
           Transformation
             .create(refinedPlan)
             .leftMap(err => ErrorsWithSpan(err :: Nil))
-            .map(FallibleInterpreter.run(_, tuple))
+            .map { trans =>
+              Logger.info("Fallible transformation", trans)
+              FallibleInterpreter.run(trans, tuple)
+            }
       }
     } yield expr
 

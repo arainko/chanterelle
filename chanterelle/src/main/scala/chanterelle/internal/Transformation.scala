@@ -88,7 +88,7 @@ object Transformation {
     outputTpe: Type[?]
   ) extends Transformation[Fallible]
 
-  enum ElemTransformation {
+  enum ElemTransformation derives Debug {
     case HoistedFallible[F[_]](transformation: Transformation[Fallible], mode: Expr[Mode.FailFast[F]])
     case HoistedNonFallible(transformation: Transformation[Nothing])
   }

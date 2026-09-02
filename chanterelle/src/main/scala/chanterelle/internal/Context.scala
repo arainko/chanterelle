@@ -4,8 +4,13 @@ import scala.quoted.Expr
 import chanterelle.Mode
 import scala.quoted.Quotes
 import chanterelle.internal.FallibleInterpreter.TransformationMode
+import chanterelle.internal.Debug.AST
 
-private[chanterelle] object Fallible
+private[chanterelle] object Fallible {
+  given Debug[Fallible] with {
+    def astify(self: Fallible)(using Quotes): AST = AST.Text("Fallible")
+  }
+}
 private[chanterelle] type Fallible = Fallible.type
 
 private[chanterelle] sealed trait Context[+F <: Fallible] {

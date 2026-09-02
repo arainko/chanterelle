@@ -7,6 +7,7 @@ import scala.annotation.compileTimeOnly
 import scala.annotation.targetName
 import chanterelle.Mode
 import scala.collection.generic.IsMap
+import java.lang.System.Logger
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -249,16 +250,18 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
 
   import chanterelle.*
 
-  val b = mode.locally {
-    (int = Some(Right((int = Right((int = 1))))), str = Right("asd"), int2 = 2, nest = (int = Right(1)))
-      .transform(
-        _.?(_.int.element.element.int)
-        // _.?(_.int),
-        // _.?(_.str),
-        // _.?(_.nest.int)
-      )
-  }
+  internal.Logger.locally:
+    val b = mode.locally {
 
-  println(b)
+      (int = Right(Right((int = Right((int = 1)), int2 = Right(3)))))
+        .transform(
+          _.?(_.int.element.element.int),
+          _.?(_.int.element.element.int2)
+
+          // _.?(_.int),
+          // _.?(_.str),
+          // _.?(_.nest.int)
+        )
+    }
 
 }

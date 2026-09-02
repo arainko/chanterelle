@@ -682,8 +682,10 @@ private[chanterelle] object Plan {
   ) extends Plan[E]("wrapped") {
     def calculateTpe(using Quotes): Type[? <: AnyKind] = {
       @unused given Type[F] = source.wrapper.wrapper
-      if isHoisted == Hoist.Yes then wrapped.calculateTpe
-      else (wrapped.calculateTpe).runtimeChecked match { case '[tpe] => Type.of[F[tpe]] }
+      isHoisted match {
+        case Hoist.Yes | Hoist.Passthrough => wrapped.calculateTpe
+        case Hoist.No                      => (wrapped.calculateTpe).runtimeChecked match { case '[tpe] => Type.of[F[tpe]] }
+      }
     }
 
     def update(f: Plan[E] => Plan[Err]): Wrapped[Err, F] =
