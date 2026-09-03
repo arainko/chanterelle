@@ -58,13 +58,29 @@ private[chanterelle] object FallibleInterpreter {
                   }
                 }
             }
-          case Transformation.EitherLike(source, left, right, outputTpe)      => ???
+          case Transformation.EitherLike(sourceStruct, left, right, outputTpe) =>
+            (sourceStruct.tpe, left.outputTpe, right.outputTpe).runtimeChecked match {
+              case ('[Either[left, right]], '[leftOut], '[rightOut]) =>
+                val src = source.asExprOf[Either[left, right]]
+                Value.Wrapped {
+                  '{
+                    $src match {
+                      case Right(rightValue) =>
+                        ${ F.value }.map(${ recurse(right, 'rightValue, F).wrapped(F).asExprOf[F[rightOut]] }, Right.apply)
+                      case Left(leftValue) =>
+                        ${ F.value }.pure(Left(${
+                          Context.current.asTotal.locally(Interpreter.runTransformation('leftValue, left)).asExprOf[leftOut]
+                        }))
+                    }
+                  }
+                }
+            }
           case Transformation.MapLike(source, key, value, factory, outputTpe) => ???
           case Transformation.IterLike(source, elem, factory, outputTpe)      => ???
           case Transformation.Leaf(output)                                    =>
             Value.Unwrapped(source)
-          case Transformation.ConfedUp(config) => ???
-          case merged: Transformation.Merged   =>
+          case Transformation.ConfedUp(config)                            => ???
+          case merged: (Transformation.Merged | Transformation.Mapped[f]) =>
             Value.Unwrapped(Context.current.asTotal.locally(Interpreter.runTransformation(source, merged)))
           case t: Transformation.Hoisted[f] =>
             (t.source.tpe, t.outputTpe).runtimeChecked match {
