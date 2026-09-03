@@ -23,9 +23,12 @@ private[chanterelle] object FallibleInterpreter {
     Sources,
     Context.PossiblyFallible[F]
   ): Value[F] = {
+    def nonfallibleTransformation(src: Expr[Any], nonfallible: Transformation[Nothing]) =
+      Context.current.asTotal.locally(Interpreter.runTransformation(src, nonfallible))
+
     FallibilityRefiner.run(transformation) match {
       case nonfallible: Transformation[Nothing] =>
-        Value.Unwrapped(Context.current.asTotal.locally(Interpreter.runTransformation(source, nonfallible)))
+        Value.Unwrapped(nonfallibleTransformation(source, nonfallible))
       case None =>
         transformation match {
           case t @ Transformation.Named(_, fields, namesTpe, valuesTpe, outTpe) =>
@@ -68,9 +71,7 @@ private[chanterelle] object FallibleInterpreter {
                       case Right(rightValue) =>
                         ${ F.value }.map(${ recurse(right, 'rightValue, F).wrapped(F).asExprOf[F[rightOut]] }, Right.apply)
                       case Left(leftValue) =>
-                        ${ F.value }.pure(Left(${
-                          Context.current.asTotal.locally(Interpreter.runTransformation('leftValue, left)).asExprOf[leftOut]
-                        }))
+                        ${ F.value }.pure(Left(${ nonfallibleTransformation('leftValue, left).asExprOf[leftOut] }))
                     }
                   }
                 }
@@ -81,7 +82,7 @@ private[chanterelle] object FallibleInterpreter {
             Value.Unwrapped(source)
           case Transformation.ConfedUp(config)                            => ???
           case merged: (Transformation.Merged | Transformation.Mapped[f]) =>
-            Value.Unwrapped(Context.current.asTotal.locally(Interpreter.runTransformation(source, merged)))
+            Value.Unwrapped(nonfallibleTransformation(source, merged))
           case t: Transformation.Hoisted[f] =>
             (t.source.tpe, t.outputTpe).runtimeChecked match {
               case '[F[src]] -> '[out] =>
