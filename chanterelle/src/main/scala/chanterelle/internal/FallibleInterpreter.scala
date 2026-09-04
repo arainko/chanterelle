@@ -6,6 +6,7 @@ import chanterelle.internal.Transformation.{ ElemTransformation, Field }
 
 import scala.quoted.*
 import scala.reflect.TypeTest
+import scala.collection.Factory
 
 private[chanterelle] object FallibleInterpreter {
   def run[F[_]](transformation: Transformation[Fallible], source: Expr[Any])(using
@@ -76,9 +77,59 @@ private[chanterelle] object FallibleInterpreter {
                   }
                 }
             }
-          case Transformation.MapLike(source, key, value, factory, outputTpe) => ???
-          case Transformation.IterLike(source, elem, factory, outputTpe)      => ???
-          case Transformation.Leaf(output)                                    =>
+          case Transformation.MapLike(sourceStruct, key, value, factory, outputTpe) =>
+            (sourceStruct.tycon, outputTpe, source).runtimeChecked match {
+              case (
+                    '[type outMap[k, v]; outMap],
+                    '[collection.Map[outKey, outValue]],
+                    '{ $srcValue: collection.Map[srcKey, srcValue] }
+                  ) =>
+                val fac = factory.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
+                def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
+                  F match {
+                    case TransformationMode.Accumulating(value) =>
+                      '{ $value.zip[A, B]($left, $right) }
+                    case TransformationMode.FailFast(value) =>
+                      '{ $value.flatMap($left, left => $value.map($right, right => (left, right))) }
+                  }
+                Value.Wrapped {
+                  '{
+                    ${ F.value }.traverseCollection[(srcKey, srcValue), (outKey, outValue), Iterable[(srcKey, srcValue)], outMap[
+                      outKey,
+                      outValue
+                    ]](
+                      $srcValue,
+                      (srcKey, srcValue) =>
+                        ${
+                          handlePair(
+                            recurse(key, 'srcKey, F).wrapped(F).asExprOf[F[outKey]],
+                            recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
+                          )
+                        }
+                    )(using $fac)
+                  }
+                }
+
+            }
+          case Transformation.IterLike(sourceStruct, elem, factory, outputTpe) =>
+            (sourceStruct.tycon, outputTpe, source).runtimeChecked match {
+              case (
+                    '[type coll[a]; coll],
+                    '[Iterable[elem]],
+                    '{ $srcValue: Iterable[srcElem] }
+                  ) =>
+                val f = factory.asExprOf[Factory[elem, coll[elem]]]
+                Value.Wrapped {
+                  '{
+                    ${ F.value }.traverseCollection[srcElem, elem, Iterable[srcElem], coll[elem]](
+                      $srcValue,
+                      srcElem => ${ recurse(elem, 'srcElem, F).wrapped(F).asExprOf[F[elem]] }
+                    )(using $f)
+                  }
+                }
+            }
+
+          case Transformation.Leaf(output) =>
             Value.Unwrapped(source)
           case Transformation.ConfedUp(config)                            => ???
           case merged: (Transformation.Merged | Transformation.Mapped[f]) =>

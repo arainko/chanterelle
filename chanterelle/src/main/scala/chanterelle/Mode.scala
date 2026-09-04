@@ -1,19 +1,22 @@
 package chanterelle
 
 import scala.collection.Factory
+import scala.collection.generic.IsSeq
 
 sealed trait Mode[F[_]] {
   def pure[A](value: A): F[A]
 
   def map[A, B](fa: F[A], f: A => B): F[B]
 
-  def traverseCollection[A, B, AColl <: Iterable[A], BColl <: Iterable[B]](
+  // TODO: reevaluate this - I don't think we even need 'AColl' as a type param, we just need something that can TURN into an Iterable (so having IsIterable in scope?) - BColl also doesn't need to be <: Iterable[B]? As long as there is a Factory in scope
+  def traverseCollection[A, B, AColl <: Iterable[A], BColl](
     collection: AColl,
     transformation: A => F[B]
   )(using Factory[B, BColl]): F[BColl]
 }
 
 object Mode {
+  IsSeq
   trait FailFast[F[_]] extends Mode[F] {
     def flatMap[A, B](fa: F[A], f: A => F[B]): F[B]
   }
@@ -23,7 +26,7 @@ object Mode {
   }
 
   extension [F[_], M <: Mode[F]](self: M) {
-    inline def locally[A](inline f: M ?=> A): A = f(using self)
+    inline def apply[A](inline f: M ?=> A): A = f(using self)
   }
 
   object Accumulating {
@@ -49,7 +52,7 @@ object Mode {
         }
 
       // Inspired by chimney's implementation: https://github.com/scalalandio/chimney/blob/53125c0a55479763157909ef920e11f5b487b182/chimney/src/main/scala/io/scalaland/chimney/TransformerFSupport.scala#L153
-      override def traverseCollection[A, B, AColl <: Iterable[A], BColl <: Iterable[B]](
+      override def traverseCollection[A, B, AColl <: Iterable[A], BColl](
         collection: AColl,
         transformation: A => scala.Either[Coll[E], B]
       )(using
@@ -89,7 +92,7 @@ object Mode {
 
       final def flatMap[A, B](fa: scala.Either[E, A], f: A => scala.Either[E, B]): scala.Either[E, B] = fa.flatMap(f)
 
-      final def traverseCollection[A, B, AColl <: Iterable[A], BColl <: Iterable[B]](
+      final def traverseCollection[A, B, AColl <: Iterable[A], BColl](
         collection: AColl,
         transformation: A => scala.Either[E, B]
       )(using
@@ -125,7 +128,7 @@ object Mode {
 
       final def flatMap[A, B](fa: scala.Option[A], f: A => scala.Option[B]): scala.Option[B] = fa.flatMap(f)
 
-      final def traverseCollection[A, B, AColl <: Iterable[A], BColl <: Iterable[B]](
+      final def traverseCollection[A, B, AColl <: Iterable[A], BColl](
         collection: AColl,
         transformation: A => scala.Option[B]
       )(using factory: Factory[B, BColl]): scala.Option[BColl] = {

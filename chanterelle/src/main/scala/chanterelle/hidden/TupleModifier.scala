@@ -1,13 +1,14 @@
 package chanterelle.hidden
 
-import chanterelle.FieldName
+import chanterelle.{ FieldName, Mode }
 
 import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
-import scala.annotation.targetName
-import chanterelle.Mode
+import scala.collection.generic.IsIterable
+import scala.collection.immutable.IntMap
 import scala.collection.generic.IsMap
-import java.lang.System.Logger
+import scala.collection.MapOps
+import scala.collection.IterableOps
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -240,27 +241,21 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
     Mode[F]
   )(value: Value)(using IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
 
-  val mode: Mode.FailFast[[a] =>> Either[String, a]] = new {
-    def flatMap[A, B](fa: Either[String, A], f: A => Either[String, B]): Either[String, B] = fa.flatMap(f)
-    def map[A, B](fa: Either[String, A], f: A => B): Either[String, B] = fa.map(f)
-    def pure[A](value: A): Either[String, A] = Right(value)
-  }
-
-  val acc: Mode.Accumulating[[a] =>> Either[String, a]] = ???
-
   import chanterelle.*
 
-  internal.Logger.locally:
-    val b = mode.locally {
+  val asd = summon[IsIterable[List[Int]]]
+  val asdf = summon[IsMap[IntMap[Int]]]
+  summon[IsIterable[String]]
 
-      (int = Right(Right((int = Right((int = 1)), int2 = Right(3)))))
+  IterableOps
+
+  internal.Logger.locally:
+    val b = Mode.FailFast.either[String] {
+      (int = Right(Right((int = Right((int = 1)), list = List(Right((int = 1))), int2 = Right(3)))))
         .transform(
           _.?(_.int.element.element.int),
-          _.?(_.int.element.element.int2)
-
-          // _.?(_.int),
-          // _.?(_.str),
-          // _.?(_.nest.int)
+          _.?(_.int.element.element.int2),
+          _.?(_.int.element.element.list.element)
         )
     }
 
