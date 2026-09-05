@@ -60,6 +60,24 @@ lazy val chanterelle =
       mimaPreviousArtifacts := Set.empty
     )
 
+lazy val chanterelleCats =
+  crossProject(JSPlatform, JVMPlatform, NativePlatform)
+    .withoutSuffixFor(JVMPlatform)
+    .crossType(CrossType.Pure)
+    .in(file("chanterelle-cats"))
+    .settings(
+      libraryDependencies ++= Seq("org.typelevel" %%% "cats-core" % "2.13.0")
+    )
+    .jsSettings(
+      bspEnabled := false,
+      mimaPreviousArtifacts := Set.empty
+    )
+    .nativeSettings(
+      bspEnabled := false,
+      mimaPreviousArtifacts := Set.empty
+    )
+    .dependsOn(chanterelle)
+
 lazy val docs =
   project
     .in(file("documentation"))
