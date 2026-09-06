@@ -9,8 +9,6 @@ import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
 import NamedTuple.*
-import chanterelle.Mode
-import chanterelle.internal.Debug.AST
 import scala.annotation.unused
 
 private[chanterelle] object Interpreter {
@@ -84,8 +82,6 @@ private[chanterelle] object Interpreter {
             case Configured.Update(fn = fn) =>
               Sources.current.get(fn) match { case '{ $fn: (src => out) } => '{ $fn(${ primary.asExprOf[src] }) } }
 
-            case Configured.Sequence(tpe, source, unwrappedDest) =>
-              ???
             // Context.current match {
             //   case ctx: Context.PossiblyFallible[f] =>
             //     given Type[f] = ctx.wrapperType.wrapper

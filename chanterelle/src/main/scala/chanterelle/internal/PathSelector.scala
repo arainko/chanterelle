@@ -50,7 +50,7 @@ private[chanterelle] object PathSelector {
           recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
 
         case Apply(
-              Apply(TypeApply(Select(Ident(_), "element"), wrapperTpe :: elemTpe :: Nil), _),
+              Apply(TypeApply(Select(Ident(_), "element"), _ :: elemTpe :: Nil), _),
               tree :: Nil
             ) =>
           Logger.debug(

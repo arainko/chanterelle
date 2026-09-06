@@ -5,7 +5,6 @@ import chanterelle.internal.Structure.Leaf
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
-import chanterelle.Mode
 import scala.annotation.unused
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
@@ -106,7 +105,7 @@ private[chanterelle] object Structure {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
 
-        case tpe @ WrappedType(mode = mode, wrapper = wrapper: WrapperType[f], wrapped = '[wrapped]) =>
+        case WrappedType(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped]) =>
           @unused given Type[f] = wrapper.wrapper
           Structure.Wrapped[f](
             Type.of[f[wrapped]],
@@ -241,9 +240,9 @@ private[chanterelle] object Structure {
   private object WrappedType {
     def unapply(tpe: Type[?])(using q: Quotes, context: Context.Any) =
       context match {
-        case Context.Total                               => None
-        case Context.PossiblyFallible(mode, wrapperType) =>
-          wrapperType.unapply(tpe).map((wrapper, wrapped) => (mode = mode, wrapper = wrapper, wrapped = wrapped))
+        case Context.Total                       => None
+        case ctx: Context.PossibleFallible[?, ?] =>
+          ctx.wrapperType.unapply(tpe).map((wrapper, wrapped) => (wrapper = wrapper, wrapped = wrapped))
       }
 
   }

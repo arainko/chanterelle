@@ -5,10 +5,11 @@ import chanterelle.internal.Debug.AST
 import chanterelle.internal.Transformation.{ ElemTransformation, Field }
 
 import scala.quoted.*
-import scala.reflect.TypeTest
 import scala.collection.Factory
 
 private[chanterelle] object FallibleInterpreter {
+
+  // TODO: add caching! This is ran a lot of times
   def run[F[_]](transformation: Transformation[Fallible], source: Expr[Any])(using
     Quotes,
     Sources,
@@ -16,7 +17,10 @@ private[chanterelle] object FallibleInterpreter {
   ): Expr[Any] = {
     given Type[F] = Context.current.wrapperType.wrapper
     val mode = Context.current.mode
-    recurse(transformation, source, mode).wrapped(mode)
+    recurse(transformation, source, mode) match {
+      case Value.Unwrapped(value) => value
+      case Value.Wrapped(value)   => value
+    }
   }
 
   private def recurse[F[_]: Type](transformation: Transformation[Fallible], source: Expr[Any], F: TransformationMode[F])(using
@@ -25,7 +29,7 @@ private[chanterelle] object FallibleInterpreter {
     Context.PossiblyFallible[F]
   ): Value[F] = {
     def nonfallibleTransformation(src: Expr[Any], nonfallible: Transformation[Nothing]) =
-      Context.current.asTotal.locally(Interpreter.runTransformation(src, nonfallible))
+      Context.current.weaken.locally(Interpreter.runTransformation(src, nonfallible))
 
     FallibilityRefiner.run(transformation) match {
       case nonfallible: Transformation[Nothing] =>
@@ -87,7 +91,7 @@ private[chanterelle] object FallibleInterpreter {
                 val fac = factory.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
                   F match {
-                    case TransformationMode.Accumulating(value) =>
+                    case TransformationMode.Accumulating(value, _) =>
                       '{ $value.zip[A, B]($left, $right) }
                     case TransformationMode.FailFast(value) =>
                       '{ $value.flatMap($left, left => $value.map($right, right => (left, right))) }
@@ -156,8 +160,7 @@ private[chanterelle] object FallibleInterpreter {
                         ${ F.value }
                           .map(
                             $src,
-                            src =>
-                              ${ Context.current.asTotal.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
+                            src => ${ Context.current.weaken.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
                           )
                       }
                     }
@@ -177,7 +180,7 @@ private[chanterelle] object FallibleInterpreter {
     transformation.outputTpe match {
       case '[dest] =>
         F match {
-          case TransformationMode.Accumulating(value) =>
+          case TransformationMode.Accumulating(value, _) =>
             NonEmptyList
               .fromList(wrappeds.toList)
               .map(wrappeds =>
@@ -203,27 +206,30 @@ private[chanterelle] object FallibleInterpreter {
   enum TransformationMode[F[x]] {
     def value: Expr[Mode[F]]
 
-    case Accumulating(value: Expr[Mode.Accumulating[F]])
+    case Accumulating(value: Expr[Mode.Accumulating[F]], failFast: Option[Expr[Mode.FailFast[F]]])
     case FailFast(value: Expr[Mode.FailFast[F]])
   }
 
   object TransformationMode {
     def create[F[x]: Type](expr: Expr[Mode[F]])(using Quotes): TransformationMode[F] =
       expr match
+        case '{ $acc: Mode.Accumulating[F] & Mode.FailFast[F] } =>
+          Accumulating(acc, Some(acc))
         case '{ $acc: Mode.Accumulating[F] } =>
-          Accumulating(acc)
+          Accumulating(acc, None)
         case '{ $ff: Mode.FailFast[F] } =>
           FailFast(ff)
         case _ =>
+          val rendered = Type.show[F]
           quotes.reflect.report.errorAndAbort(
-            "Couldn't determine the transformation mode, make sure an instance of either Mode.FailFast[F] or Mode.Accumulating[F] is in implicit scope"
+            s"Couldn't determine the transformation mode, make sure an instance of either Mode.FailFast[$$rendered] or Mode.Accumulating[$rendered] is in implicit scope"
           )
 
     given Debug[TransformationMode[?]] with {
       def astify(self: TransformationMode[?])(using Quotes): AST =
         self match
-          case Accumulating(value) => AST.Text("Accumulating")
-          case FailFast(value)     => AST.Text("FailFast")
+          case Accumulating(value, ff) => AST.Text("Accumulating ()")
+          case FailFast(value)         => AST.Text("FailFast")
 
     }
   }

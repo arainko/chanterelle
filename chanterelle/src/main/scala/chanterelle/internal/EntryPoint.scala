@@ -5,8 +5,6 @@ import chanterelle.hidden.TupleModifier
 import scala.annotation.publicInBinary
 import scala.quoted.*
 import scala.quoted.runtime.StopMacroExpansion
-import chanterelle.internal.Context.Total
-import chanterelle.internal.Context.PossiblyFallible
 
 object EntryPoint {
   transparent inline def run[A](tuple: A, inline mods: TupleModifier.Builder[A] => TupleModifier[A]*): Any = ${
@@ -35,18 +33,18 @@ object EntryPoint {
         .leftMap(ErrorsWithSpan)
       given Sources = builder.build
       expr <- Context.current match {
-        case ctx @ given Context.Total.type =>
+        case ctx @ given (Context.Total.type | Context.NonFallible[f]) =>
           Transformation
             .create(refinedPlan)
             .leftMap(err => ErrorsWithSpan(err :: Nil))
             .map { trans =>
-              // Logger.info("Infallible transformation", trans)
               Interpreter.runTransformation(tuple, trans)
             }
 
         case ctx @ given Context.PossiblyFallible[f] =>
-          Transformation
-            .create(refinedPlan)
+          val transformation = Transformation.create(refinedPlan)
+
+          transformation
             .leftMap(err => ErrorsWithSpan(err :: Nil))
             .map { trans =>
               Logger.info("Fallible transformation", trans)

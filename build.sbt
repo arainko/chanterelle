@@ -1,6 +1,6 @@
 import com.typesafe.tools.mima.core._
 
-ThisBuild / scalaVersion := "3.8.4"
+ThisBuild / scalaVersion := "3.9.0"
 
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / organization := "io.github.arainko"
@@ -42,6 +42,7 @@ lazy val chanterelle =
     .settings(
       scalacOptions ++= Seq(
         "-preview",
+        "-Xkind-projector:underscores",
         "-Wunused:all",
         "-WunstableInlineAccessors",
         "-Xcheck-macros",

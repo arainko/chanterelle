@@ -6,7 +6,6 @@ import chanterelle.hidden.TupleModifier
 import scala.quoted.*
 
 import NamedTuple.AnyNamedTuple
-import chanterelle.Mode
 
 private[chanterelle] enum Modifier derives Debug {
   def path: Path
@@ -117,7 +116,7 @@ private[chanterelle] object Modifier {
 
       case cfg @ '{
             type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.sequence[f](using $mode)
+            (builder: TupleModifier.Builder[tup]) => builder.sequence[f](using $_)
           } =>
         Right(
           Modifier.Sequence(Path.empty(Type.of[Any]), Span.fromExpr(cfg), WrapperType.create[f])
@@ -125,7 +124,7 @@ private[chanterelle] object Modifier {
 
       case cfg @ '{
             type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.?[f, selected](using $mode)(${ AsTerm(PathSelector(path)) })
+            (builder: TupleModifier.Builder[tup]) => builder.?[f, selected](using $_)(${ AsTerm(PathSelector(path)) })
           } =>
         Right(
           Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f])

@@ -1,6 +1,7 @@
 package chanterelle.internal
 
 import scala.quoted.*
+import scala.annotation.unused
 
 private[chanterelle] sealed trait ProductConstructor {
   def apply(fields: Seq[Expr[Any]])(using Quotes): Expr[Any]
@@ -15,7 +16,7 @@ private[chanterelle] object ProductConstructor {
     }
   }
 
-  final class Tuple(structure: Structure.Tuple) extends ProductConstructor {
+  final class Tuple(@unused structure: Structure.Tuple) extends ProductConstructor {
     def apply(fields: Seq[Expr[Any]])(using Quotes): Expr[Any] =
       Expr.ofTupleFromSeq(fields)
   }

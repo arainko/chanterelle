@@ -249,13 +249,16 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
 
   IterableOps
 
+  val yup =
+    (int = Right(Right((int = Right((int = 1)), list = List(Right((int = 1))), int2 = Right(3)))))
+    // internal.CodePrinter.code:
   internal.Logger.locally:
-    val b = Mode.FailFast.either[String] {
-      (int = Right(Right((int = Right((int = 1)), list = List(Right((int = 1))), int2 = Right(3)))))
+    val b = Mode.Accumulating.either[List, String] {
+      yup
         .transform(
-          _.?(_.int.element.element.int),
-          _.?(_.int.element.element.int2),
-          _.?(_.int.element.element.list.element)
+          _.?(_.int.element.element.int)
+          // _.?(_.int.element.element.int2),
+          // _.?(_.int.element.element.list.element)
         )
     }
 

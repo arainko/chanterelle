@@ -80,7 +80,9 @@ private[chanterelle] object ErrorMessage {
     }
   }
 
-  case object CantSequenceWithoutFallibleContext extends ErrorMessage {
-    def render(using Quotes): String = "Can't use fallible transformations without providing Mode[F] in scope"
+  case class CantSequenceWithoutFallibleContext() extends ErrorMessage {
+    private val exec = new RuntimeException()
+    def render(using Quotes): String =
+      s"Can't use fallible transformations without providing Mode[F] in scope: ${exec.printStackTrace()}"
   }
 }

@@ -1,15 +1,11 @@
 package chanterelle.internal
 
-import chanterelle.internal.Plan.IsModified
-
 import scala.collection.Factory
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
 import chanterelle.internal.Plan.Hoist
-import chanterelle.internal.Context.Total
-import chanterelle.internal.Context.PossiblyFallible
 import chanterelle.Mode
 import chanterelle.internal.FallibleInterpreter.TransformationMode
 
@@ -114,7 +110,7 @@ object Transformation {
     def fromMerged(
       plan: Plan.Merged[Nothing]
     )(using Quotes, Label[ErrorMessage], Context.Any): Transformation.Merged =
-      Context.current.asTotal.locally {
+      Context.current.weaken.locally {
         val fields =
           plan.fields.collect {
             case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
@@ -167,7 +163,7 @@ object Transformation {
           Optional(source, recurse(paramTransformation), p.calculateTpe)
 
         case p @ Plan.Either(source, left, right, _) =>
-          EitherLike(source, Context.current.asTotal.locally(recurse(left)), recurse(right), p.calculateTpe)
+          EitherLike(source, Context.current.weaken.locally(recurse(left)), recurse(right), p.calculateTpe)
 
         case p @ Plan.MapLike(source, key, value, _) =>
           val tpe = p.calculateTpe
@@ -191,7 +187,20 @@ object Transformation {
         case p: Plan.Wrapped[Nothing, f] =>
           Context.current match {
             case Context.Total =>
-              boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
+              boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
+            case ctx @ given Context.NonFallible[`f`] =>
+              p.isHoisted match {
+                case Hoist.No =>
+                  Transformation.Mapped[f](
+                    p.source,
+                    Context.current.weaken.locally(recurse(p.wrapped)),
+                    ctx.mode.value,
+                    p.calculateTpe
+                  )
+
+                case Hoist.Passthrough | Hoist.Yes =>
+                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
+              }
             case ctx @ given Context.PossiblyFallible[`f`] =>
               (p.isHoisted, ctx.mode) match
                 case Plan.Hoist.Passthrough -> (TransformationMode.FailFast(mode)) =>
@@ -201,20 +210,27 @@ object Transformation {
                     p.wrapped.calculateTpe
                   )
 
-                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_) =>
-                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
+                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_, Some(mode)) =>
+                  Transformation.Hoisted(
+                    p.source,
+                    ElemTransformation.HoistedFallible(recurse(p.wrapped), mode),
+                    p.wrapped.calculateTpe
+                  )
+
+                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_, None) =>
+                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
 
                 case Plan.Hoist.Yes -> _ =>
                   Transformation.Hoisted(
                     p.source,
-                    Context.current.asTotal.locally(ElemTransformation.HoistedNonFallible(recurse(p.wrapped))),
+                    Context.current.weaken.locally(ElemTransformation.HoistedNonFallible(recurse(p.wrapped))),
                     p.wrapped.calculateTpe
                   )
 
                 case Plan.Hoist.No -> _ =>
                   Transformation.Mapped[f](
                     p.source,
-                    Context.current.asTotal.locally(recurse(p.wrapped)),
+                    Context.current.weaken.locally(recurse(p.wrapped)),
                     ctx.mode.value,
                     p.calculateTpe
                   )
@@ -231,7 +247,7 @@ object Transformation {
                 case update: Configured.Update =>
                   ConfedUp(update)
                 case _: Configured.Sequence =>
-                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
+                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
               }
             case Context.PossiblyFallible(mode, wrapperType) =>
               ConfedUp(config)

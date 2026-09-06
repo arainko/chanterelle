@@ -169,7 +169,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
             )
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
 
-        case m: Modifier.Hoist[f] =>
+        case _: Modifier.Hoist[f] =>
           transformation.narrow(
             when[Plan.Wrapped[Err, f]](
               _.hoisted

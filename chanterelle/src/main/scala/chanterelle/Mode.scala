@@ -1,7 +1,6 @@
 package chanterelle
 
 import scala.collection.Factory
-import scala.collection.generic.IsSeq
 
 sealed trait Mode[F[_]] {
   def pure[A](value: A): F[A]
@@ -16,7 +15,6 @@ sealed trait Mode[F[_]] {
 }
 
 object Mode {
-  IsSeq
   trait FailFast[F[_]] extends Mode[F] {
     def flatMap[A, B](fa: F[A], f: A => F[B]): F[B]
   }
@@ -30,11 +28,16 @@ object Mode {
   }
 
   object Accumulating {
-    def either[E, Coll[x] <: Iterable[x]](using Factory[E, Coll[E]]): Mode.Accumulating[[A] =>> scala.Either[Coll[E], A]] =
-      Either[E, Coll]
+    def either[Coll[x] <: Iterable[x], E](using
+      Factory[E, Coll[E]]
+    ): Mode.Accumulating[scala.Either[Coll[E], _]] & Mode.FailFast[scala.Either[Coll[E], _]] = Either[E, Coll]
 
     private final class Either[E, Coll[x] <: Iterable[x]](using errorCollFactory: Factory[E, Coll[E]])
-        extends Mode.Accumulating[[A] =>> scala.Either[Coll[E], A]] {
+        extends Mode.Accumulating[[A] =>> scala.Either[Coll[E], A]],
+          Mode.FailFast[[A] =>> scala.Either[Coll[E], A]] {
+
+      override def flatMap[A, B](fa: scala.Either[Coll[E], A], f: A => scala.Either[Coll[E], B]): scala.Either[Coll[E], B] =
+        fa.flatMap(f)
 
       override def pure[A](value: A): scala.Either[Coll[E], A] = Right(value)
 
@@ -83,7 +86,7 @@ object Mode {
   }
 
   object FailFast {
-    def either[E]: Mode.FailFast[[A] =>> scala.Either[E, A]] = Either[E]
+    def either[E]: Mode.FailFast[scala.Either[E, _]] = Either[E]
 
     private final class Either[E] extends Mode.FailFast[[A] =>> scala.Either[E, A]] {
       final def pure[A](value: A): scala.Either[E, A] = Right(value)
@@ -118,7 +121,7 @@ object Mode {
 
     }
 
-    def option: Mode.FailFast[scala.Option] = Option
+    val option: Mode.FailFast[scala.Option] = Option
 
     private object Option extends Mode.FailFast[scala.Option] {
 
