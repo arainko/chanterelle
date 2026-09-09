@@ -41,7 +41,10 @@ private[chanterelle] object FallibleInterpreter {
               case (_, Field.FromSource(name, transformation)) -> idx =>
                 val fieldValue = StructuredValue.of(t.source, source).fieldValue(name)
                 recurse(transformation, fieldValue, F).asFieldValue(idx, transformation.outputTpe)
-              case (fieldName, Field.FromModifier(modifier)) -> idx => ???
+              case (fieldName, Field.FromModifier(modifier)) -> idx =>
+                Sources.current.withPrimary(source) {
+                  Left(new FieldValue.Unwrapped(idx, modifier.tpe, Interpreter.handleNamedSpecific(modifier)))
+                }
             }
             handleTransformation(F, t, unwrappeds, wrappeds, ProductConstructor.Primary(t.outputTpe))
 
@@ -98,7 +101,7 @@ private[chanterelle] object FallibleInterpreter {
                   }
                 Value.Wrapped {
                   '{
-                    ${ F.value }.traverseCollection[(srcKey, srcValue), (outKey, outValue), Iterable[(srcKey, srcValue)], outMap[
+                    ${ F.value }.traverseCollection[(srcKey, srcValue), (outKey, outValue), outMap[
                       outKey,
                       outValue
                     ]](
@@ -125,7 +128,7 @@ private[chanterelle] object FallibleInterpreter {
                 val f = factory.asExprOf[Factory[elem, coll[elem]]]
                 Value.Wrapped {
                   '{
-                    ${ F.value }.traverseCollection[srcElem, elem, Iterable[srcElem], coll[elem]](
+                    ${ F.value }.traverseCollection[srcElem, elem, coll[elem]](
                       $srcValue,
                       srcElem => ${ recurse(elem, 'srcElem, F).wrapped(F).asExprOf[F[elem]] }
                     )(using $f)
@@ -135,7 +138,14 @@ private[chanterelle] object FallibleInterpreter {
 
           case Transformation.Leaf(output) =>
             Value.Unwrapped(source)
-          case Transformation.ConfedUp(config)                            => ???
+          case t @ Transformation.ConfedUp(config) =>
+            config match {
+              case Configured.Sequence(tpe, source, unwrappedDest) =>
+                ???
+              case update: Configured.Update =>
+                ???
+              // Interpreter.runTransformation(source, t)
+            }
           case merged: (Transformation.Merged | Transformation.Mapped[f]) =>
             Value.Unwrapped(nonfallibleTransformation(source, merged))
           case t: Transformation.Hoisted[f] =>

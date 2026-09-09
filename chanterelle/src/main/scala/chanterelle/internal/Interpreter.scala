@@ -10,6 +10,8 @@ import scala.quoted.*
 
 import NamedTuple.*
 import scala.annotation.unused
+import chanterelle.internal.Configured.NamedSpecific
+import chanterelle.internal.Sources.Scope
 
 private[chanterelle] object Interpreter {
 
@@ -23,22 +25,7 @@ private[chanterelle] object Interpreter {
         case Field.FromSource(srcName, transformation) =>
           runTransformation(StructuredValue.of(source, primary).fieldValue(srcName), transformation)
         case Field.FromModifier(modifier) =>
-          modifier match {
-            case Configured.NamedSpecific.Add(valueStructure = struct, value = value) =>
-              val source = Sources.current.get(value)
-              StructuredValue.of(struct, source).fieldValue(struct.fieldName)
-            case Configured.NamedSpecific.Compute(valueStructure = struct, fn = fn) =>
-              Sources.current.get(fn) match {
-                case '{ $fn: (src => out) } =>
-                  '{
-                    val computed = $fn(${ primary.asExprOf[src] })
-                    ${
-                      val computedValue = 'computed
-                      StructuredValue.of(struct, computedValue).fieldValue(struct.fieldName)
-                    }
-                  }
-              }
-          }
+          handleNamedSpecific(modifier)
       }
 
     Sources.current.withPrimary(primary) {
@@ -171,6 +158,24 @@ private[chanterelle] object Interpreter {
       }
     }
   }
+
+  def handleNamedSpecific(modifier: NamedSpecific)(using Sources, Scope, Quotes): Expr[Any] =
+    modifier match {
+      case Configured.NamedSpecific.Add(valueStructure = struct, value = value) =>
+        val source = Sources.current.get(value)
+        StructuredValue.of(struct, source).fieldValue(struct.fieldName)
+      case Configured.NamedSpecific.Compute(valueStructure = struct, fn = fn) =>
+        Sources.current.get(fn) match {
+          case '{ $fn: (src => out) } =>
+            '{
+              val computed = $fn(${ Sources.current.get(Sources.Ref.Primary).asExprOf[src] })
+              ${
+                val computedValue = 'computed
+                StructuredValue.of(struct, computedValue).fieldValue(struct.fieldName)
+              }
+            }
+        }
+    }
 
   extension (sources: Sources)
     private def advance(

@@ -242,7 +242,7 @@ object Transformation {
 
         case Plan.ConfedUp(config, _) =>
           Context.current match {
-            case Context.Total =>
+            case (Context.Total | Context.NonFallible(_, _)) =>
               config match {
                 case update: Configured.Update =>
                   ConfedUp(update)
