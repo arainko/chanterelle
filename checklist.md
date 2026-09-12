@@ -28,6 +28,8 @@ this feels like it'd be immediately better vs what is in ducktape (extensible, a
 
     * don't use an Iterable, but require an `Iterator`? this would also require a typeclass of some sorts so maybe that's just dumb
 
+    * another solution - hybrid for Scala collections via 'IterableOnceOps[?, ?, CC, ?]' where CC is the collection type constructor (which also carries a .iterableFactory that is overriden to the right type) and then an extension point with what I wrote above (combo of IsIterableOnce and Factory)
+
 * good errors []
 * tests []
 

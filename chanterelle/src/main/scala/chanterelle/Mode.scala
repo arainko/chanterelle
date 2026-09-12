@@ -3,6 +3,10 @@ package chanterelle
 import scala.collection.Factory
 import scala.collection.generic.IsIterable
 import scala.collection.generic.IsSeq
+import scala.collection.IterableOnceOps
+import scala.collection.immutable.HashMap
+import scala.collection.MapOps
+import scala.collection.immutable.IntMap
 
 sealed trait Mode[F[_]] {
   def pure[A](value: A): F[A]
@@ -38,7 +42,7 @@ object Mode {
       Factory[E, Coll[E]]
     ): Mode.Accumulating[scala.Either[Coll[E], _]] & Mode.FailFast[scala.Either[Coll[E], _]] = Either[E, Coll]
 
-    private final class Either[E, Coll[x] <: Iterable[x]](using errorCollFactory: Factory[E, Coll[E]])
+    private final class Either[E, Coll[x] <: Iterable[x]](using Errors: Factory[E, Coll[E]])
         extends Mode.Accumulating[[A] =>> scala.Either[Coll[E], A]],
           Mode.FailFast[[A] =>> scala.Either[Coll[E], A]] {
 
@@ -55,7 +59,7 @@ object Mode {
           case (Right(_), err @ Left(_))      => err.asInstanceOf[scala.Either[Coll[E], (A, B)]]
           case (err @ Left(_), Right(_))      => err.asInstanceOf[scala.Either[Coll[E], (A, B)]]
           case (Left(errorsA), Left(errorsB)) =>
-            val builder = errorCollFactory.newBuilder
+            val builder = Errors.newBuilder
             val accumulated = builder ++= errorsA ++= errorsB
             Left(accumulated.result())
         }
@@ -64,11 +68,9 @@ object Mode {
       override def traverseCollection[A, B, BColl](
         collection: Iterable[A],
         transformation: A => scala.Either[Coll[E], B]
-      )(using
-        factory: Factory[B, BColl]
-      ): scala.Either[Coll[E], BColl] = {
-        val accumulatedErrors = errorCollFactory.newBuilder
-        val accumulatedSuccesses = factory.newBuilder
+      )(using BColl: Factory[B, BColl]): scala.Either[Coll[E], BColl] = {
+        val accumulatedErrors = Errors.newBuilder
+        val accumulatedSuccesses = BColl.newBuilder
         var isErroredOut = false
         val iter = collection.iterator
 
@@ -93,6 +95,20 @@ object Mode {
     }
   }
 
+  val arr = Vector(1, 2, 3)
+
+  val d = summon[arr.type <:< IterableOnceOps[?, Vector, ?]]
+
+  val dd = HashMap(1 -> 2)
+
+  val h = summon[dd.type <:< MapOps[?, ?, HashMap, ?]]
+
+  val intMap = IntMap(1 -> 1).map(identity)
+
+  intMap.mapFactory
+
+  dd.mapFactory
+
   object FailFast {
     def either[E]: Mode.FailFast[scala.Either[E, _]] = Either[E]
 
@@ -106,13 +122,11 @@ object Mode {
       final def traverseCollection[A, B, BColl](
         collection: Iterable[A],
         transformation: A => scala.Either[E, B]
-      )(using
-        factory: Factory[B, BColl]
-      ): scala.Either[E, BColl] = {
+      )(using BColl: Factory[B, BColl]): scala.Either[E, BColl] = {
         var error: Left[E, Nothing] = null
         def isErroredOut = !(error eq null)
 
-        val resultBuilder = factory.newBuilder
+        val resultBuilder = BColl.newBuilder
         val iterator = collection.iterator
         while iterator.hasNext && !isErroredOut do {
           transformation(iterator.next()) match {
