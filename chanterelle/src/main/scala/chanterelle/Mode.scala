@@ -70,8 +70,10 @@ object Mode {
         val accumulatedErrors = errorCollFactory.newBuilder
         val accumulatedSuccesses = factory.newBuilder
         var isErroredOut = false
+        val iter = collection.iterator
 
-        collection.foreach { elem =>
+        while iter.hasNext do {
+          val elem = iter.next()
           transformation(elem) match {
             case Left(errors) =>
               accumulatedErrors.addAll(errors)
