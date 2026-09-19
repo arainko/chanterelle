@@ -17,10 +17,10 @@ object CollectionLike {
 
   val hashMap: MapOps[Int, Int, MutHashMap, ?] = MutHashMap(1 -> 1)
 
-  extension [Coll[_], Elem](coll: Coll[Elem]) {
+  extension [Coll[_], Elem](coll: CollectionLike[Coll, Elem]) {
     def mapped[B](f: Elem => B): Coll[B] = coll match {
-      case it: IterableOnceOps[Elem, Coll, ?] => it.map(f)
-      case interop: Interopped[Coll, Elem]    => interop.iterator(coll).map(f).to(interop.factory[B])
+      case it: IterableOnceOps[Elem @unchecked, Coll @unchecked, ?] => it.map(f)
+      case interop: Interopped[Coll @unchecked, Elem @unchecked]    => interop.iterator(coll).map(f).to(interop.factory[B])
     }
   }
 }
