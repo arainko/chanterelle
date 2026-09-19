@@ -9,6 +9,9 @@ import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
 import NamedTuple.*
+import scala.annotation.unused
+import scala.collection.IterableOps
+import scala.collection.MapOps
 
 private[chanterelle] object Interpreter {
 
@@ -78,29 +81,32 @@ private[chanterelle] object Interpreter {
               Sources.current.get(fn) match { case '{ $fn: (src => out) } => '{ $fn(${ primary.asExprOf[src] }) } }
           }
 
-        case Transformation.IterLike(source, paramTransformation, factory, outputTpe) =>
-          (source.tycon, outputTpe, primary).runtimeChecked match {
+        case Transformation.IterLike(source: Structure.Collection.Repr.IterLike[coll], paramTransformation, factory, outputTpe) =>
+          @unused given Type[coll] = source.tycon
+          (outputTpe, primary).runtimeChecked match {
             case (
-                  '[type coll[a]; coll],
-                  '[Iterable[elem]],
-                  '{ $srcValue: Iterable[srcElem] }
+                  '[Iterable[elem]], // TODO: add .outputTpe to transformation and use it here
+                  '{ $srcValue: IterableOps[srcElem, coll, ?] }
                 ) =>
-              val f = factory.asExprOf[Factory[elem, coll[elem]]]
               '{
                 $srcValue
                   .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
-                  .to[coll[elem]]($f)
               }
           }
 
-        case Transformation.MapLike(source, keyTransformation, valueTransformation, fac, outputTpe) =>
-          (source.tycon, outputTpe, primary).runtimeChecked match {
+        case Transformation.MapLike(
+              source: Structure.Collection.Repr.MapLike[map],
+              keyTransformation,
+              valueTransformation,
+              fac,
+              outputTpe
+            ) =>
+          @unused given Type[map] = source.tycon
+          (outputTpe, primary).runtimeChecked match {
             case (
-                  '[type outMap[k, v]; outMap],
                   '[collection.Map[outKey, outValue]],
-                  '{ $srcValue: collection.Map[srcKey, srcValue] }
+                  '{ $srcValue: MapOps[srcKey, srcValue, map, ?] }
                 ) =>
-              val factory = fac.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
               '{
                 $srcValue
                   .map[outKey, outValue]((k, v) =>
@@ -109,7 +115,6 @@ private[chanterelle] object Interpreter {
                       ${ runTransformation('v, valueTransformation).asExprOf[outValue] }
                     )
                   )
-                  .to[outMap[outKey, outValue]]($factory)
               }
           }
 

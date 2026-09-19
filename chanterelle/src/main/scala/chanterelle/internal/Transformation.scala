@@ -7,6 +7,8 @@ import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
+import scala.collection.MapOps
+import scala.collection.IterableOps
 
 private[chanterelle] enum Transformation derives Debug {
   case Named(
@@ -35,7 +37,7 @@ private[chanterelle] enum Transformation derives Debug {
     outputTpe: Type[? <: scala.Either[?, ?]]
   )
 
-  case MapLike[F[k, v] <: collection.Map[k, v]](
+  case MapLike[F[k, v]](
     source: Structure.Collection.Repr.MapLike[F],
     key: Transformation,
     value: Transformation,
@@ -43,7 +45,7 @@ private[chanterelle] enum Transformation derives Debug {
     outputTpe: Type[?]
   )
 
-  case IterLike[F[elem] <: Iterable[elem]](
+  case IterLike[F[elem]](
     source: Structure.Collection.Repr.IterLike[F],
     elem: Transformation,
     factory: Expr[Factory[?, ?]],

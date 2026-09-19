@@ -5,6 +5,8 @@ import chanterelle.internal.Structure.Leaf
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
+import scala.collection.MapOps
+import scala.collection.IterableOps
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -71,15 +73,15 @@ private[chanterelle] object Structure {
   ) extends Structure
 
   case class Collection(
-    tpe: Type[? <: Iterable[?]],
+    tpe: Type[?],
     path: Path,
     repr: Collection.Repr
   ) extends Structure
 
   object Collection {
     enum Repr derives Debug {
-      case MapLike[F[k, v] <: scala.collection.Map[k, v]](tycon: Type[F], key: Structure, value: Structure)
-      case IterLike[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
+      case MapLike[F[k, v]](tycon: Type[F], key: Structure, value: Structure)
+      case IterLike[F[elem]](tycon: Type[F], element: Structure)
     }
   }
 
@@ -179,42 +181,29 @@ private[chanterelle] object Structure {
     def unapply(tpe: Type[?])(using q: Quotes, path: Path): Option[Structure.Collection] = {
       import quotes.reflect.*
       tpe match {
-        case tpe @ '[Iterable[param]] =>
-          tpe.repr.simplified.widen match {
-            case AppliedType(tycon, args) =>
-              (tycon.asType -> args.map(_.asType)) match {
-                case '[type map[k, v] <: collection.Map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
-                  Some(
-                    Structure.Collection(
-                      tpe,
-                      path,
-                      Structure.Collection.Repr.MapLike(
-                        Type.of[map],
-                        Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
-                        Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
-                      )
-                    )
-                  )
-
-                // matches on the likes of IntMap and LongMap
-                case '[type map[v] <: collection.Map[?, v]; map] -> _ =>
-                  None // TODO: support later? maybeeeee
-
-                case '[type coll[a] <: Iterable[a]; coll] -> ('[elem] :: Nil) =>
-                  Some(
-                    Structure.Collection(
-                      tpe,
-                      path,
-                      Structure.Collection.Repr.IterLike(
-                        Type.of[coll],
-                        Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
-                      )
-                    )
-                  )
-                case _ => None
-              }
-            case _ => None
-          }
+        case tpe @ '[type map[k, v] <: MapOps[k, v, `map`, ?]; MapOps[key, value, `map`, ?]] =>
+          Some(
+            Structure.Collection(
+              tpe,
+              path,
+              Structure.Collection.Repr.MapLike(
+                Type.of[map],
+                Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
+                Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
+              )
+            )
+          )
+        case tpe @ '[type coll[a] <: IterableOps[a, `coll`, ?]; IterableOps[elem, `coll`, ?]] =>
+          Some(
+            Structure.Collection(
+              tpe,
+              path,
+              Structure.Collection.Repr.IterLike(
+                Type.of[coll],
+                Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
+              )
+            )
+          )
         case _ => None
       }
     }
