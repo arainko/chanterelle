@@ -6,6 +6,7 @@ import scala.annotation.nowarn
 import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
 import scala.compiletime.ops.string.*
+import scala.collection.immutable.SortedMap
 
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
@@ -58,7 +59,7 @@ class ModifiersSpec extends ChanterelleSuite {
 
   test("modifiers can traverse collections (and keep the same collection type)") {
     val tup = (anotherField = List((field1 = 123), (field1 = 124)))
-    val expected =
+    val expected: (anotherField: List[(field1: Int, newField: String)]) =
       (anotherField =
         List(
           (field1 = 123, newField = "ashtray wasp"),
@@ -80,7 +81,7 @@ class ModifiersSpec extends ChanterelleSuite {
         )
       )
 
-    val actual =
+    val actual: (anotherField: HashMap[(key: Int, newField: String), (value: Int, newField: String)]) =
       tup.transform(
         _.put(_.anotherField.element._1)((newField = "the king of limbs is a good album")),
         _.put(_.anotherField.element._2)((newField = "frfr"))
@@ -92,9 +93,19 @@ class ModifiersSpec extends ChanterelleSuite {
   test("modifiers can traverse sorted collections") {
     val tup = (anotherField = SortedSet(1, 2, 3))
     val expected = (anotherField = SortedSet(2, 3, 4))
-    val actual = tup.transform(_.update(_.anotherField.element)(_ + 1))
+    val actual: (anotherField: SortedSet[Int]) = tup.transform(_.update(_.anotherField.element)(_ + 1))
 
     assertEquals(actual, expected)
+  }
+
+  test("modifiers can traverse sorted maps") {
+
+    val tup = (anotherField = SortedMap(1 -> 1, 2 -> 2, 3 -> 3))
+    val expected = (anotherField = SortedMap(2 -> 1, 3 -> 2, 4 -> 3))
+    val actual: (anotherField: SortedMap[Int, Int]) = tup.transform(_.update(_.anotherField.element._1)(_ + 1))
+
+    assertEquals(actual, expected)
+
   }
 
   test("modifiers can traverse classic tuples (using _N accessors)") {
@@ -125,7 +136,7 @@ class ModifiersSpec extends ChanterelleSuite {
       _.remove(_.anotherField.element.field1)
     )
 
-    val expected =
+    val expected: (anotherField: List[(field2: Int, newField1: Int, newField2: Int, newField3: Int)]) =
       (anotherField =
         List(
           (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3),
