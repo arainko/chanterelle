@@ -6,6 +6,7 @@ import chanterelle.internal.Transformation.{ ElemTransformation, Field }
 
 import scala.quoted.*
 import scala.collection.Factory
+import chanterelle.IsCollection
 
 private[chanterelle] object FallibleInterpreter {
 
@@ -101,19 +102,20 @@ private[chanterelle] object FallibleInterpreter {
                   }
                 Value.Wrapped {
                   '{
-                    ${ F.value }.traverseCollection[(srcKey, srcValue), (outKey, outValue), outMap[
-                      outKey,
-                      outValue
-                    ]](
-                      $srcValue,
-                      (srcKey, srcValue) =>
-                        ${
-                          handlePair(
-                            recurse(key, 'srcKey, F).wrapped(F).asExprOf[F[outKey]],
-                            recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
-                          )
-                        }
-                    )(using $fac)
+                    ${ F.value }
+                      .traverseCollection[(srcKey, srcValue), (outKey, outValue), Iterable[(srcKey, srcValue)], outMap[
+                        outKey,
+                        outValue
+                      ]](
+                        $srcValue,
+                        (srcKey, srcValue) =>
+                          ${
+                            handlePair(
+                              recurse(key, 'srcKey, F).wrapped(F).asExprOf[F[outKey]],
+                              recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
+                            )
+                          }
+                      )(using summon, $fac) // TODO: TRICKLE DOWN IsCollection from above!
                   }
                 }
 
@@ -128,10 +130,10 @@ private[chanterelle] object FallibleInterpreter {
                 val f = factory.asExprOf[Factory[elem, coll[elem]]]
                 Value.Wrapped {
                   '{
-                    ${ F.value }.traverseCollection[srcElem, elem, coll[elem]](
+                    ${ F.value }.traverseCollection[srcElem, elem, Iterable[srcElem], coll[elem]](
                       $srcValue,
                       srcElem => ${ recurse(elem, 'srcElem, F).wrapped(F).asExprOf[F[elem]] }
-                    )(using $f)
+                    )(using summon, $f) // TODO: TRICKE DOWN IsCollection from above!
                   }
                 }
             }

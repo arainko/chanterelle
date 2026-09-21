@@ -8,7 +8,7 @@ import scala.collection.generic.IsIterable
 import scala.collection.immutable.IntMap
 import scala.collection.generic.IsMap
 import scala.collection.MapOps
-import scala.collection.IterableOps
+import scala.collection.IterableOnceOps
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -246,8 +246,6 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
   val asd = summon[IsIterable[List[Int]]]
   val asdf = summon[IsMap[IntMap[Int]]]
   summon[IsIterable[String]]
-
-  IterableOps
 
   val yup =
     (int = Right(Right((int = Right((int = 1)), list = List(Right((int = 1))), int2 = Right(3)))))

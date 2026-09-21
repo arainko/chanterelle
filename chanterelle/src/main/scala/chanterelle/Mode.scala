@@ -1,23 +1,16 @@
 package chanterelle
 
 import scala.collection.Factory
-import scala.collection.generic.IsIterable
-import scala.collection.generic.IsSeq
-import scala.collection.IterableOnceOps
-import scala.collection.immutable.HashMap
-import scala.collection.MapOps
-import scala.collection.immutable.IntMap
 
 sealed trait Mode[F[_]] {
   def pure[A](value: A): F[A]
 
   def map[A, B](fa: F[A], f: A => B): F[B]
 
-  // TODO: reevaluate this - I don't think we even need 'AColl' as a type param, we just need something that can TURN into an Iterable (so having IsIterable in scope?) - BColl also doesn't need to be <: Iterable[B]? As long as there is a Factory in scope
-  def traverseCollection[A, B, BColl](
-    collection: Iterable[A],
-    transformation: A => F[B]
-  )(using Factory[B, BColl]): F[BColl]
+  def traverseCollection[AElem, BElem, AColl, BColl](
+    collection: AColl,
+    transformation: AElem => F[BElem]
+  )(using IsCollection[AElem, AColl], Factory[BElem, BColl]): F[BColl]
 }
 
 object Mode {
@@ -32,10 +25,6 @@ object Mode {
   extension [F[_], M <: Mode[F]](self: M) {
     inline def apply[A](inline f: M ?=> A): A = f(using self)
   }
-
-  private val s = summon[IsIterable[String]]
-  val trans = s.apply("asd").filter(_.isDigit)
-  val asd = summon[IsSeq[String]]
 
   object Accumulating {
     def either[Coll[x] <: Iterable[x], E](using
@@ -65,14 +54,14 @@ object Mode {
         }
 
       // Inspired by chimney's implementation: https://github.com/scalalandio/chimney/blob/53125c0a55479763157909ef920e11f5b487b182/chimney/src/main/scala/io/scalaland/chimney/TransformerFSupport.scala#L153
-      override def traverseCollection[A, B, BColl](
-        collection: Iterable[A],
+      override def traverseCollection[A, B, AColl, BColl](
+        collection: AColl,
         transformation: A => scala.Either[Coll[E], B]
-      )(using BColl: Factory[B, BColl]): scala.Either[Coll[E], BColl] = {
+      )(using AColl: IsCollection[A, AColl], BColl: Factory[B, BColl]): scala.Either[Coll[E], BColl] = {
         val accumulatedErrors = Errors.newBuilder
         val accumulatedSuccesses = BColl.newBuilder
         var isErroredOut = false
-        val iter = collection.iterator
+        val iter = AColl.iterator(collection)
 
         while iter.hasNext do {
           val elem = iter.next()
@@ -95,20 +84,6 @@ object Mode {
     }
   }
 
-  val arr = Vector(1, 2, 3)
-
-  val d = summon[arr.type <:< IterableOnceOps[?, Vector, ?]]
-
-  val dd = HashMap(1 -> 2)
-
-  val h = summon[dd.type <:< MapOps[?, ?, HashMap, ?]]
-
-  val intMap = IntMap(1 -> 1).map(identity)
-
-  intMap.mapFactory
-
-  dd.mapFactory
-
   object FailFast {
     def either[E]: Mode.FailFast[scala.Either[E, _]] = Either[E]
 
@@ -119,15 +94,15 @@ object Mode {
 
       final def flatMap[A, B](fa: scala.Either[E, A], f: A => scala.Either[E, B]): scala.Either[E, B] = fa.flatMap(f)
 
-      final def traverseCollection[A, B, BColl](
-        collection: Iterable[A],
+      final def traverseCollection[A, B, AColl, BColl](
+        collection: AColl,
         transformation: A => scala.Either[E, B]
-      )(using BColl: Factory[B, BColl]): scala.Either[E, BColl] = {
+      )(using AColl: IsCollection[A, AColl], BColl: Factory[B, BColl]): scala.Either[E, BColl] = {
         var error: Left[E, Nothing] = null
         def isErroredOut = !(error eq null)
 
         val resultBuilder = BColl.newBuilder
-        val iterator = collection.iterator
+        val iterator = AColl.iterator(collection)
         while iterator.hasNext && !isErroredOut do {
           transformation(iterator.next()) match {
             case err @ Left(_) =>
@@ -153,13 +128,13 @@ object Mode {
 
       final def flatMap[A, B](fa: scala.Option[A], f: A => scala.Option[B]): scala.Option[B] = fa.flatMap(f)
 
-      final def traverseCollection[A, B, BColl](
-        collection: Iterable[A],
+      final def traverseCollection[A, B, AColl, BColl](
+        collection: AColl,
         transformation: A => scala.Option[B]
-      )(using factory: Factory[B, BColl]): scala.Option[BColl] = {
+      )(using AColl: IsCollection[A, AColl], BColl: Factory[B, BColl]): scala.Option[BColl] = {
         var isErroredOut = false
-        val resultBuilder = factory.newBuilder
-        val iterator = collection.iterator
+        val resultBuilder = BColl.newBuilder
+        val iterator = AColl.iterator(collection)
         while iterator.hasNext && !isErroredOut do {
           transformation(iterator.next()) match {
             case None =>
