@@ -1,6 +1,7 @@
 package chanterelle.internal
 
 import chanterelle.internal.Structure.Leaf
+import chanterelle.IsCollection
 
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
@@ -72,15 +73,20 @@ private[chanterelle] object Structure {
   ) extends Structure
 
   case class Collection(
-    tpe: Type[? <: Iterable[?]],
+    tpe: Type[?],
     path: Path,
     repr: Collection.Repr
   ) extends Structure
 
   object Collection {
     enum Repr derives Debug {
-      case MapLike[F[k, v] <: scala.collection.Map[k, v]](tycon: Type[F], key: Structure, value: Structure)
-      case IterLike[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
+      case MapLike[F[_, _], Key, Value](
+        tycon: Type[F],
+        isColl: Expr[IsCollection[(Key, Value), F[Key, Value]]],
+        key: Structure,
+        value: Structure
+      )
+      case IterLike[F[_], Elem](tycon: Type[F], isColl: Expr[IsCollection[Elem, F[Elem]]], element: Structure)
     }
   }
 
@@ -195,40 +201,34 @@ private[chanterelle] object Structure {
   private object SupportedCollection {
     def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context.Any): Option[Structure.Collection] = {
       import quotes.reflect.*
-      tpe match {
-        case tpe @ '[Iterable[param]] =>
-          tpe.repr.simplified.widen match {
-            case AppliedType(tycon, args) =>
-              (tycon.asType -> args.map(_.asType)) match {
-                case '[type map[k, v] <: collection.Map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
-                  Some(
-                    Structure.Collection(
-                      tpe,
-                      path,
-                      Structure.Collection.Repr.MapLike(
-                        Type.of[map],
-                        Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
-                        Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
-                      )
-                    )
+      tpe.repr.simplified.widen match {
+        case AppliedType(tycon, args) =>
+          (tycon.asType -> args.map(_.asType)) match {
+            case '[type map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
+              Expr.summon[IsCollection[(key, value), map[key, value]]].map { isColl =>
+                Structure.Collection(
+                  tpe,
+                  path,
+                  Structure.Collection.Repr.MapLike(
+                    Type.of[map],
+                    isColl,
+                    Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
+                    Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
                   )
+                )
+              }
 
-                // matches on the likes of IntMap and LongMap
-                case '[type map[v] <: collection.Map[?, v]; map] -> _ =>
-                  None // TODO: support later? maybeeeee
-
-                case '[type coll[a] <: Iterable[a]; coll] -> ('[elem] :: Nil) =>
-                  Some(
-                    Structure.Collection(
-                      tpe,
-                      path,
-                      Structure.Collection.Repr.IterLike(
-                        Type.of[coll],
-                        Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
-                      )
-                    )
+            case '[type coll[a]; coll] -> ('[elem] :: Nil) =>
+              Expr.summon[IsCollection[elem, coll[elem]]].map { isColl =>
+                Structure.Collection(
+                  tpe,
+                  path,
+                  Structure.Collection.Repr.IterLike(
+                    Type.of[coll],
+                    isColl,
+                    Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
                   )
-                case _ => None
+                )
               }
             case _ => None
           }

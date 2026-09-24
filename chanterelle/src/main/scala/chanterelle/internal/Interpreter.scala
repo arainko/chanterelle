@@ -105,6 +105,7 @@ private[chanterelle] object Interpreter {
                   '[Iterable[elem]],
                   '{ $srcValue: Iterable[srcElem] }
                 ) =>
+              Logger.debug(s"coll[elem] is ${Type.show[coll[elem]]}")
               val f = factory.asExprOf[Factory[elem, coll[elem]]]
               '{
                 $srcValue

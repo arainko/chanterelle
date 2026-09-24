@@ -42,16 +42,16 @@ object Transformation {
     outputTpe: Type[? <: scala.Either[?, ?]]
   ) extends Transformation[F]
 
-  case class MapLike[+F <: Fallible, map[k, v] <: collection.Map[k, v]](
-    source: Structure.Collection.Repr.MapLike[map],
+  case class MapLike[+F <: Fallible, map[k, v], Key, Value](
+    source: Structure.Collection.Repr.MapLike[map, Key, Value],
     key: Transformation[F],
     value: Transformation[F],
     factory: Expr[Factory[?, ?]],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
-  case class IterLike[+F <: Fallible, iter[elem] <: Iterable[elem]](
-    source: Structure.Collection.Repr.IterLike[iter],
+  case class IterLike[+F <: Fallible, iter[elem], Elem](
+    source: Structure.Collection.Repr.IterLike[iter, Elem],
     elem: Transformation[F],
     factory: Expr[Factory[?, ?]],
     outputTpe: Type[?]
@@ -167,16 +167,17 @@ object Transformation {
 
         case p @ Plan.MapLike(source, key, value, _) =>
           val tpe = p.calculateTpe
-          val factory = (source.tycon, tpe).runtimeChecked match {
-            case ('[type map[k, v]; map], '[collection.Map[key, value]]) =>
-              Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+          (source.tycon, key.calculateTpe, value.calculateTpe).runtimeChecked match {
+            case ('[type map[k, v]; map], '[key], '[value]) =>
+              val factory =
+                Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+              MapLike(source, recurse(key), recurse(value), factory, tpe)
           }
-          MapLike(source, recurse(key), recurse(value), factory, tpe)
 
         case t @ Plan.IterLike(source, elem, _) =>
           val tpe = t.calculateTpe
-          val factory = (source.tycon, tpe).runtimeChecked match {
-            case ('[type coll[a]; coll], '[Iterable[elem]]) =>
+          val factory = (source.tycon, elem.calculateTpe).runtimeChecked match {
+            case ('[type coll[a]; coll], '[elem]) =>
               Expr.summon[Factory[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
           }
           IterLike(source, recurse(elem), factory, tpe)
@@ -255,8 +256,10 @@ object Transformation {
       }
 
     boundary[Transformation[F] | ErrorMessage](recurse(transformation)) match {
-      case transformation: Transformation[F] => Right(transformation)
-      case error: ErrorMessage               => Left(error)
+      case transformation: Transformation[F] =>
+        Logger.info("Transformation:", transformation)
+        Right(transformation)
+      case error: ErrorMessage => Left(error)
     }
   }
 

@@ -1,12 +1,10 @@
 package chanterelle
 
-import chanterelle.internal.Structure.Collection
 import scala.collection.generic.IsIterableOnce
-import scala.collection.mutable.SortedSet
 
 opaque type IsCollection[Elem, Collection] = IsIterableOnce[Collection] { type A = Elem }
 
-object IsCollection extends IsCollectionLowPriority {
+object IsCollection extends IsCollection.LowPriority {
   private val iterableOnceColl: IsIterableOnce[IterableOnce[Any]] { type A = Any } =
     IsIterableOnce.iterableOnceIsIterableOnce
 
@@ -16,7 +14,7 @@ object IsCollection extends IsCollectionLowPriority {
   given iterableOnce[Elem, Coll[a] <: IterableOnce[a]]: IsCollection[Elem, Coll[Elem]] =
     iterableOnceColl.asInstanceOf[IsCollection[Elem, Coll[Elem]]]
 
-  private[chanterelle] transparent trait IsCollectionLowPriority { self: IsCollection.type =>
+  private[chanterelle] transparent trait LowPriority { self: IsCollection.type =>
     given fallback[Elem, Collection](using Coll: IsIterableOnce[Collection] { type A = Elem }): IsCollection[Elem, Collection] =
       Coll
   }

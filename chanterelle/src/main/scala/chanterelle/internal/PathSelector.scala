@@ -81,7 +81,7 @@ private[chanterelle] object PathSelector {
 
         case Apply(
               Apply(
-                TypeApply(Select("NamedTuple", "apply") | Ident("apply"), List(namesTpe, _)),
+                TypeApply(Select(Ident("NamedTuple"), "apply") | Ident("apply"), List(namesTpe, _)),
                 tree :: Nil
               ),
               Literal(IntConstant(idx)) :: Nil

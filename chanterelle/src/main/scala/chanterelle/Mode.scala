@@ -85,7 +85,10 @@ object Mode {
   }
 
   object FailFast {
-    def either[E]: Mode.FailFast[scala.Either[E, _]] = Either[E]
+    private val eitherInstance = new Either[Any]
+
+    def either[E]: Mode.FailFast[scala.Either[E, _]] =
+      eitherInstance.asInstanceOf[Mode.FailFast[scala.Either[E, _]]]
 
     private final class Either[E] extends Mode.FailFast[[A] =>> scala.Either[E, A]] {
       final def pure[A](value: A): scala.Either[E, A] = Right(value)
