@@ -1,6 +1,5 @@
 package chanterelle.internal
 
-
 import scala.annotation.unused
 import scala.quoted.*
 import chanterelle.internal.Debug.AST
@@ -54,8 +53,7 @@ private[chanterelle] object WrapperType {
       @unused given Type[F] = wrapperTpe
       tpe match
         case '[F[underlying]] => Some(this -> Type.of[underlying])
-        case _                => None 
-                              
+        case _                => None
 
     }
   }

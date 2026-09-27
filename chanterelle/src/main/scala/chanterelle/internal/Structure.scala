@@ -240,9 +240,10 @@ private[chanterelle] object Structure {
   private object WrappedType {
     def unapply(tpe: Type[?])(using q: Quotes, context: Context.Any) =
       context match {
-        case Context.Total                       => None
         case ctx: Context.PossibleFallible[?, ?] =>
           ctx.wrapperType.unapply(tpe).map((wrapper, wrapped) => (wrapper = wrapper, wrapped = wrapped))
+        case ctx: Context.Total =>
+          Type.unapplied(tpe)
       }
 
   }

@@ -12,6 +12,7 @@ import NamedTuple.*
 import scala.annotation.unused
 import chanterelle.internal.Configured.NamedSpecific
 import chanterelle.internal.Sources.Scope
+import chanterelle.IsCollection
 
 private[chanterelle] object Interpreter {
 
@@ -98,19 +99,32 @@ private[chanterelle] object Interpreter {
               '{ ${ mapped.mode }.map[a, b]($src, a => ${ runTransformation('a, mapped.wrapped).asExprOf[b] }) }
           }
 
-        case Transformation.IterLike(source, paramTransformation, factory, outputTpe) =>
-          (source.tycon, outputTpe, primary).runtimeChecked match {
-            case (
-                  '[type coll[a]; coll],
-                  '[Iterable[elem]],
-                  '{ $srcValue: Iterable[srcElem] }
-                ) =>
-              Logger.debug(s"coll[elem] is ${Type.show[coll[elem]]}")
+        case Transformation.IterLike(
+              source: Structure.Collection.Repr.IterLike[coll, ?],
+              paramTransformation,
+              factory,
+              outputTpe
+            ) =>
+          @unused given Type[coll] = source.tycon
+          (source.element.tpe, paramTransformation.outputTpe).runtimeChecked match {
+            case '[srcElem] -> '[elem] =>
               val f = factory.asExprOf[Factory[elem, coll[elem]]]
-              '{
-                $srcValue
-                  .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
-                  .to[coll[elem]]($f)
+              primary match {
+                case '{ $srcValue: Iterable[`srcElem`] } =>
+                  Logger.debug(s"coll[elem] is ${Type.show[coll[elem]]}")
+                  '{
+                    $srcValue
+                      .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
+                      .to[coll[elem]]($f)
+                  }
+                case '{ $srcValue: `coll`[`srcElem`] } =>
+                  val isColl = source.isColl.asExprOf[IsCollection[srcElem, coll[srcElem]]]
+                  '{
+                    $isColl
+                      .iterator($srcValue)
+                      .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
+                      .to[coll[elem]]($f)
+                  }
               }
           }
 

@@ -5,6 +5,12 @@ import scala.collection.generic.IsIterableOnce
 opaque type IsCollection[Elem, Collection] = IsIterableOnce[Collection] { type A = Elem }
 
 object IsCollection extends IsCollection.LowPriority {
+  def make[Elem, Coll[_]](toIterator: Coll[Elem] => Iterator[Elem]): IsCollection[Elem, Coll[Elem]] =
+    new IsIterableOnce[Coll[Elem]] {
+      type A = Elem
+      def apply(coll: Coll[Elem]): IterableOnce[Elem] = toIterator(coll)
+    }
+
   private val iterableOnceColl: IsIterableOnce[IterableOnce[Any]] { type A = Any } =
     IsIterableOnce.iterableOnceIsIterableOnce
 

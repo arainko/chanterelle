@@ -22,6 +22,15 @@ extension (tpe: Type[? <: AnyKind]) {
     quotes.reflect.TypeRepr.of(using tpe)
 }
 
+extension (self: Type.type) {
+  private[chanterelle] def unapplied(tpe: Type[?])(using Quotes): Option[(tycon: Type[?], args: ::[Type[?]])] =
+    import quotes.reflect.*
+    tpe.repr.simplified.dealias match {
+      case AppliedType(tycon, head :: tail) => Some((tycon.asType, ::(head.asType, tail.map(_.asType))))
+      case _                                => None
+    }
+}
+
 extension [A, B](self: Either[A, B]) {
   private[chanterelle] inline def zipRight[AA >: A, C](inline that: Either[AA, C]): Either[AA, C] =
     self.flatMap(_ => that)

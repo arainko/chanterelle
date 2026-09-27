@@ -956,6 +956,12 @@ class ModifiersSpec extends ChanterelleSuite {
       actual
     )
   }
+
+  test("custom collection keeps its type") {
+    case class CusVector[+A](vec: Vector[A])
+    given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
+
+  }
 }
 
 object SnakeCaseConverter {
