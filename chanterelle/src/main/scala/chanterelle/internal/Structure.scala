@@ -1,5 +1,5 @@
 package chanterelle.internal
-
+import chanterelle.Mappable
 import chanterelle.internal.Structure.Leaf
 import chanterelle.IsCollection
 
@@ -200,37 +200,32 @@ private[chanterelle] object Structure {
 
   private object SupportedCollection {
     def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context.Any): Option[Structure.Collection] = {
-      import quotes.reflect.*
-      tpe.repr.simplified.widen match {
-        case AppliedType(tycon, args) =>
-          (tycon.asType -> args.map(_.asType)) match {
-            case '[type map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
-              Expr.summon[IsCollection[(key, value), map[key, value]]].map { isColl =>
-                Structure.Collection(
-                  tpe,
-                  path,
-                  Structure.Collection.Repr.MapLike(
-                    Type.of[map],
-                    isColl,
-                    Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
-                    Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
-                  )
-                )
-              }
+      Type.unapplied(tpe).flatMap {
+        case '[type map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
+          Expr.summon[IsCollection[(key, value), map[key, value]]].map { isColl =>
+            Structure.Collection(
+              tpe,
+              path,
+              Structure.Collection.Repr.MapLike(
+                Type.of[map],
+                isColl,
+                Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
+                Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
+              )
+            )
+          }
 
-            case '[type coll[a]; coll] -> ('[elem] :: Nil) =>
-              Expr.summon[IsCollection[elem, coll[elem]]].map { isColl =>
-                Structure.Collection(
-                  tpe,
-                  path,
-                  Structure.Collection.Repr.IterLike(
-                    Type.of[coll],
-                    isColl,
-                    Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
-                  )
-                )
-              }
-            case _ => None
+        case '[type coll[a]; coll] -> ('[elem] :: Nil) =>
+          Expr.summon[IsCollection[elem, coll[elem]]].map { isColl =>
+            Structure.Collection(
+              tpe,
+              path,
+              Structure.Collection.Repr.IterLike(
+                Type.of[coll],
+                isColl,
+                Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
+              )
+            )
           }
         case _ => None
       }
@@ -238,13 +233,31 @@ private[chanterelle] object Structure {
   }
 
   private object WrappedType {
-    def unapply(tpe: Type[?])(using q: Quotes, context: Context.Any) =
+    def unapply(
+      tpe: Type[?]
+    )(using
+      q: Quotes,
+      context: Context.Any
+    ): Option[(wrapper: WrapperType[?], wrapped: Type[? <: AnyKind], mappable: Option[Expr[Mappable[?]]])] = {
+      def mappableCandidate = Type
+        .unapplied(tpe)
+        .collect {
+          case (tycon = '[type f[_]; f], args = wrapped :: Nil) =>
+            Expr
+              .summon[Mappable[f]]
+              .map(mappable => (wrapper = WrapperType.create[f], wrapped = wrapped, mappable = Some(mappable)))
+        }
+        .flatten
+
       context match {
         case ctx: Context.PossibleFallible[?, ?] =>
-          ctx.wrapperType.unapply(tpe).map((wrapper, wrapped) => (wrapper = wrapper, wrapped = wrapped))
-        case ctx: Context.Total =>
-          Type.unapplied(tpe)
+          ctx.wrapperType
+            .unapply(tpe)
+            .map((wrapper, wrapped) => (wrapper = wrapper, wrapped = wrapped, mappable = None))
+            .orElse(mappableCandidate)
+        case Context.Total => mappableCandidate
       }
+    }
 
   }
 }

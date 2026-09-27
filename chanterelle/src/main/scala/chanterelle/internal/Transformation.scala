@@ -1,4 +1,5 @@
 package chanterelle.internal
+import chanterelle.Mappable
 
 import scala.collection.Factory
 import scala.collection.immutable.{ SortedMap, VectorMap }
@@ -92,7 +93,7 @@ object Transformation {
   case class Mapped[F[_]](
     source: Structure.Wrapped[F],
     wrapped: Transformation[Nothing],
-    mode: Expr[Mode[F]],
+    mode: Expr[Mappable[F]],
     outputTpe: Type[?]
   ) extends Transformation[Nothing]
 

@@ -25,7 +25,7 @@ extension (tpe: Type[? <: AnyKind]) {
 extension (self: Type.type) {
   private[chanterelle] def unapplied(tpe: Type[?])(using Quotes): Option[(tycon: Type[?], args: ::[Type[?]])] =
     import quotes.reflect.*
-    tpe.repr.simplified.dealias match {
+    tpe.repr.simplified.dealias.widen match {
       case AppliedType(tycon, head :: tail) => Some((tycon.asType, ::(head.asType, tail.map(_.asType))))
       case _                                => None
     }

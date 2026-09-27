@@ -2,10 +2,8 @@ package chanterelle
 
 import scala.collection.Factory
 
-sealed trait Mode[F[_]] {
+sealed trait Mode[F[_]] extends Mappable[F] {
   def pure[A](value: A): F[A]
-
-  def map[A, B](fa: F[A], f: A => B): F[B]
 
   def traverseCollection[AElem, BElem, AColl, BColl](
     collection: AColl,
