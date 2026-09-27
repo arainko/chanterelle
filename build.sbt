@@ -32,7 +32,7 @@ ThisBuild / githubWorkflowBuild += WorkflowStep.Run(
   commands = "sbt --client docs/mdoc" :: Nil
 )
 
-lazy val root = tlCrossRootProject.aggregate(chanterelle)
+lazy val root = tlCrossRootProject.aggregate(chanterelle, chanterelleCats)
 
 lazy val chanterelle =
   crossProject(JSPlatform, JVMPlatform, NativePlatform)
