@@ -1,6 +1,7 @@
 package chanterelle.hidden
 
 import chanterelle.Mode
+import chanterelle.Mappable
 
 sealed trait Selector {
   extension [A](self: Option[A] | Iterable[A]) def element: A
@@ -10,5 +11,5 @@ sealed trait Selector {
     def rightElement: A
   }
 
-  extension [F[_], A](using Mode[F])(self: F[A]) def element: A
+  extension [F[_], A](using Mappable[F])(self: F[A]) def element: A
 }

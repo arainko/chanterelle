@@ -1,5 +1,4 @@
 package chanterelle.internal
-import chanterelle.Mappable
 
 import scala.collection.Factory
 import scala.collection.immutable.{ SortedMap, VectorMap }
@@ -93,7 +92,6 @@ object Transformation {
   case class Mapped[F[_]](
     source: Structure.Wrapped[F],
     wrapped: Transformation[Nothing],
-    mode: Expr[Mappable[F]],
     outputTpe: Type[?]
   ) extends Transformation[Nothing]
 
@@ -188,15 +186,12 @@ object Transformation {
 
         case p: Plan.Wrapped[Nothing, f] =>
           Context.current match {
-            case Context.Total =>
-              boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
-            case ctx @ given Context.NonFallible[`f`] =>
+            case _: (Context.Total.type | Context.NonFallible[?]) =>
               p.isHoisted match {
                 case Hoist.No =>
                   Transformation.Mapped[f](
                     p.source,
                     Context.current.weaken.locally(recurse(p.wrapped)),
-                    ctx.mode.value,
                     p.calculateTpe
                   )
 
@@ -233,7 +228,6 @@ object Transformation {
                   Transformation.Mapped[f](
                     p.source,
                     Context.current.weaken.locally(recurse(p.wrapped)),
-                    ctx.mode.value,
                     p.calculateTpe
                   )
 

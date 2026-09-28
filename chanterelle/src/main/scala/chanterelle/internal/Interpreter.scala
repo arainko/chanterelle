@@ -96,7 +96,7 @@ private[chanterelle] object Interpreter {
           (mapped.source.tpe, mapped.wrapped.outputTpe).runtimeChecked match {
             case '[`f`[a]] -> '[b] =>
               val src = primary.asExprOf[f[a]]
-              '{ ${ mapped.mode }.map[a, b]($src, a => ${ runTransformation('a, mapped.wrapped).asExprOf[b] }) }
+              '{ ${ mapped.source.mappable }.map[a, b]($src, a => ${ runTransformation('a, mapped.wrapped).asExprOf[b] }) }
           }
 
         case Transformation.IterLike(

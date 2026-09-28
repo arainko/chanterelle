@@ -94,6 +94,7 @@ private[chanterelle] object Structure {
     tpe: Type[?], // <-- it's supposed to be F[underlying.tpe]
     wrapper: WrapperType[F],
     path: Path,
+    mappable: Expr[Mappable[F]],
     wrapped: Structure
   ) extends Structure
 
@@ -111,12 +112,13 @@ private[chanterelle] object Structure {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
 
-        case WrappedType(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped]) =>
+        case WrappedType(Res(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped], mappable = m)) =>
           @unused given Type[f] = wrapper.wrapper
           Structure.Wrapped[f](
             Type.of[f[wrapped]],
             wrapper,
             path,
+            m,
             Structure.of[wrapped](path.appended(Path.Segment.Element(Type.of[wrapped])))
           )
 
@@ -232,20 +234,22 @@ private[chanterelle] object Structure {
     }
   }
 
+  private case class Res[F[_]](wrapper: WrapperType[F], wrapped: Type[?], mappable: Expr[Mappable[F]])
+
   private object WrappedType {
     def unapply(
       tpe: Type[?]
     )(using
       q: Quotes,
       context: Context.Any
-    ): Option[(wrapper: WrapperType[?], wrapped: Type[? <: AnyKind], mappable: Option[Expr[Mappable[?]]])] = {
+    ): Option[Res[?]] = {
       def mappableCandidate = Type
         .unapplied(tpe)
         .collect {
           case (tycon = '[type f[_]; f], args = wrapped :: Nil) =>
             Expr
               .summon[Mappable[f]]
-              .map(mappable => (wrapper = WrapperType.create[f], wrapped = wrapped, mappable = Some(mappable)))
+              .map(mappable => Res(wrapper = WrapperType.create[f], wrapped = wrapped, mappable = mappable))
         }
         .flatten
 
@@ -253,7 +257,7 @@ private[chanterelle] object Structure {
         case ctx: Context.PossibleFallible[?, ?] =>
           ctx.wrapperType
             .unapply(tpe)
-            .map((wrapper, wrapped) => (wrapper = wrapper, wrapped = wrapped, mappable = None))
+            .map((wrapper, wrapped) => Res(wrapper = wrapper, wrapped = wrapped, mappable = ctx.mode.value))
             .orElse(mappableCandidate)
         case Context.Total => mappableCandidate
       }

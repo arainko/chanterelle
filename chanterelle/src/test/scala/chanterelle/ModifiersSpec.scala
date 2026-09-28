@@ -7,6 +7,7 @@ import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
 import scala.compiletime.ops.string.*
 import scala.collection.immutable.SortedMap
+import scala.collection.Factory
 
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
@@ -957,10 +958,19 @@ class ModifiersSpec extends ChanterelleSuite {
     )
   }
 
-  test("custom collection keeps its type") {
+  test("custom mappable type works") {
     case class CusVector[+A](vec: Vector[A])
+    given Mappable[CusVector] with {
+      def map[A, B](fa: CusVector[A], f: A => B) = fa.copy(vec = fa.vec.map(f))
+    }
+
+    val tup = (someField = CusVector(Vector(1, 2, 3, 4)))
+
+    val actual = tup.transform(_.update(_.someField.element)(_.toString))
+
     given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
 
+    val cos = summon[Factory[Int, Vector[Int]]]
   }
 }
 
