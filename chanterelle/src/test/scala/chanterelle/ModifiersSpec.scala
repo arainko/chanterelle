@@ -968,9 +968,25 @@ class ModifiersSpec extends ChanterelleSuite {
 
     val actual = tup.transform(_.update(_.someField.element)(_.toString))
 
-    given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
+    // Expr cast exception when this us uncommented?
+    // given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
 
-    val cos = summon[Factory[Int, Vector[Int]]]
+  }
+
+  test("custom collection type works") {
+
+    case class CusVector[+A](vec: Vector[A])
+
+    val tup = (someField = Array(1, 2, 3, 4))
+
+    val b = summon[IsCollection[Int, Array[Int]]]
+    // given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
+    //
+    // given [A]: Factory[A, CusVector[A]] = summon[Factory[A, Vector[A]]].asInstanceOf
+    //
+    // internal.CodePrinter.code:
+    // val actual = tup.transform(_.update(_.someField.element)(_.toString))
+
   }
 }
 
