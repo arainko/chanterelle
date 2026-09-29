@@ -32,7 +32,7 @@ object IsCollection extends IsCollection.LowPriority {
   }
 }
 
-opaque type CollectionBuilder[Elem, Collection] = Factory[Elem, Collection]
+opaque type CollectionBuilder[Elem, Collection] <: Factory[Elem, Collection] = Factory[Elem, Collection]
 
 object CollectionBuilder {
 

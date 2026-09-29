@@ -971,6 +971,8 @@ class ModifiersSpec extends ChanterelleSuite {
 
     // Expr cast exception when this us uncommented?
     // given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
+    val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
+    assertEquals(actual, expected)
 
   }
 
@@ -978,19 +980,19 @@ class ModifiersSpec extends ChanterelleSuite {
 
     case class CusVector[+A](vec: Vector[A])
 
-    val tup = (someField = Array(1, 2, 3, 4))
+    val tup = (someField = CusVector(Vector(1, 2, 3, 4)))
 
-    given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
+    given [A]: IsCollection[A, CusVector[A]] =
+      IsCollection.make(_.vec.iterator)
 
-    given [A]: Factory[A, CusVector[A]] with {
-      private val underlying = summon[Factory[A, Vector[A]]]
-      override def fromSpecific(it: IterableOnce[A]): CusVector[A] = newBuilder.addAll(it).result()
+    given [A]: CollectionBuilder[A, CusVector[A]] =
+      CollectionBuilder
+        .fromFactory(Vector)
+        .transform(CusVector.apply)
 
-      override def newBuilder: mutable.Builder[A, CusVector[A]] = underlying.newBuilder.mapResult(CusVector.apply)
-    }
-    //
-    // internal.CodePrinter.code:
-    // val actual = tup.transform(_.update(_.someField.element)(_.toString))
+    val actual = tup.transform(_.update(_.someField.element)(_.toString))
+    val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
+    assertEquals(actual, expected)
 
   }
 }
