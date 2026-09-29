@@ -8,6 +8,7 @@ import scala.collection.immutable.HashMap
 import scala.compiletime.ops.string.*
 import scala.collection.immutable.SortedMap
 import scala.collection.Factory
+import scala.collection.mutable
 
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
@@ -979,10 +980,14 @@ class ModifiersSpec extends ChanterelleSuite {
 
     val tup = (someField = Array(1, 2, 3, 4))
 
-    val b = summon[IsCollection[Int, Array[Int]]]
-    // given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
-    //
-    // given [A]: Factory[A, CusVector[A]] = summon[Factory[A, Vector[A]]].asInstanceOf
+    given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
+
+    given [A]: Factory[A, CusVector[A]] with {
+      private val underlying = summon[Factory[A, Vector[A]]]
+      override def fromSpecific(it: IterableOnce[A]): CusVector[A] = newBuilder.addAll(it).result()
+
+      override def newBuilder: mutable.Builder[A, CusVector[A]] = underlying.newBuilder.mapResult(CusVector.apply)
+    }
     //
     // internal.CodePrinter.code:
     // val actual = tup.transform(_.update(_.someField.element)(_.toString))
