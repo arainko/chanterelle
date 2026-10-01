@@ -48,10 +48,29 @@ private[chanterelle] object PathSelector {
               elemTpe.tpe.asType
             )
           recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
-
+// Apply(
+//   Apply(
+//     TypeApply(Select(Ident("contextual$50"), "element"), List(Inferred())),
+//     List(
+//       Apply(
+//         Apply(TypeApply(Select(Ident("NamedTuple"), "apply"), List(Inferred(), Inferred())), List(Ident("_$124"))),
+//         List(Literal(IntConstant(0)))
+//       )
+//     )
+//   ),
+//   List(
+//     Apply(
+//       TypeApply(Ident("collection"), List(Inferred(), Inferred())),
+//       List(TypeApply(Ident("given_IsCollection_K_V_CusMap"), List(Inferred(), Inferred())))
+//     )
+//   )
+// )
         case Apply(
-              Apply(TypeApply(Select(Ident(_), "element"), _ :: elemTpe :: Nil), _),
-              tree :: Nil
+              Apply(
+                TypeApply(Select(Ident(_), "element"), _ :: elemTpe :: Nil),
+                tree :: Nil
+              ),
+              _ :: Nil
             ) =>
           Logger.debug(
             s"Matched 'Apply(Apply((TypeApply(...)))) (matching .element on a Wrapped node)'",

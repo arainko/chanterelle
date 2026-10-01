@@ -1,6 +1,8 @@
 package chanterelle
 
 import scala.collection.Factory
+import chanterelle.interop.Collection
+import chanterelle.interop.Mappable
 
 sealed trait Mode[F[_]] extends Mappable[F] {
   def pure[A](value: A): F[A]
@@ -8,7 +10,7 @@ sealed trait Mode[F[_]] extends Mappable[F] {
   def traverseCollection[AElem, BElem, AColl, BColl](
     collection: AColl,
     transformation: AElem => F[BElem]
-  )(using IsCollection[AElem, AColl], Factory[BElem, BColl]): F[BColl]
+  )(using Collection.IntoIterator[AElem, AColl], Factory[BElem, BColl]): F[BColl]
 }
 
 object Mode {
@@ -55,7 +57,7 @@ object Mode {
       override def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Either[Coll[E], B]
-      )(using AColl: IsCollection[A, AColl], BColl: Factory[B, BColl]): scala.Either[Coll[E], BColl] = {
+      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Factory[B, BColl]): scala.Either[Coll[E], BColl] = {
         val accumulatedErrors = Errors.newBuilder
         val accumulatedSuccesses = BColl.newBuilder
         var isErroredOut = false
@@ -98,7 +100,7 @@ object Mode {
       final def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Either[E, B]
-      )(using AColl: IsCollection[A, AColl], BColl: Factory[B, BColl]): scala.Either[E, BColl] = {
+      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Factory[B, BColl]): scala.Either[E, BColl] = {
         var error: Left[E, Nothing] = null
         def isErroredOut = !(error eq null)
 
@@ -132,7 +134,7 @@ object Mode {
       final def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Option[B]
-      )(using AColl: IsCollection[A, AColl], BColl: Factory[B, BColl]): scala.Option[BColl] = {
+      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Factory[B, BColl]): scala.Option[BColl] = {
         var isErroredOut = false
         val resultBuilder = BColl.newBuilder
         val iterator = AColl.iterator(collection)

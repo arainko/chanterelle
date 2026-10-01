@@ -6,7 +6,7 @@ import chanterelle.internal.Transformation.{ ElemTransformation, Field }
 
 import scala.quoted.*
 import scala.collection.Factory
-import chanterelle.IsCollection
+import chanterelle.interop.Collection
 
 private[chanterelle] object FallibleInterpreter {
 

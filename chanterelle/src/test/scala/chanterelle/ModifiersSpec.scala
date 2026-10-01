@@ -9,6 +9,9 @@ import scala.compiletime.ops.string.*
 import scala.collection.immutable.SortedMap
 import scala.collection.Factory
 import scala.collection.mutable
+import chanterelle.hidden.Selector
+import chanterelle.interop.Collection
+import chanterelle.interop.Mappable
 
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
@@ -982,17 +985,30 @@ class ModifiersSpec extends ChanterelleSuite {
 
     val tup = (someField = CusVector(Vector(1, 2, 3, 4)))
 
-    given [A]: IsCollection[A, CusVector[A]] =
-      IsCollection.make(_.vec.iterator)
+    given [A]: Collection.IntoIterator[A, CusVector[A]] =
+      Collection.IntoIterator.from(_.vec.iterator)
 
-    given [A]: CollectionBuilder[A, CusVector[A]] =
-      CollectionBuilder
-        .fromFactory(Vector)
+    given [A]: Collection.Builder[A, CusVector[A]] =
+      Collection.Builder
+        .from(Vector)
         .transform(CusVector.apply)
 
     val actual = tup.transform(_.update(_.someField.element)(_.toString))
     val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
     assertEquals(actual, expected)
+
+  }
+
+  test("custom map type works") {
+    case class CusMap[K, +V](map: HashMap[K, V])
+
+    val tup = (someField = CusMap(HashMap(1 -> 2, 3 -> 4)))
+
+    given [K, V]: Collection.IntoIterator[(K, V), CusMap[K, V]] = Collection.IntoIterator.from(_.map.iterator)
+
+    given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.from(HashMap).transform(CusMap.apply)
+
+    val actual = tup.transform(_.update(_.someField.element._1)(a => a.toString))
 
   }
 }

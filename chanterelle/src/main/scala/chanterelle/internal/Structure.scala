@@ -1,7 +1,7 @@
 package chanterelle.internal
-import chanterelle.Mappable
+import chanterelle.interop.Mappable
 import chanterelle.internal.Structure.Leaf
-import chanterelle.IsCollection
+import chanterelle.interop.Collection.IntoIterator
 
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
@@ -82,11 +82,11 @@ private[chanterelle] object Structure {
     enum Repr derives Debug {
       case MapLike[F[_, _], Key, Value](
         tycon: Type[F],
-        isColl: Expr[IsCollection[(Key, Value), F[Key, Value]]],
+        isColl: Expr[IntoIterator[(Key, Value), F[Key, Value]]],
         key: Structure,
         value: Structure
       )
-      case IterLike[F[_], Elem](tycon: Type[F], isColl: Expr[IsCollection[Elem, F[Elem]]], element: Structure)
+      case IterLike[F[_], Elem](tycon: Type[F], isColl: Expr[IntoIterator[Elem, F[Elem]]], element: Structure)
     }
   }
 
@@ -204,7 +204,7 @@ private[chanterelle] object Structure {
     def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context.Any): Option[Structure.Collection] = {
       Type.unapplied(tpe).flatMap {
         case '[type map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
-          Expr.summon[IsCollection[(key, value), map[key, value]]].map { isColl =>
+          Expr.summon[IntoIterator[(key, value), map[key, value]]].map { isColl =>
             Structure.Collection(
               tpe,
               path,
@@ -218,7 +218,7 @@ private[chanterelle] object Structure {
           }
 
         case '[type coll[a]; coll] -> ('[elem] :: Nil) =>
-          Expr.summon[IsCollection[elem, coll[elem]]].map { isColl =>
+          Expr.summon[IntoIterator[elem, coll[elem]]].map { isColl =>
             Structure.Collection(
               tpe,
               path,

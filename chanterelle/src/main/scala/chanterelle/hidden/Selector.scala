@@ -1,8 +1,10 @@
 package chanterelle.hidden
 
 import chanterelle.Mode
-import chanterelle.Mappable
-import chanterelle.IsCollection
+import chanterelle.interop.Mappable
+import chanterelle.interop.Collection
+import scala.annotation.targetName
+import scala.annotation.compileTimeOnly
 
 sealed trait Selector {
   extension [A](self: Option[A] | Iterable[A]) def element: A
@@ -12,5 +14,23 @@ sealed trait Selector {
     def rightElement: A
   }
 
-  extension [F[_], A](using Mappable[F] | IsCollection[A, F[A]])(self: F[A]) def element: A
+  extension [Self, A](self: Self)(using extractor: Selector.Extractor[Self] { type Elem = A }) {
+    def element: A
+  }
+}
+
+object Selector {
+  sealed trait Extractor[Self] {
+    type Elem
+  }
+
+  @compileTimeOnly("only usable inside the .transform DSL")
+  given mappable[F[_], A](using Mappable[F]): Extractor[F[A]] with {
+    type Elem = A
+  }
+
+  @compileTimeOnly("only usable inside the .transform DSL")
+  given collection[A, Coll](using Collection.IntoIterator[A, Coll]): Extractor[Coll] with {
+    type Elem = A
+  }
 }

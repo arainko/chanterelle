@@ -12,7 +12,7 @@ import NamedTuple.*
 import scala.annotation.unused
 import chanterelle.internal.Configured.NamedSpecific
 import chanterelle.internal.Sources.Scope
-import chanterelle.IsCollection
+import chanterelle.interop.Collection
 
 private[chanterelle] object Interpreter {
 
@@ -118,7 +118,7 @@ private[chanterelle] object Interpreter {
                       .to[coll[elem]]($f)
                   }
                 case '{ $srcValue: `coll`[`srcElem`] } =>
-                  val isColl = source.isColl.asExprOf[IsCollection[srcElem, coll[srcElem]]]
+                  val isColl = source.isColl.asExprOf[Collection.IntoIterator[srcElem, coll[srcElem]]]
                   '{
                     $isColl
                       .iterator($srcValue)
@@ -128,17 +128,42 @@ private[chanterelle] object Interpreter {
               }
           }
 
-        case Transformation.MapLike(source, keyTransformation, valueTransformation, fac, outputTpe) =>
-          (source.tycon, outputTpe, primary).runtimeChecked match {
+        case Transformation.MapLike(
+              source: Structure.Collection.Repr.MapLike[outMap, ?, ?],
+              keyTransformation,
+              valueTransformation,
+              fac,
+              outputTpe
+            ) =>
+          @unused given Type[outMap] = source.tycon
+          (outputTpe, primary).runtimeChecked match {
             case (
-                  '[type outMap[k, v]; outMap],
-                  '[collection.Map[outKey, outValue]],
+                  '[`outMap`[outKey, outValue]],
                   '{ $srcValue: collection.Map[srcKey, srcValue] }
                 ) =>
               val factory = fac.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
               '{
                 $srcValue
                   .map[outKey, outValue]((k, v) =>
+                    (
+                      ${ runTransformation('k, keyTransformation).asExprOf[outKey] },
+                      ${ runTransformation('v, valueTransformation).asExprOf[outValue] }
+                    )
+                  )
+                  .to[outMap[outKey, outValue]]($factory)
+              }
+            case (
+                  '[`outMap`[outKey, outValue]],
+                  '{ $srcValue: `outMap`[srcKey, srcValue] }
+                ) =>
+              val isColl = source.isColl.asExprOf[Collection.IntoIterator[(srcKey, srcValue), outMap[srcKey, srcValue]]]
+              val factory = fac.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
+              '{
+                $isColl
+                  .iterator(
+                    $srcValue
+                  )
+                  .map[(outKey, outValue)]((k, v) =>
                     (
                       ${ runTransformation('k, keyTransformation).asExprOf[outKey] },
                       ${ runTransformation('v, valueTransformation).asExprOf[outValue] }
