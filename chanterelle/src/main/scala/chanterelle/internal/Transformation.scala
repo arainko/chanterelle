@@ -1,6 +1,5 @@
 package chanterelle.internal
 
-import scala.collection.Factory
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
@@ -8,6 +7,7 @@ import scala.util.boundary.Label
 import chanterelle.internal.Plan.Hoist
 import chanterelle.Mode
 import chanterelle.internal.FallibleInterpreter.TransformationMode
+import chanterelle.interop.Collection
 
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
@@ -46,14 +46,14 @@ object Transformation {
     source: Structure.Collection.Repr.MapLike[map, Key, Value],
     key: Transformation[F],
     value: Transformation[F],
-    factory: Expr[Factory[?, ?]],
+    factory: Erased.K2[Collection.Builder],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
   case class IterLike[+F <: Fallible, iter[elem], Elem](
     source: Structure.Collection.Repr.IterLike[iter, Elem],
     elem: Transformation[F],
-    factory: Expr[Factory[?, ?]],
+    factory: Erased.K2[Collection.Builder],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
@@ -169,17 +169,20 @@ object Transformation {
           (source.tycon, key.calculateTpe, value.calculateTpe).runtimeChecked match {
             case ('[type map[k, v]; map], '[key], '[value]) =>
               val factory =
-                Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
-              MapLike(source, recurse(key), recurse(value), factory, tpe)
+                Expr
+                  .summon[Collection.Builder[(key, value), map[key, value]]]
+                  .getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+              MapLike(source, recurse(key), recurse(value), Erased.K2(factory), tpe)
           }
 
         case t @ Plan.IterLike(source, elem, _) =>
           val tpe = t.calculateTpe
-          val factory = (source.tycon, elem.calculateTpe).runtimeChecked match {
+          (source.tycon, elem.calculateTpe).runtimeChecked match {
             case ('[type coll[a]; coll], '[elem]) =>
-              Expr.summon[Factory[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+              val factory =
+                Expr.summon[Collection.Builder[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+              IterLike(source, recurse(elem), Erased.K2(factory), tpe)
           }
-          IterLike(source, recurse(elem), factory, tpe)
 
         case p: Plan.Merged[Nothing] =>
           fromMerged(p)

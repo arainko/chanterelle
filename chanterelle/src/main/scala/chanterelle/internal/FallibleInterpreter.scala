@@ -92,7 +92,7 @@ private[chanterelle] object FallibleInterpreter {
                     '[collection.Map[outKey, outValue]],
                     '{ $srcValue: collection.Map[srcKey, srcValue] }
                   ) =>
-                val fac = factory.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
+                val fac = factory.unerase[(outKey, outValue), outMap[outKey, outValue]]
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
                   F match {
                     case TransformationMode.Accumulating(value, _) =>
@@ -127,7 +127,7 @@ private[chanterelle] object FallibleInterpreter {
                     '[Iterable[elem]],
                     '{ $srcValue: Iterable[srcElem] }
                   ) =>
-                val f = factory.asExprOf[Factory[elem, coll[elem]]]
+                val f = factory.unerase[elem, coll[elem]]
                 Value.Wrapped {
                   '{
                     ${ F.value }.traverseCollection[srcElem, elem, Iterable[srcElem], coll[elem]](
