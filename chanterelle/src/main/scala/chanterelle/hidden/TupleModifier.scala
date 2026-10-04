@@ -252,12 +252,14 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
     val sel: Selector = ???
     val t = yup.int
     // sel.element(yup.int.element)
+    internal.Logger.locally {
     yup
       .transform(
         _.?(_.int.element)
         // _.?(_.int.element.element.int2),
         // _.?(_.int.element.element.list.element)
       )
+    }
   }
 
 }

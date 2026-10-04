@@ -68,9 +68,9 @@ private[chanterelle] object PathSelector {
         case Apply(
               Apply(
                 TypeApply(Select(Ident(_), "element"), _ :: elemTpe :: Nil),
-                tree :: Nil
+                _ :: Nil
               ),
-              _ :: Nil
+              tree :: Nil
             ) =>
           Logger.debug(
             s"Matched 'Apply(Apply((TypeApply(...)))) (matching .element on a Wrapped node)'",
