@@ -13,6 +13,7 @@ import scala.collection.IterableFactory
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.generic.IsIterableOnce
 import scala.collection.mutable.Builder
+import chanterelle.interop.Collection
 
 extension (self: Mode.type) {
   def parallel[F[_]: Parallel]: Mode.Accumulating[F] & Mode.FailFast[F] = ParallelMode[F]
@@ -30,10 +31,12 @@ private final class ParallelMode[F[_]: Parallel as F] extends Mode.Accumulating[
 
   override def map[A, B](fa: F[A], f: A => B): F[B] = F.monad.map(fa)(f)
 
-  override def traverseCollection[A, B, BColl](collection: Iterable[A], transformation: A => F[B])(using
-    BColl: Factory[B, BColl]
-  ): F[BColl] =
-    map(collection.toVector.parTraverse(transformation), _.to(BColl))
+  override def traverseCollection[AElem, BElem, AColl, BColl](
+    collection: AColl,
+    transformation: AElem => F[BElem]
+  )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder[BElem, BColl]): F[BColl] =
+    map(AColl.iterator(collection).toVector.parTraverse(transformation), _.to(BColl))
+
 }
 
 private final class ApplicativeMode[F[_]: Applicative as F] extends Mode.Accumulating[F] {
@@ -44,10 +47,12 @@ private final class ApplicativeMode[F[_]: Applicative as F] extends Mode.Accumul
 
   override def map[A, B](fa: F[A], f: A => B): F[B] = F.map(fa)(f)
 
-  override def traverseCollection[A, B, BColl](collection: Iterable[A], transformation: A => F[B])(using
-    BColl: Factory[B, BColl]
-  ): F[BColl] =
-    map(collection.toVector.traverse(transformation), _.to(BColl))
+  override def traverseCollection[AElem, BElem, AColl, BColl](
+    collection: AColl,
+    transformation: AElem => F[BElem]
+  )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder[BElem, BColl]): F[BColl] =
+    map(AColl.iterator(collection).toVector.traverse(transformation), _.to(BColl))
+
 }
 
 private final class MonadMode[F[_]: Monad as F] extends Mode.FailFast[F] {
@@ -58,9 +63,10 @@ private final class MonadMode[F[_]: Monad as F] extends Mode.FailFast[F] {
 
   override def map[A, B](fa: F[A], f: A => B): F[B] = F.map(fa)(f)
 
-  override def traverseCollection[A, B, BColl](collection: Iterable[A], transformation: A => F[B])(using
-    BColl: Factory[B, BColl]
-  ): F[BColl] =
-    map(collection.toVector.traverse(transformation), _.to(BColl))
+  override def traverseCollection[AElem, BElem, AColl, BColl](
+    collection: AColl,
+    transformation: AElem => F[BElem]
+  )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder[BElem, BColl]): F[BColl] =
+    map(AColl.iterator(collection).toVector.traverse(transformation), _.to(BColl))
 
 }

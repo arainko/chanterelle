@@ -80,13 +80,13 @@ private[chanterelle] object Structure {
 
   object Collection {
     enum Repr derives Debug {
-      case MapLike[F[_, _], Key, Value](
+      case MapLike[F[_, _]](
         tycon: Type[F],
-        isColl: Expr[IntoIterator[(Key, Value), F[Key, Value]]],
+        isColl: Erased.K2[IntoIterator],
         key: Structure,
         value: Structure
       )
-      case IterLike[F[_], Elem](tycon: Type[F], isColl: Expr[IntoIterator[Elem, F[Elem]]], element: Structure)
+      case IterLike[F[_]](tycon: Type[F], isColl: Erased.K2[IntoIterator], element: Structure)
     }
   }
 
@@ -210,7 +210,7 @@ private[chanterelle] object Structure {
               path,
               Structure.Collection.Repr.MapLike(
                 Type.of[map],
-                isColl,
+                Erased.K2(isColl),
                 Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
                 Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
               )
@@ -224,7 +224,7 @@ private[chanterelle] object Structure {
               path,
               Structure.Collection.Repr.IterLike(
                 Type.of[coll],
-                isColl,
+                Erased.K2(isColl),
                 Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
               )
             )

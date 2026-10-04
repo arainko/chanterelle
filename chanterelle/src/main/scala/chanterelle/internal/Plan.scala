@@ -76,14 +76,14 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
         case (elem @ Path.Segment.Element(tpe)) :: (zero @ Path.Segment.TupleElement(_, 0)) :: next =>
           val traversedPath = traversed :+ elem :+ zero
-          curr.narrow[Plan.MapLike[Err, ?, ?, ?]](_.updateKey(recurse(next, traversedPath)))(other =>
+          curr.narrow[Plan.MapLike[Err, ?]](_.updateKey(recurse(next, traversedPath)))(other =>
             ErrorMessage.UnexpectedTransformation("map", other, traversedPath, modifier.span)
           )
 
         case (elem @ Path.Segment.Element(tpe)) :: (one @ Path.Segment.TupleElement(_, 1)) :: next =>
           val traversedPath = traversed :+ elem :+ one
 
-          curr.narrow[Plan.MapLike[Err, ?, ?, ?]](_.updateValue(recurse(next, traversedPath)))(other =>
+          curr.narrow[Plan.MapLike[Err, ?]](_.updateValue(recurse(next, traversedPath)))(other =>
             ErrorMessage.UnexpectedTransformation("map", other, traversedPath, modifier.span)
           )
 
@@ -92,7 +92,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
           curr.narrow(
             when[Plan.Optional[Err]](_.update(recurse(next, traversedPath))),
-            when[Plan.IterLike[Err, ?, ?]](_.update(recurse(next, traversedPath))),
+            when[Plan.IterLike[Err, ?]](_.update(recurse(next, traversedPath))),
             when[Plan.Wrapped[Err, ?]] { plan =>
               val updated = plan.update(recurse(next, traversedPath))
               // hoist all plans on a path of a hoist, otherwise hoisting fields nested within other wrapped fields is dumb
@@ -639,8 +639,8 @@ private[chanterelle] object Plan {
       this.copy(right = f(right), isModified = IsModified.Yes)
   }
 
-  case class MapLike[+E <: Err, F[k, v], Key, Value](
-    source: Structure.Collection.Repr.MapLike[F, Key, Value],
+  case class MapLike[+E <: Err, F[k, v]](
+    source: Structure.Collection.Repr.MapLike[F],
     key: Plan[E],
     value: Plan[E],
     isModified: IsModified
@@ -651,15 +651,15 @@ private[chanterelle] object Plan {
       }
     }
 
-    def updateKey(f: Plan[E] => Plan[Err]): MapLike[Err, F, Key, Value] =
+    def updateKey(f: Plan[E] => Plan[Err]): MapLike[Err, F] =
       this.copy(key = f(key), isModified = IsModified.Yes)
 
-    def updateValue(f: Plan[E] => Plan[Err]): MapLike[Err, F, Key, Value] =
+    def updateValue(f: Plan[E] => Plan[Err]): MapLike[Err, F] =
       this.copy(value = f(value), isModified = IsModified.Yes)
   }
 
-  case class IterLike[+E <: Err, F[elem], Elem](
-    source: Structure.Collection.Repr.IterLike[F, Elem],
+  case class IterLike[+E <: Err, F[elem]](
+    source: Structure.Collection.Repr.IterLike[F],
     elem: Plan[E],
     isModified: IsModified
   ) extends Plan[E]("iterable") {
@@ -670,7 +670,7 @@ private[chanterelle] object Plan {
       }
     }
 
-    def update(f: Plan[E] => Plan[Err]): IterLike[Err, F, Elem] =
+    def update(f: Plan[E] => Plan[Err]): IterLike[Err, F] =
       this.copy(elem = f(elem), isModified = IsModified.Yes)
   }
 
@@ -791,9 +791,9 @@ private[chanterelle] object Plan {
         opt.update(recurse)
       case either: Plan.Either[Err] =>
         either.updateLeft(recurse).updateRight(recurse)
-      case map: Plan.MapLike[Err, ?, ?, ?] =>
+      case map: Plan.MapLike[Err, ?] =>
         map.updateKey(recurse).updateValue(recurse)
-      case iter: Plan.IterLike[Err, ?, ?] =>
+      case iter: Plan.IterLike[Err, ?] =>
         iter.update(recurse)
       case merged: Plan.Merged[Err] =>
         def update(merged: Plan.Merged[Err]): Plan.Merged[Err] =

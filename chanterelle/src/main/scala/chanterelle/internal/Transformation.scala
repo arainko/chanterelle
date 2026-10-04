@@ -42,16 +42,16 @@ object Transformation {
     outputTpe: Type[? <: scala.Either[?, ?]]
   ) extends Transformation[F]
 
-  case class MapLike[+F <: Fallible, map[k, v], Key, Value](
-    source: Structure.Collection.Repr.MapLike[map, Key, Value],
+  case class MapLike[+F <: Fallible, map[k, v]](
+    source: Structure.Collection.Repr.MapLike[map],
     key: Transformation[F],
     value: Transformation[F],
     factory: Erased.K2[Collection.Builder],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
-  case class IterLike[+F <: Fallible, iter[elem], Elem](
-    source: Structure.Collection.Repr.IterLike[iter, Elem],
+  case class IterLike[+F <: Fallible, iter[elem]](
+    source: Structure.Collection.Repr.IterLike[iter],
     elem: Transformation[F],
     factory: Erased.K2[Collection.Builder],
     outputTpe: Type[?]

@@ -1,14 +1,11 @@
 package chanterelle.hidden
 
-import chanterelle.{ FieldName, Mode }
+import chanterelle.*
 
 import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
-import scala.collection.generic.IsIterable
+import scala.collection.generic.{ IsIterable, IsMap }
 import scala.collection.immutable.IntMap
-import scala.collection.generic.IsMap
-import scala.collection.MapOps
-import scala.collection.IterableOnceOps
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -241,23 +238,26 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
     Mode[F]
   )(value: Value)(using IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
 
-  import chanterelle.*
-
   val asd = summon[IsIterable[List[Int]]]
   val asdf = summon[IsMap[IntMap[Int]]]
   summon[IsIterable[String]]
+  def cos = {
 
+    
+  }
   val yup =
     (int = Right(Right((int = Right((int = 1)), list = List(Right((int = 1))), int2 = Right(3)))))
     // internal.CodePrinter.code:
-  // internal.Logger.locally:
-  //   val b = Mode.Accumulating.either[List, String] {
-  //     yup
-  //       .transform(
-  //         _.?(_.int.element.element.int)
-  //         // _.?(_.int.element.element.int2),
-  //         // _.?(_.int.element.element.list.element)
-  //       )
-  //   }
+  val b = Mode.Accumulating.either[List, String] {
+    val sel: Selector = ???
+    val t = yup.int
+    // sel.element(yup.int.element)
+    yup
+      .transform(
+        _.?(_.int.element)
+        // _.?(_.int.element.element.int2),
+        // _.?(_.int.element.element.list.element)
+      )
+  }
 
 }

@@ -1,10 +1,10 @@
 package chanterelle.hidden
 
-import chanterelle.Mode
-import chanterelle.interop.Mappable
-import chanterelle.interop.Collection
-import scala.annotation.targetName
+import chanterelle.interop.{ Collection, Mappable }
+
 import scala.annotation.compileTimeOnly
+import scala.annotation.unused
+import chanterelle.Mode
 
 sealed trait Selector {
   extension [A](self: Option[A] | Iterable[A]) def element: A
@@ -14,7 +14,7 @@ sealed trait Selector {
     def rightElement: A
   }
 
-  extension [Self, A](self: Self)(using extractor: Selector.Extractor[Self] { type Elem = A }) {
+  extension [Self, A](using extractor: Selector.Extractor[Self] { type Elem = A })(self: Self) {
     def element: A
   }
 }
@@ -25,7 +25,7 @@ object Selector {
   }
 
   @compileTimeOnly("only usable inside the .transform DSL")
-  given mappable[F[_], A](using Mappable[F]): Extractor[F[A]] with {
+  given mappable[F[_], A](using @unused F: Mappable[F]): Extractor[F[A]] with {
     type Elem = A
   }
 

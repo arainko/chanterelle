@@ -4,7 +4,6 @@ import chanterelle.internal.Sources.Ref
 import chanterelle.internal.Structure.*
 import chanterelle.internal.Transformation.Field
 
-import scala.collection.Factory
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
@@ -100,7 +99,7 @@ private[chanterelle] object Interpreter {
           }
 
         case Transformation.IterLike(
-              source: Structure.Collection.Repr.IterLike[coll, ?],
+              source: Structure.Collection.Repr.IterLike[coll],
               paramTransformation,
               factory,
               outputTpe
@@ -118,7 +117,7 @@ private[chanterelle] object Interpreter {
                       .to[coll[elem]]($f)
                   }
                 case '{ $srcValue: `coll`[`srcElem`] } =>
-                  val isColl = source.isColl.asExprOf[Collection.IntoIterator[srcElem, coll[srcElem]]]
+                  val isColl = source.isColl.unerase[srcElem, coll[srcElem]]
                   '{
                     $isColl
                       .iterator($srcValue)
@@ -129,7 +128,7 @@ private[chanterelle] object Interpreter {
           }
 
         case Transformation.MapLike(
-              source: Structure.Collection.Repr.MapLike[outMap, ?, ?],
+              source: Structure.Collection.Repr.MapLike[outMap],
               keyTransformation,
               valueTransformation,
               fac,
@@ -156,7 +155,7 @@ private[chanterelle] object Interpreter {
                   '[`outMap`[outKey, outValue]],
                   '{ $srcValue: `outMap`[srcKey, srcValue] }
                 ) =>
-              val isColl = source.isColl.asExprOf[Collection.IntoIterator[(srcKey, srcValue), outMap[srcKey, srcValue]]]
+              val isColl = source.isColl.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
               val factory = fac.unerase[(outKey, outValue), outMap[outKey, outValue]]
               '{
                 $isColl
