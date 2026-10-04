@@ -1,13 +1,14 @@
 package chanterelle.internal
 
+import chanterelle.Mode
+import chanterelle.internal.FallibleInterpreter.TransformationMode
+import chanterelle.internal.Plan.Hoist
+import chanterelle.interop.Collection
+
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
-import chanterelle.internal.Plan.Hoist
-import chanterelle.Mode
-import chanterelle.internal.FallibleInterpreter.TransformationMode
-import chanterelle.interop.Collection
 
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
@@ -245,8 +246,6 @@ object Transformation {
               config match {
                 case update: Configured.Update =>
                   ConfedUp(update)
-                case _: Configured.Sequence =>
-                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
               }
             case Context.PossiblyFallible(mode, wrapperType) =>
               ConfedUp(config)

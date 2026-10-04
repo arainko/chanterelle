@@ -1,7 +1,8 @@
 package chanterelle.internal
 
-import scala.quoted.*
 import chanterelle.internal.Debug.AST
+
+import scala.quoted.*
 
 private[chanterelle] object Erased {
   opaque type K2[F[_, _]] = Expr[F[Any, Any]]

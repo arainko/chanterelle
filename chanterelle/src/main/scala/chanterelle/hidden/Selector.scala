@@ -2,9 +2,10 @@ package chanterelle.hidden
 
 import chanterelle.interop.{ Collection, Mappable }
 
-import scala.annotation.compileTimeOnly
-import scala.annotation.unused
-import chanterelle.Mode
+import scala.annotation.{
+  compileTimeOnly,
+  unused
+}
 
 sealed trait Selector {
   extension [A](self: Option[A] | Iterable[A]) def element: A

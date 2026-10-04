@@ -1,12 +1,12 @@
 package chanterelle.internal
-import chanterelle.interop.Mappable
 import chanterelle.internal.Structure.Leaf
 import chanterelle.interop.Collection.IntoIterator
+import chanterelle.interop.Mappable
 
+import scala.annotation.unused
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
-import scala.annotation.unused
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]

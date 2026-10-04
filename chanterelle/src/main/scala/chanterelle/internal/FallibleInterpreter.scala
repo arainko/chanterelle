@@ -3,10 +3,9 @@ package chanterelle.internal
 import chanterelle.Mode
 import chanterelle.internal.Debug.AST
 import chanterelle.internal.Transformation.{ ElemTransformation, Field }
+import chanterelle.interop.Collection
 
 import scala.quoted.*
-import scala.collection.Factory
-import chanterelle.interop.Collection
 
 private[chanterelle] object FallibleInterpreter {
 
@@ -142,8 +141,6 @@ private[chanterelle] object FallibleInterpreter {
             Value.Unwrapped(source)
           case t @ Transformation.ConfedUp(config) =>
             config match {
-              case Configured.Sequence(tpe, source, unwrappedDest) =>
-                ???
               case update: Configured.Update =>
                 ???
               // Interpreter.runTransformation(source, t)
@@ -241,7 +238,7 @@ private[chanterelle] object FallibleInterpreter {
       def astify(self: TransformationMode[?])(using Quotes): AST =
         self match
           case Accumulating(value, ff) => AST.Text("Accumulating ()")
-          case FailFast(value)         => AST.Text("FailFast")
+          case FailFast(value)      => AST.Text("FailFast")
 
     }
   }

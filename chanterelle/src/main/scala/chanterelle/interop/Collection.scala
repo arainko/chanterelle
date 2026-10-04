@@ -1,7 +1,7 @@
 package chanterelle.interop
 
-import scala.collection.generic.IsIterableOnce
 import scala.collection.Factory
+import scala.collection.generic.IsIterableOnce
 import scala.collection.mutable.Builder as MutBuilder
 
 object Collection {

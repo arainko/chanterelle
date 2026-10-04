@@ -1,8 +1,9 @@
 package chanterelle.internal
 
+import chanterelle.internal.Debug.AST
+
 import scala.annotation.unused
 import scala.quoted.*
-import chanterelle.internal.Debug.AST
 
 private[chanterelle] sealed trait WrapperType[F[_]] {
   def wrapper(using Quotes): Type[F]

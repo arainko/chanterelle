@@ -1,7 +1,10 @@
 package chanterelle
 
-import chanterelle.interop.Collection
-import chanterelle.interop.Mappable
+import chanterelle.interop.{
+  Collection,
+  Mappable
+}
+
 import scala.collection.Factory
 
 sealed trait Mode[F[_]] extends Mappable[F] {

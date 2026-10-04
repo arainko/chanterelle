@@ -3,14 +3,17 @@ package chanterelle.internal
 import chanterelle.internal.Plan.IsModified
 import chanterelle.internal.Plan.Merged.Field
 
-import scala.annotation.{ nowarn, tailrec }
+import scala.annotation.{
+  nowarn,
+  tailrec,
+  unused
+}
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
+import scala.util.boundary
+import scala.util.boundary.Label
 
 import Plan.Error
-import scala.annotation.unused
-import scala.util.boundary.Label
-import scala.util.boundary
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -156,17 +159,6 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
           transformation.narrow(
             when[Plan.Named[Err]](transformation => Plan.Merged.create(transformation, m.valueStructure, m.ref)),
             when[Plan.Merged[Err]](_.merge(m.valueStructure, m.ref))
-          )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
-
-        case m: Modifier.Sequence[f] =>
-          transformation.narrow(
-            when[Plan.Named[Err]](t => ???),
-            when[Plan.Tuple[Err]](t =>
-              Plan.ConfedUp(
-                Configured.Sequence.fromTuple(t, m).left.map(err => throw RuntimeException(err.toString())).merge,
-                m.span
-              )
-            )
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
 
         case _: Modifier.Hoist[f] =>

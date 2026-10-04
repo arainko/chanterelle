@@ -1,7 +1,7 @@
 package chanterelle.internal
 
-import scala.quoted.*
 import scala.annotation.unused
+import scala.quoted.*
 
 private[chanterelle] sealed trait ProductConstructor {
   def apply(fields: Seq[Expr[Any]])(using Quotes): Expr[Any]

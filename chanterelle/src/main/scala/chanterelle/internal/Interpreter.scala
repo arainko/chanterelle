@@ -1,17 +1,19 @@
 package chanterelle.internal
 
-import chanterelle.internal.Sources.Ref
+import chanterelle.internal.Configured.NamedSpecific
+import chanterelle.internal.Sources.{
+  Ref,
+  Scope
+}
 import chanterelle.internal.Structure.*
 import chanterelle.internal.Transformation.Field
+import chanterelle.interop.Collection
 
+import scala.annotation.unused
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
 import NamedTuple.*
-import scala.annotation.unused
-import chanterelle.internal.Configured.NamedSpecific
-import chanterelle.internal.Sources.Scope
-import chanterelle.interop.Collection
 
 private[chanterelle] object Interpreter {
 

@@ -17,7 +17,6 @@ private[chanterelle] enum Modifier derives Debug {
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
   case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
-  case Sequence[F[_]](path: Path, span: Span, wrapperType: WrapperType[F])
   case Hoist[F[_]](path: Path, span: Span, wrapperType: WrapperType[F])
 }
 
@@ -113,14 +112,6 @@ private[chanterelle] object Modifier {
             (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergee).regional(${ AsTerm(PathSelector(path)) })
           } =>
         parseMerged(path, mergee.asExprOf[a], Span.fromExpr(cfg))
-
-      case cfg @ '{
-            type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.sequence[f](using $_)
-          } =>
-        Right(
-          Modifier.Sequence(Path.empty(Type.of[Any]), Span.fromExpr(cfg), WrapperType.create[f])
-        )
 
       case cfg @ '{
             type f[_]

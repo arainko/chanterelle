@@ -1,13 +1,18 @@
 package chanterelle.internal
 
-import scala.quoted.Expr
 import chanterelle.Mode
-import scala.quoted.Quotes
-import chanterelle.internal.FallibleInterpreter.TransformationMode
+import chanterelle.internal.Context.{
+  NonFallible,
+  PossiblyFallible,
+  Total
+}
 import chanterelle.internal.Debug.AST
-import chanterelle.internal.Context.Total
-import chanterelle.internal.Context.PossiblyFallible
-import chanterelle.internal.Context.NonFallible
+import chanterelle.internal.FallibleInterpreter.TransformationMode
+
+import scala.quoted.{
+  Expr,
+  Quotes
+}
 
 private[chanterelle] object Fallible {
   given Debug[Fallible] with {

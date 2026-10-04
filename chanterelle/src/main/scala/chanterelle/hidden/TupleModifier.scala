@@ -4,8 +4,6 @@ import chanterelle.*
 
 import scala.NamedTuple.*
 import scala.annotation.compileTimeOnly
-import scala.collection.generic.{ IsIterable, IsMap }
-import scala.collection.immutable.IntMap
 
 opaque type TupleModifier[Tup] = Unit
 
@@ -154,23 +152,8 @@ object TupleModifier {
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
 
-    def falliblePut[F[_], Value <: NamedTuple.AnyNamedTuple](
-      value: Value
-    )(using Mode[F], IsMappedBy[F][NamedTuple.DropNames[Value]]): TupleModifier[Tup] & Fallible[Tup]
-
-    def traverseEach[F[_], B](using mode: Mode[F], union: Union[Tup])(f: union.Result => F[B]): TupleModifier[Tup] & Fallible[Tup]
-
-    def sequence[F[_]](using Mode[F]): TupleModifier[Tup]
 
     def ?[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
-  }
-
-  object Builder {
-
-    extension [Tup <: Tuple | NamedTuple.AnyNamedTuple](self: Builder[Tup]) {
-      def map[B](using union: Union[Tup])(f: union.Result => B): TupleModifier[Tup] = ???
-    }
-
   }
 
   sealed trait Local[Tup]
@@ -238,9 +221,6 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
     Mode[F]
   )(value: Value)(using IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
 
-  val asd = summon[IsIterable[List[Int]]]
-  val asdf = summon[IsMap[IntMap[Int]]]
-  summon[IsIterable[String]]
   def cos = {
 
     
@@ -255,9 +235,9 @@ type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F],
     internal.Logger.locally {
     yup
       .transform(
-        _.?(_.int.element)
+        _.?(_.int.element.element.int),
         // _.?(_.int.element.element.int2),
-        // _.?(_.int.element.element.list.element)
+        _.?(_.int.element.element.list.element)
       )
     }
   }

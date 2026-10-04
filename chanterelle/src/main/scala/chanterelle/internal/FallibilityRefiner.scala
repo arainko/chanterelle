@@ -1,9 +1,12 @@
 package chanterelle.internal
 
-import scala.util.boundary
-import chanterelle.internal.Transformation.Field
-import chanterelle.internal.Transformation.Merged
+import chanterelle.internal.Transformation.{
+  Field,
+  Merged
+}
+
 import scala.annotation.publicInBinary
+import scala.util.boundary
 
 private[chanterelle] object FallibilityRefiner {
   def run(transformation: Transformation[Fallible]): Transformation[Nothing] | None =
@@ -35,7 +38,6 @@ private[chanterelle] object FallibilityRefiner {
         case Transformation.ConfedUp(config) =>
           config match
             case Configured.Update(tpe, fn)                      => ()
-            case Configured.Sequence(tpe, source, unwrappedDest) => boundary.break(None)
 
         case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, _) =>
           evaluate(fields.collect {
