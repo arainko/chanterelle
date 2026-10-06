@@ -152,6 +152,7 @@ object TupleModifier {
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
 
+    @compileTimeOnly("Only usable as part of the .transform DSL")
     def hoist[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
   }
 
