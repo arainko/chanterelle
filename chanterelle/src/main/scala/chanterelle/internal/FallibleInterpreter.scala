@@ -6,6 +6,9 @@ import chanterelle.internal.Transformation.{ ElemTransformation, Field }
 import chanterelle.interop.Collection
 
 import scala.quoted.*
+import chanterelle.internal.Structure.Collection.Repr.MapLike
+import scala.annotation.unused
+import chanterelle.internal.Structure.Collection.Repr.IterLike
 
 private[chanterelle] object FallibleInterpreter {
 
@@ -84,14 +87,16 @@ private[chanterelle] object FallibleInterpreter {
                   }
                 }
             }
-          case Transformation.MapLike(sourceStruct, key, value, factory, outputTpe) =>
-            (sourceStruct.tycon, outputTpe, source).runtimeChecked match {
+          case Transformation.MapLike(sourceStruct: MapLike[outMap], key, value, factory, outputTpe) =>
+            @unused given Type[outMap] = sourceStruct.tycon
+            (key.outputTpe, value.outputTpe, source).runtimeChecked match {
               case (
-                    '[type outMap[k, v]; outMap],
-                    '[collection.Map[outKey, outValue]],
-                    '{ $srcValue: collection.Map[srcKey, srcValue] }
+                    '[outKey],
+                    '[outValue],
+                    '{ $srcValue: `outMap`[srcKey, srcValue] }
                   ) =>
                 val fac = factory.unerase[(outKey, outValue), outMap[outKey, outValue]]
+                val isColl = sourceStruct.isColl.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
                   F match {
                     case TransformationMode.Accumulating(value, _) =>
@@ -102,10 +107,12 @@ private[chanterelle] object FallibleInterpreter {
                 Value.Wrapped {
                   '{
                     ${ F.value }
-                      .traverseCollection[(srcKey, srcValue), (outKey, outValue), Iterable[(srcKey, srcValue)], outMap[
-                        outKey,
-                        outValue
-                      ]](
+                      .traverseCollection[
+                        (srcKey, srcValue),
+                        (outKey, outValue),
+                        outMap[srcKey, srcValue],
+                        outMap[outKey, outValue]
+                      ](
                         $srcValue,
                         (srcKey, srcValue) =>
                           ${
@@ -114,36 +121,38 @@ private[chanterelle] object FallibleInterpreter {
                               recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
                             )
                           }
-                      )(using summon, $fac) // TODO: TRICKLE DOWN IsCollection from above!
+                      )(using $isColl, $fac)
                   }
                 }
 
             }
-          case Transformation.IterLike(sourceStruct, elem, factory, outputTpe) =>
-            (sourceStruct.tycon, outputTpe, source).runtimeChecked match {
+          case Transformation.IterLike(sourceStruct: IterLike[coll], elem, factory, outputTpe) =>
+            @unused given Type[coll] = sourceStruct.tycon
+            (elem.outputTpe, source).runtimeChecked match {
               case (
-                    '[type coll[a]; coll],
-                    '[Iterable[elem]],
-                    '{ $srcValue: Iterable[srcElem] }
+                    '[elem],
+                    '{ $srcValue: `coll`[srcElem] }
                   ) =>
                 val f = factory.unerase[elem, coll[elem]]
+                val isColl = sourceStruct.isColl.unerase[srcElem, coll[srcElem]]
                 Value.Wrapped {
                   '{
-                    ${ F.value }.traverseCollection[srcElem, elem, Iterable[srcElem], coll[elem]](
+                    ${ F.value }.traverseCollection[srcElem, elem, coll[srcElem], coll[elem]](
                       $srcValue,
                       srcElem => ${ recurse(elem, 'srcElem, F).wrapped(F).asExprOf[F[elem]] }
-                    )(using summon, $f) // TODO: TRICKE DOWN IsCollection from above!
+                    )(using $isColl, $f)
                   }
                 }
             }
 
           case Transformation.Leaf(output) =>
             Value.Unwrapped(source)
-          case t @ Transformation.ConfedUp(config) =>
+          case Transformation.ConfedUp(config) =>
             config match {
               case update: Configured.Update =>
-                ???
-              // Interpreter.runTransformation(source, t)
+                Value.Unwrapped(
+                  nonfallibleTransformation(source, Transformation.ConfedUp(update))
+                )
             }
           case merged: (Transformation.Merged | Transformation.Mapped[f]) =>
             Value.Unwrapped(nonfallibleTransformation(source, merged))
@@ -238,7 +247,7 @@ private[chanterelle] object FallibleInterpreter {
       def astify(self: TransformationMode[?])(using Quotes): AST =
         self match
           case Accumulating(value, ff) => AST.Text("Accumulating ()")
-          case FailFast(value)      => AST.Text("FailFast")
+          case FailFast(value)         => AST.Text("FailFast")
 
     }
   }

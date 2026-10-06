@@ -152,7 +152,6 @@ object TupleModifier {
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
 
-
     def ?[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
   }
 
@@ -182,64 +181,6 @@ object TupleModifier {
       def ? : TupleModifier[Tup] = ???
     }
 
-  }
-
-}
-
-sealed trait Union[Tup] { type Result }
-
-object Union extends Union[EmptyTuple] {
-  type Result = Nothing
-
-  given tuple[A <: Tuple]: (Union[A] { type Result = Tuple.Union[A] }) = this.asInstanceOf
-  given namedTuple[A <: NamedTuple.AnyNamedTuple]: (Union[A] {
-    type Result = Tuple.Union[NamedTuple.DropNames[A]]
-  }) =
-    this.asInstanceOf
-}
-
-sealed trait Values[Tup] { type Result <: Tuple }
-
-object Values extends Union[EmptyTuple] {
-  type Result = EmptyTuple
-
-  given tuple[A <: Tuple]: (Values[A] { type Result = A }) = this.asInstanceOf
-  given namedTuple[A <: NamedTuple.AnyNamedTuple]: (Values[A] {
-    type Result = NamedTuple.DropNames[A]
-  }) =
-    this.asInstanceOf
-}
-
-type IsMappedBy[F[_]] = [X <: Tuple] =>> X <:< Tuple.Map[Tuple.InverseMap[X, F], F]
-
-@main def syntaxTest = {
-  def modifierOf[A](value: A): TupleModifier.Builder[A] = ???
-
-  val a = summon[Union[(Int, String, Int)]]
-
-  def someDef[F[_], Value](using
-    Mode[F]
-  )(value: Value)(using IsMappedBy[F][NamedTuple.DropNames[NamedTuple.From[Value]]]) = ???
-
-  def cos = {
-
-    
-  }
-  val yup =
-    (int = Right(Right((int = Right((int = 1)), list = List(Right((int = 1))), int2 = Right(3)))))
-    // internal.CodePrinter.code:
-  val b = Mode.Accumulating.either[List, String] {
-    val sel: Selector = ???
-    val t = yup.int
-    // sel.element(yup.int.element)
-    internal.Logger.locally {
-    yup
-      .transform(
-        _.?(_.int.element.element.int),
-        // _.?(_.int.element.element.int2),
-        _.?(_.int.element.element.list.element)
-      )
-    }
   }
 
 }

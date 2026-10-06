@@ -13,6 +13,7 @@ import chanterelle.hidden.Selector
 import chanterelle.interop.Collection
 import chanterelle.interop.Mappable
 
+
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
     val tup = (anotherField = (field1 = 123))
