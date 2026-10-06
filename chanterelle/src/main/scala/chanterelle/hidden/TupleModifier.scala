@@ -152,7 +152,7 @@ object TupleModifier {
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
 
-    def ?[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
+    def hoist[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
   }
 
   sealed trait Local[Tup]
@@ -172,15 +172,4 @@ object TupleModifier {
       def regional[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
     }
   }
-
-  sealed trait Fallible[Tup]
-
-  object Fallible {
-    extension [Tup](self: TupleModifier[Tup] & Fallible[Tup]) {
-      // @compileTimeOnly("Only usable as part of the .transform DSL")
-      def ? : TupleModifier[Tup] = ???
-    }
-
-  }
-
 }

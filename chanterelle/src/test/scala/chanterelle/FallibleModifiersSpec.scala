@@ -15,7 +15,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     Mode.FailFast.option {
       val tup = (field = Some((inner = 1)))
 
-      val actual = tup.transform(_.?(_.field))
+      val actual = tup.transform(_.hoist(_.field))
       val expected = Some((field = (inner = 1)))
 
       assertEquals(actual, expected)
@@ -26,7 +26,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     Mode.FailFast.option {
       val tup = (field = Option.empty[(inner: Int)])
 
-      val actual = tup.transform(_.?(_.field))
+      val actual = tup.transform(_.hoist(_.field))
       val expected = None
 
       assertEquals(actual, expected)
@@ -49,8 +49,8 @@ class FallibleModifiersSpec extends ChanterelleSuite {
       val successful = (field = Right((inner = 1)))
       val failed = (field = Left("boom"))
 
-      val actualOk = successful.transform(_.?(_.field))
-      val actualFailed = failed.transform(_.?(_.field))
+      val actualOk = successful.transform(_.hoist(_.field))
+      val actualFailed = failed.transform(_.hoist(_.field))
 
       val expectedOk = Right((field = (inner = 1)))
       val expectedFailed = Left("boom")
@@ -66,7 +66,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.field),
+          _.hoist(_.field),
           _.update(_.field.element.inner)(_ + 1)
         )
 
@@ -80,7 +80,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     Mode.FailFast.either[String] {
       val tup = (list = List(Right(1), Left("boom"), Left("bang")))
 
-      val actual = tup.transform(_.?(_.list.element))
+      val actual = tup.transform(_.hoist(_.list.element))
       val expected = Left("boom")
 
       assertEquals(actual, expected)
@@ -95,7 +95,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
         two = Left(List("two"))
       )
 
-      val actual = tup.transform(_.?(_.one), _.?(_.two))
+      val actual = tup.transform(_.hoist(_.one), _.hoist(_.two))
       val expected = Left(List("one", "two"))
 
       assertEquals(actual, expected)
@@ -107,7 +107,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val tup = (list = List(Right(1), Left(List("boom")), Right(2), Left(List("bang"))))
 
-      val actual = tup.transform(_.?(_.list.element))
+      val actual = tup.transform(_.hoist(_.list.element))
       val expected = Left(List("boom", "bang"))
 
       assertEquals(actual, expected)
@@ -119,7 +119,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val tup = (nest = Right(Right((leaf = Right(1)))))
 
-      val actual = tup.transform(_.?(_.nest.element.element.leaf))
+      val actual = tup.transform(_.hoist(_.nest.element.element.leaf))
       val expected = Right((nest = (leaf = 1)))
 
       assertEquals(actual, expected)
@@ -143,7 +143,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.nest.element.keep),
+          _.hoist(_.nest.element.keep),
           _.remove(_.nest.element.drop)
         )
 
@@ -161,7 +161,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
       val actual =
         tup.transform(
           _.remove(_.nest.element.drop),
-          _.?(_.nest.element.keep)
+          _.hoist(_.nest.element.keep)
         )
 
       val expected =
@@ -177,7 +177,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.nest.element.keep),
+          _.hoist(_.nest.element.keep),
           _.remove(_.before)
         )
 
@@ -194,7 +194,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.nest.element.keep),
+          _.hoist(_.nest.element.keep),
           _.remove(_.nest)
         )
 
@@ -227,7 +227,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.nest.element.element.keep),
+          _.hoist(_.nest.element.element.keep),
           _.remove(_.nest.element.element.drop)
         )
 
@@ -247,7 +247,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.nest.element.keep),
+          _.hoist(_.nest.element.keep),
           _.remove(_.nest.element.keep.element.k2)
         )
 
@@ -264,7 +264,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.nest.element.keep),
+          _.hoist(_.nest.element.keep),
           _.remove(_.nest.element.keep)
         )
 
@@ -282,7 +282,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
       val actual =
         tup.transform(
           _.remove(_.nest.element.keep),
-          _.?(_.nest.element.drop)
+          _.hoist(_.nest.element.drop)
         )
 
       val expected =
@@ -299,7 +299,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.nest.element.keep),
+          _.hoist(_.nest.element.keep),
           _.remove(_.nest.element.drop)
         )
 

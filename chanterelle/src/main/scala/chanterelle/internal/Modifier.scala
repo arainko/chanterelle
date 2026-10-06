@@ -115,7 +115,7 @@ private[chanterelle] object Modifier {
 
       case cfg @ '{
             type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.?[f, selected](using $_)(${ AsTerm(PathSelector(path)) })
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f, selected](using $_)(${ AsTerm(PathSelector(path)) })
           } =>
         Right(
           Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f])

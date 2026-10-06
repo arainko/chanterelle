@@ -7,8 +7,6 @@ import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
 import scala.compiletime.ops.string.*
 import scala.collection.immutable.SortedMap
-import scala.collection.Factory
-import scala.collection.mutable
 import chanterelle.hidden.Selector
 import chanterelle.interop.Collection
 import chanterelle.interop.Mappable
@@ -973,15 +971,12 @@ class ModifiersSpec extends ChanterelleSuite {
 
     val actual = tup.transform(_.update(_.someField.element)(_.toString))
 
-    // Expr cast exception when this us uncommented?
-    // given [A]: IsCollection[A, CusVector[A]] = IsCollection.make(_.vec.iterator)
     val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
     assertEquals(actual, expected)
 
   }
 
   test("custom collection type works") {
-
     case class CusVector[+A](vec: Vector[A])
 
     val tup = (someField = CusVector(Vector(1, 2, 3, 4)))

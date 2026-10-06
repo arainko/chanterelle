@@ -12,7 +12,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         src().transform(
           _.put(_.field.element)((extra = "hi")),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected =
@@ -27,7 +27,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         src().transform(
           _.compute(_.field.element)(v => (extra = v.inner + 1)),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected =
@@ -42,7 +42,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         src().transform(
           _.put(_.field.element)((extra = Left("nested"))),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected =
@@ -57,7 +57,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         src().transform(
           _.compute(_.field.element)(v => (extra = Right(v.inner))),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected =
@@ -71,7 +71,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
     Mode.FailFast.either[String] {
       val actual =
         src().transform(
-          _.?(_.field),
+          _.hoist(_.field),
           _.put(_.field.element)((extra = "hi"))
         )
 
@@ -86,7 +86,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
     Mode.FailFast.either[String] {
       val actual =
         src().transform(
-          _.?(_.field),
+          _.hoist(_.field),
           _.compute(_.field.element)(v => (doubled = v.inner * 2))
         )
 
@@ -101,7 +101,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
     Mode.FailFast.either[String] {
       val actual =
         src().transform(
-          _.?(_.field),
+          _.hoist(_.field),
           _.put(_.field.element)((extra = Left("still here")))
         )
 
@@ -119,7 +119,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         tup.transform(
           _.put(_.b.element)((extra = 7)),
-          _.?(_.a)
+          _.hoist(_.a)
         )
 
       val expected =
@@ -136,7 +136,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         tup.transform(
           _.compute(_.b.element)(v => (extra = v.x + 1)),
-          _.?(_.a)
+          _.hoist(_.a)
         )
 
       val expected =
@@ -151,7 +151,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         src().transform(
           _.put(a => a)((extra = Right(7))),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected =
@@ -167,7 +167,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
         src().transform(
           _.put(_.field.element)((extra = "hi")),
           _.compute(_.field.element)(v => (derived = v.inner * 10)),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected =
@@ -183,7 +183,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
         src().transform(
           _.put(_.field.element)((extra = "hi")),
           _.update(_.field.element.inner)(_ + 1),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected =
@@ -238,7 +238,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         tup.transform(
           _.put(_.nest.element.element)((extra = Right(9))),
-          _.?(_.nest.element.element.keep)
+          _.hoist(_.nest.element.element.keep)
         )
 
       val expected =
@@ -254,7 +254,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.?(_.list),
+          _.hoist(_.list),
           _.put(_.list.element.element)((b = 0))
         )
 
@@ -272,7 +272,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         tup.transform(
           _.put(_.field.element)((extra = "hi")),
-          _.?(_.field)
+          _.hoist(_.field)
         )
 
       val expected = Left("boom")

@@ -163,9 +163,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
         case _: Modifier.Hoist[f] =>
           transformation.narrow(
-            when[Plan.Wrapped[Err, f]](
-              _.hoisted
-            ) // TODO: this might not be the correct way of encoding this, maybe I need to change the encoding of .sequence
+            when[Plan.Wrapped[Err, f]](_.hoisted)
           )(other => ErrorMessage.UnexpectedTransformation("wrapped value", other, traversedPath, modifier.span))
 
       }
