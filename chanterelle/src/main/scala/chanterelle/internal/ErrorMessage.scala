@@ -53,11 +53,11 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class NoFactoryFound(tpe: Type[?]) extends ErrorMessage {
+  case class NoCollectionBuilderFound(tpe: Type[?]) extends ErrorMessage {
     def render(using Quotes) = {
 
       import quotes.reflect.*
-      s"Couldn't find an implicit instance of Factory for ${tpe.repr.show(using Printer.TypeReprCode)}"
+      s"Couldn't find an implicit instance of chanterelle.interop.Collection.Builder for ${tpe.repr.show(using Printer.TypeReprCode)}"
     }
 
   }
@@ -81,8 +81,7 @@ private[chanterelle] object ErrorMessage {
   }
 
   case class CantSequenceWithoutFallibleContext() extends ErrorMessage {
-    private val exec = new RuntimeException()
     def render(using Quotes): String =
-      s"Can't use fallible transformations without providing Mode[F] in scope: ${exec.printStackTrace()}"
+      s"Can't use fallible transformations without providing Mode[F] in scope"
   }
 }

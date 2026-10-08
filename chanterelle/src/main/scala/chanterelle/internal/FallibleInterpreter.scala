@@ -96,7 +96,7 @@ private[chanterelle] object FallibleInterpreter {
                     '{ $srcValue: `outMap`[srcKey, srcValue] }
                   ) =>
                 val fac = factory.unerase[(outKey, outValue), outMap[outKey, outValue]]
-                val isColl = sourceStruct.isColl.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
+                val isColl = sourceStruct.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
                   F match {
                     case TransformationMode.Accumulating(value, _) =>
@@ -134,7 +134,7 @@ private[chanterelle] object FallibleInterpreter {
                     '{ $srcValue: `coll`[srcElem] }
                   ) =>
                 val f = factory.unerase[elem, coll[elem]]
-                val isColl = sourceStruct.isColl.unerase[srcElem, coll[srcElem]]
+                val isColl = sourceStruct.intoIter.unerase[srcElem, coll[srcElem]]
                 Value.Wrapped {
                   '{
                     ${ F.value }.traverseCollection[srcElem, elem, coll[srcElem], coll[elem]](

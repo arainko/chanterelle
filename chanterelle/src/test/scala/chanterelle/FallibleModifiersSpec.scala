@@ -131,7 +131,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
       """
       Mode.FailFast.option {
         val tup = (field = 1)
-        tup.transform(_.?(_.field))
+        tup.transform(_.hoist(_.field))
       }
       """
     }("Couldn't traverse transformation plan, expected wrapped value but encountered ordinary value at _.field")
@@ -319,7 +319,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
         val tup = (before = 0, nest = wrapped, plain = 99)
         tup.transform(
           _.remove(_.nest),
-          _.?(_.nest.element.keep)
+          _.hoist(_.nest.element.keep)
         )
       }
       """

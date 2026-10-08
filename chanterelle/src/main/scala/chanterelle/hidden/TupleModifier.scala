@@ -154,6 +154,9 @@ object TupleModifier {
 
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def hoist[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
+
+    @compileTimeOnly("Only usable as part of the .transform DSL")
+    def hoist[F[_]](using Mode[F]): TupleModifier[Tup] & Regional[Tup] & Local[Tup]
   }
 
   sealed trait Local[Tup]

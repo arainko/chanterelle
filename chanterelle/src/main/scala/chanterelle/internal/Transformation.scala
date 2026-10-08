@@ -78,7 +78,6 @@ object Transformation {
   // * hoisting a wrapped node hoists all encountered wrapped nodes on its way
   // * this means that if we encounter a transformation with IsHoisted == No we can be sure that __THERE ARE NO__ fallible nodes in 'wrapped'
   // * type enforcement should be: if IsHoisted == No then ElemTransformation.NonFallible, every other combo is possible when IsHoisted.Yes.
-  // TODO: sooo given the above, isHoisted and wrapped form a 3 arm enum? NonHoisted(Transformation[Fallible]), Hoisted(NonFallible), Hoisted(Fallible)
   case class Hoisted[F[_]](
     source: Structure.Wrapped[F],
     wrapped: ElemTransformation,
@@ -172,7 +171,7 @@ object Transformation {
               val factory =
                 Expr
                   .summon[Collection.Builder[(key, value), map[key, value]]]
-                  .getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+                  .getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
               MapLike(source, recurse(key), recurse(value), Erased.K2(factory), tpe)
           }
 
@@ -181,7 +180,7 @@ object Transformation {
           (source.tycon, elem.calculateTpe).runtimeChecked match {
             case ('[type coll[a]; coll], '[elem]) =>
               val factory =
-                Expr.summon[Collection.Builder[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+                Expr.summon[Collection.Builder[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
               IterLike(source, recurse(elem), Erased.K2(factory), tpe)
           }
 
@@ -198,7 +197,6 @@ object Transformation {
                     Context.current.weaken.locally(recurse(p.wrapped)),
                     p.calculateTpe
                   )
-
                 case Hoist.Passthrough | Hoist.Yes =>
                   boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
               }
@@ -218,6 +216,7 @@ object Transformation {
                     p.wrapped.calculateTpe
                   )
 
+              //TODO: better error message - Mode.Accumulating isn't able to pass through a layer of fallible computations, you need Mode.Accumulating & Mode.FailFast in scope for that.
                 case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_, None) =>
                   boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
 

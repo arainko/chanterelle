@@ -82,11 +82,11 @@ private[chanterelle] object Structure {
     enum Repr derives Debug {
       case MapLike[F[_, _]](
         tycon: Type[F],
-        isColl: Erased.K2[IntoIterator],
+        intoIter: Erased.K2[IntoIterator],
         key: Structure,
         value: Structure
       )
-      case IterLike[F[_]](tycon: Type[F], isColl: Erased.K2[IntoIterator], element: Structure)
+      case IterLike[F[_]](tycon: Type[F], intoIter: Erased.K2[IntoIterator], element: Structure)
     }
   }
 

@@ -3,17 +3,15 @@ package chanterelle.internal
 import chanterelle.internal.Plan.IsModified
 import chanterelle.internal.Plan.Merged.Field
 
-import scala.annotation.{
-  nowarn,
-  tailrec,
-  unused
-}
+import scala.annotation.{ nowarn, tailrec, unused }
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
 
 import Plan.Error
+import chanterelle.internal.Modifier.Kind
+import scala.collection.immutable.Range.Partial
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -161,15 +159,32 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
             when[Plan.Merged[Err]](_.merge(m.valueStructure, m.ref))
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
 
-        case _: Modifier.Hoist[f] =>
-          transformation.narrow(
-            when[Plan.Wrapped[Err, f]](_.hoisted)
-          )(other => ErrorMessage.UnexpectedTransformation("wrapped value", other, traversedPath, modifier.span))
-
+        case m: Modifier.Hoist[f] =>
+          m.kind match {
+            case None =>
+              transformation.narrow(
+                when[Plan.Wrapped[Err, f]](_.hoisted)
+              )(other => ErrorMessage.UnexpectedTransformation("wrapped value", other, traversedPath, modifier.span))
+            case Some(Modifier.Kind.Local) =>
+              transformation.narrow(
+                when[Plan.Named[Err]](_.updateSelected { case wrapped: Plan.Wrapped[Err, ?] => wrapped.hoisted }),
+                when[Plan.Tuple[Err]](_.updateSelected { case wrapped: Plan.Wrapped[Err, ?] => wrapped.hoisted }),
+                when[Plan.Merged[Err]](_.updateSelected { case wrapped: Plan.Wrapped[Err, ?] => wrapped.hoisted })
+              )(other =>
+                ErrorMessage.UnexpectedTransformation(
+                  "named or positional tuple, merged value",
+                  other,
+                  traversedPath,
+                  modifier.span
+                )
+              )
+            case Some(Modifier.Kind.Regional) =>
+              ???
+          }
       }
     }
 
-    boundary[ErrorMessage | Plan[Err]] { recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this) } match {
+    boundary[ErrorMessage | Plan[Err]](recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this)) match {
       case plan: Plan[Err]   => plan
       case err: ErrorMessage => Plan.Error(err)
     }
@@ -307,6 +322,9 @@ private[chanterelle] object Plan {
       this.copy(allFields = updatedFields, isModified = IsModified.Yes)
     }
 
+    def updateSelected(fn: PartialFunction[Plan[E], Plan[Err]]): Named[Err] =
+      updateAll((name, field) => name -> field.update(plan => fn.applyOrElse(plan, identity)))
+
     def update(name: String, f: Plan[E] => Plan[Err], modifierSpan: Span): Named[Err] = {
       val fieldTransformation =
         this.allFields.andThen {
@@ -393,6 +411,9 @@ private[chanterelle] object Plan {
       val updatedFields = fields.map { (name, field) => f(name) -> field.update(primaryUpdate, secondaryMerged) }
       this.copy(fields = updatedFields)
     }
+
+    def updateSelected(fn: PartialFunction[Plan[E], Plan[Err]]): Merged[Err] =
+      updateAll(identity, _.update(plan => fn.applyOrElse(plan, identity)), identity)
 
     def merge(mergee: Structure.Named, ref: Sources.Ref): Merged[Err] = {
       val mutualKeys = fields.keySet.intersect(mergee.fields.keySet)
@@ -572,6 +593,9 @@ private[chanterelle] object Plan {
         allFields = allFields.transform { case (_, (t, removed)) => (f(t), removed) },
         isModified = IsModified.Yes
       )
+
+    def updateSelected(fn: PartialFunction[Plan[E], Plan[Err]]): Tuple[Err] =
+      updateAll(plan => fn.applyOrElse(plan, identity))
 
     def update(index: Int, f: Plan[E] => Plan[Err]): Tuple[Err] = {
       val t =

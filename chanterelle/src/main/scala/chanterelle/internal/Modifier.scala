@@ -17,7 +17,7 @@ private[chanterelle] enum Modifier derives Debug {
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
   case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
-  case Hoist[F[_]](path: Path, span: Span, wrapperType: WrapperType[F])
+  case Hoist[F[_]](path: Path, span: Span, wrapperType: WrapperType[F], kind: Option[Modifier.Kind])
 }
 
 private[chanterelle] object Modifier {
@@ -118,8 +118,25 @@ private[chanterelle] object Modifier {
             (builder: TupleModifier.Builder[tup]) => builder.hoist[f, selected](using $_)(${ AsTerm(PathSelector(path)) })
           } =>
         Right(
-          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f])
+          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], None)
         )
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_)
+          } =>
+        Right(
+          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Regional))
+        )
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).local(${ AsTerm(PathSelector(path)) })
+          } =>
+        Right(
+          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+        )
+
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")
         report.errorAndAbort(s"Couldn't parse '${CodePrinter.codeAtSpan(Span.fromExpr(other))}' as a valid modifier", other)

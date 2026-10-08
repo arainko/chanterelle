@@ -288,7 +288,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
         val tup = (field = Right((inner = 1)), plain = 99)
         tup.transform(
           _.put(_.field.element)((extra = Right(5))),
-          _.?(_.field.element.extra)
+          _.hoist(_.field.element.extra)
         )
       }
       """

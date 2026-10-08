@@ -989,7 +989,7 @@ class ModifiersSpec extends ChanterelleSuite {
         .from(Vector)
         .transform(CusVector.apply)
 
-    val actual = tup.transform(_.update(_.someField.element)(_.toString))
+    val actual = tup.transform(_.update(_.someField.each)(_.toString))
     val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
     assertEquals(actual, expected)
 
@@ -1003,9 +1003,11 @@ class ModifiersSpec extends ChanterelleSuite {
     given [K, V]: Collection.IntoIterator[(K, V), CusMap[K, V]] = Collection.IntoIterator.from(_.map.iterator)
 
     given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.from(HashMap).transform(CusMap.apply)
+  
+    val actual = tup.transform(_.update(_.someField.each._2)(_ * 2))
+    val expected = (someField = CusMap(HashMap(1 -> 4, 3 -> 8)))
 
-    val actual = tup.transform(_.update(_.someField.element._1)(a => a.toString))
-
+    assertEquals(actual, expected)
   }
 }
 

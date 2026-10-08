@@ -119,7 +119,7 @@ private[chanterelle] object Interpreter {
                       .to[coll[elem]]($f)
                   }
                 case '{ $srcValue: `coll`[`srcElem`] } =>
-                  val isColl = source.isColl.unerase[srcElem, coll[srcElem]]
+                  val isColl = source.intoIter.unerase[srcElem, coll[srcElem]]
                   '{
                     $isColl
                       .iterator($srcValue)
@@ -157,7 +157,7 @@ private[chanterelle] object Interpreter {
                   '[`outMap`[outKey, outValue]],
                   '{ $srcValue: `outMap`[srcKey, srcValue] }
                 ) =>
-              val isColl = source.isColl.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
+              val isColl = source.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
               val factory = fac.unerase[(outKey, outValue), outMap[outKey, outValue]]
               '{
                 $isColl
