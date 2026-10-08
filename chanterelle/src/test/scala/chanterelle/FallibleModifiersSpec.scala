@@ -299,8 +299,8 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actual =
         tup.transform(
-          _.hoist(_.nest.element.keep),
-          _.remove(_.nest.element.drop)
+          _.hoist(_.nest.some.keep),
+          _.remove(_.nest.some.drop)
         )
 
       val expected =
@@ -308,6 +308,22 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       assertEquals(actual, expected)
     }
+  }
+
+  test(".hoist.local works") {
+    Mode.FailFast.option {
+      val tup = (one = Some(1), two = Some(2), three = (nested1 = Some(3), nested2 = Some(2), nested3 = Some(3)))
+
+      val actualTargeted = tup.transform(_.hoist.local(_.three))
+      val actualDefault = tup.transform(_.hoist.local)
+
+      val expectedDefault= Some((one = 1 , two = 2, three = (nested1 = Some(3), nested2 = Some(2), nested3 = Some(3))))
+      val expectedTargeted = Some((one = Some(1), two = Some(2), three = (nested1 = 3, nested2 = 2, nested3 = 3)))
+
+      assertEquals(actualTargeted, expectedTargeted)
+      assertEquals(actualDefault, expectedDefault)
+    }
+
   }
 
   test("BUG: traversing a field removed earlier in the same transform should be reported as an error (fallible hoist)") {

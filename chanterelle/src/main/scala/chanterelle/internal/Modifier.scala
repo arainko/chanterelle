@@ -95,6 +95,14 @@ private[chanterelle] object Modifier {
         )
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.rename($fieldName).local
+          } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
+        Right(
+          Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Local, Span.fromExpr(cfg))
+        )
+
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
             builder.rename($fieldName).regional(${ AsTerm(PathSelector(path)) })
           } =>
         val parsedRenames = ParseFieldName.parse(fieldName)
@@ -135,6 +143,14 @@ private[chanterelle] object Modifier {
           } =>
         Right(
           Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+        )
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).local
+          } =>
+        Right(
+          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
         )
 
       case other =>

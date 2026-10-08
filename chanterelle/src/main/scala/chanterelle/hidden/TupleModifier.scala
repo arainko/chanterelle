@@ -164,8 +164,12 @@ object TupleModifier {
   object Local {
     extension [Tup](self: TupleModifier[Tup] & Local[Tup]) {
       @compileTimeOnly("Only usable as part of the .transform DSL")
-      def local[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+      def local[Selected <: AnyNamedTuple | scala.Tuple](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+
+      @compileTimeOnly("Only usable as part of the .transform DSL")
+      def local: TupleModifier[Tup] = ???
     }
+
   }
 
   sealed trait Regional[Tup]

@@ -179,6 +179,8 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
                 )
               )
             case Some(Modifier.Kind.Regional) =>
+              //TODO: before impl - it's not as easy as I initially thought, we need to be able to tell whether the node that we're traveling towards is a leaf Wrapped node or a passthrough one
+              // they can't all be .passthroughHoisted because that'd make Accumulating useless for .regional 
               ???
           }
       }
