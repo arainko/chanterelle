@@ -179,9 +179,15 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
                 )
               )
             case Some(Modifier.Kind.Regional) =>
-              //TODO: before impl - it's not as easy as I initially thought, we need to be able to tell whether the node that we're traveling towards is a leaf Wrapped node or a passthrough one
-              // they can't all be .passthroughHoisted because that'd make Accumulating useless for .regional 
-              ???
+              Plan.updateTransitively(
+                transformation,
+                {
+                  case wrapped: Plan.Wrapped[Err, f] =>
+                    if Plan.hasWrappedNodes(wrapped.wrapped) then wrapped.passthroughHoisted else wrapped.hoisted
+                  case other =>
+                    other
+                }
+              )
           }
       }
     }
@@ -708,10 +714,11 @@ private[chanterelle] object Plan {
       this.copy(wrapped = f(wrapped), isModified = IsModified.Yes)
 
     def hoisted: Wrapped[Err, F] =
-      this.copy(isHoisted = Hoist.Yes, isModified = IsModified.Yes)
+      this.copy(isHoisted = if isHoisted == Hoist.Passthrough then isHoisted else Hoist.Yes, isModified = IsModified.Yes)
 
     def passthroughHoisted: Wrapped[Err, F] =
       this.copy(isHoisted = Hoist.Passthrough, isModified = IsModified.Yes)
+
   }
 
   case class Leaf(output: Structure.Leaf) extends Plan[Nothing]("ordinary value") {
@@ -835,4 +842,86 @@ private[chanterelle] object Plan {
 
     if kind.isLocal then locally(transformation) else recurse(transformation)
   }
+
+  private def hasWrappedNodes(plan: Plan[Err]): Boolean = {
+    @tailrec def recurse(stack: List[Plan[Err]]): Boolean =
+      stack match {
+        case head :: tail =>
+          head match
+            case Plan.Named(source, allFields, _) =>
+              val plans = List.newBuilder[Plan[Err]]
+
+              allFields.foreach {
+                case (_, Plan.Field.FromSource(name, transformation)) => plans += transformation
+                case (_, Plan.Field.FromModifier(_))                  => ()
+              }
+
+              recurse(plans.result() ::: tail)
+            case Plan.Merged(_, fields) =>
+              val plans = List.newBuilder[Plan[Err]]
+
+              fields.foreach {
+                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromSource(plan = plan))) => plans += plan
+                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromModifier(_)))         => ()
+                case (_, Plan.Merged.Field.FromSecondary(plan = plan))                                   => plans += plan
+                case (_, Plan.Merged.Field.Error(_))                                                     => ()
+              }
+
+              recurse(plans.result() ::: tail)
+            case Plan.Tuple(source, allFields, _) =>
+              recurse(allFields.values.toList ::: tail)
+            case Plan.Optional(source, paramTransformation, _) =>
+              recurse(paramTransformation :: tail)
+            case Plan.Either(source, left, right, _) =>
+              recurse(left :: right :: tail)
+            case Plan.MapLike(source, key, value, _) =>
+              recurse(value :: tail)
+            case Plan.IterLike(source, elem, _) =>
+              recurse(elem :: tail)
+            case Plan.Leaf(output) =>
+              recurse(tail)
+            case Plan.ConfedUp(config, span) =>
+              recurse(tail)
+            case Plan.Wrapped(wrapped = _) =>
+              true
+            case Plan.Error(message) =>
+              recurse(tail)
+
+        case Nil => false
+      }
+
+    recurse(plan :: Nil)
+  }
+
+  private def updateTransitively(plan: Plan[Err], update: Plan[Err] => Plan[Err]): Plan[Err] = {
+    def recurse(curr: Plan[Err]): Plan[Err] = curr match {
+      case named: Plan.Named[Err] =>
+        update(named.updateAll((name, field) => name -> field.update(recurse)))
+      case tup: Plan.Tuple[Err] =>
+        update(tup.updateAll(recurse))
+      case opt: Plan.Optional[Err] =>
+        update(opt.update(recurse))
+      case either: Plan.Either[Err] =>
+        update(either.updateLeft(recurse).updateRight(recurse))
+      case map: Plan.MapLike[Err, ?] =>
+        update(map.updateKey(recurse).updateValue(recurse))
+      case iter: Plan.IterLike[Err, ?] =>
+        update(iter.update(recurse))
+      case merged: Plan.Merged[Err] =>
+        def updateMerged(merged: Plan.Merged[Err]): Plan.Merged[Err] =
+          merged.updateAll(identity, _.update(recurse), updateMerged)
+        update(updateMerged(merged))
+      case wrapped: Plan.Wrapped[Err, f] =>
+        update(wrapped.update(recurse))
+      case leaf: Plan.Leaf =>
+        update(leaf)
+      case confed: Plan.ConfedUp =>
+        update(confed)
+      case err: Plan.Error =>
+        update(err)
+    }
+
+    recurse(plan)
+  }
+
 }

@@ -147,6 +147,13 @@ private[chanterelle] object Modifier {
 
       case cfg @ '{
             type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).regional(${ AsTerm(PathSelector(path)) })
+          } =>
+        Right(
+          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Regional))
+        )
+      case cfg @ '{
+            type f[_]
             (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).local
           } =>
         Right(

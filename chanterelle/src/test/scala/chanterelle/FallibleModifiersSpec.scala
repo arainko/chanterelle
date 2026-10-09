@@ -316,6 +316,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actualTargeted = tup.transform(_.hoist.local(_.three))
       val actualDefault = tup.transform(_.hoist.local)
+      val actual123 = tup.transform(_.hoist.regional(a => a))
 
       val expectedDefault= Some((one = 1 , two = 2, three = (nested1 = Some(3), nested2 = Some(2), nested3 = Some(3))))
       val expectedTargeted = Some((one = Some(1), two = Some(2), three = (nested1 = 3, nested2 = 2, nested3 = 3)))
