@@ -47,14 +47,14 @@ object Transformation {
     source: Structure.Collection.Repr.MapLike[map],
     key: Transformation[F],
     value: Transformation[F],
-    factory: Erased.K2[Collection.Builder],
+    builder: Erased.K2[Collection.Builder],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
   case class IterLike[+F <: Fallible, iter[elem]](
     source: Structure.Collection.Repr.IterLike[iter],
     elem: Transformation[F],
-    factory: Erased.K2[Collection.Builder],
+    builder: Erased.K2[Collection.Builder],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
