@@ -110,6 +110,13 @@ private[chanterelle] object Modifier {
           Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))
         )
 
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.rename($fieldName).regional
+          } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
+        Right(
+          Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))
+        )
       case cfg @ AsTerm(Lambda(_, Apply(TypeApply(Select(Ident(_), "merge"), tpe :: Nil), List(mergee)))) =>
         tpe.tpe.asType match {
           case '[a] => parseMerged(Path.empty(Type.of[Any]), mergee.asExprOf[a], Span.fromExpr(cfg))
@@ -122,19 +129,17 @@ private[chanterelle] object Modifier {
         parseMerged(path, mergee.asExprOf[a], Span.fromExpr(cfg))
 
       case cfg @ '{
+            type a <: NamedTuple.AnyNamedTuple
+            (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergee).regional
+          } =>
+        parseMerged(Path.empty(Type.of[tup]), mergee.asExprOf[a], Span.fromExpr(cfg))
+
+      case cfg @ '{
             type f[_]
             (builder: TupleModifier.Builder[tup]) => builder.hoist[f, selected](using $_)(${ AsTerm(PathSelector(path)) })
           } =>
         Right(
           Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], None)
-        )
-
-      case cfg @ '{
-            type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_)
-          } =>
-        Right(
-          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Regional))
         )
 
       case cfg @ '{
@@ -147,17 +152,26 @@ private[chanterelle] object Modifier {
 
       case cfg @ '{
             type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).local
+          } =>
+        Right(
+          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+        )
+
+      case cfg @ '{
+            type f[_]
             (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).regional(${ AsTerm(PathSelector(path)) })
           } =>
         Right(
           Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Regional))
         )
+
       case cfg @ '{
             type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).local
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).regional
           } =>
         Right(
-          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Regional))
         )
 
       case other =>

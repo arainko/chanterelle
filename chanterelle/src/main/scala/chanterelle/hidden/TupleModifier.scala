@@ -156,16 +156,19 @@ object TupleModifier {
     def hoist[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
 
     @compileTimeOnly("Only usable as part of the .transform DSL")
-    def hoist[F[_]](using Mode[F]): TupleModifier[Tup] & Regional[Tup] & Local[Tup]
+    def hoist[F[_]](using Mode[F]): Regional[Tup] & Local[Tup]
   }
 
   sealed trait Local[Tup]
 
   object Local {
-    extension [Tup](self: TupleModifier[Tup] & Local[Tup]) {
+    extension [Tup](self: Local[Tup]) {
       @compileTimeOnly("Only usable as part of the .transform DSL")
       def local[Selected <: AnyNamedTuple | scala.Tuple](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
 
+      /**
+       * The equivalent of `.local(toplevel => toplevel)`
+       */
       @compileTimeOnly("Only usable as part of the .transform DSL")
       def local: TupleModifier[Tup] = ???
     }
@@ -175,9 +178,15 @@ object TupleModifier {
   sealed trait Regional[Tup]
 
   object Regional {
-    extension [Tup](self: TupleModifier[Tup] & Regional[Tup]) {
+    extension [Tup](self: Regional[Tup]) {
       @compileTimeOnly("Only usable as part of the .transform DSL")
       def regional[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup] = ???
+
+      /**
+       * The equivalent of `.regional(toplevel => toplevel)`
+       */
+      @compileTimeOnly("Only usable as part of the .transform DSL")
+      def regional: TupleModifier[Tup] = ???
     }
   }
 }
