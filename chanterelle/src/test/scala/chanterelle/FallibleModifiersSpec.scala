@@ -316,11 +316,11 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actualTargeted = tup.transform(_.hoist.local(_.three))
       val actualDefault = tup.transform(_.hoist.local)
-      // val actual123 = 
+      // val actual123 =
       //   internal.Logger.locally:
       //     tup.transform(_.hoist)
 
-      val expectedDefault= Some((one = 1 , two = 2, three = (nested1 = Some(3), nested2 = Some(2), nested3 = Some(3))))
+      val expectedDefault = Some((one = 1, two = 2, three = (nested1 = Some(3), nested2 = Some(2), nested3 = Some(3))))
       val expectedTargeted = Some((one = Some(1), two = Some(2), three = (nested1 = 3, nested2 = 2, nested3 = 3)))
 
       assertEquals(actualTargeted, expectedTargeted)
@@ -347,8 +347,13 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
   test(".hoist.regional with just a single layer of hoists works with Mode.Accumulating") {
     (Mode.Accumulating.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
-      val tup = (toplevel1 = 1, toplevel2 = (nested1 = Right(1), nested2 = Left(List("two")), nested3 = Left(List("three"))), toplevel3 = Right(3))
-      val actual = tup.transform(_.hoist.regional(_.toplevel2))
+      val tup = (
+        toplevel1 = 1,
+        toplevel2 = (nested1 = Right(1), nested2 = Left(List("two")), nested3 = Left(List("three"))),
+        toplevel3 = Right(3)
+      )
+      val actual: Either[List[String], (toplevel1: Int, toplevel2: (nested1: Int, nested2: Nothing, nested3: Nothing), toplevel3: Either[List[String], Int])] =
+        tup.transform(_.hoist.regional(_.toplevel2))
       val expected = Left(List("two", "three"))
       assertEquals(actual, expected)
     }
@@ -357,7 +362,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   test("error messages around .passthroughHoisted with Accumulating (not Accumulating & FailFast) are alright-ish") {
     (Mode.Accumulating.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
       assertFailsToCompileContains {
-      """
+        """
         val tup = (field = Right(List(Right(1), Left(List("boom")))))
         tup.transform(_.hoist(_.field.element.each))
       """
@@ -365,9 +370,19 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }
   }
 
-  test("when operating on a Mode.Accumulating & Mode.FailFast errors are accumulated but nested fallible transformations can still be traversed") {
+  test(
+    "when operating on a Mode.Accumulating & Mode.FailFast errors are accumulated but nested fallible transformations can still be traversed"
+  ) {
     Mode.Accumulating.either[List, String] {
-      val tup = ???
+      val tup = (
+        toplevel1 = 1,
+        toplevel2 = (nested1 = Right(1), nested2 = Right(Left(List("two"))), nested3 = Right(Left(List("three")))),
+        toplevel3 = Left(List("four"))
+      )
+
+      val actual = tup.transform(_.hoist.regional)
+      val expected = Left(List("two", "three", "four"))
+      assertEquals(actual, expected)
     }
   }
 
