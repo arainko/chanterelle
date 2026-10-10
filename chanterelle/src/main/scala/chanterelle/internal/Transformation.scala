@@ -74,19 +74,17 @@ object Transformation {
     outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
   ) extends Transformation[Nothing]
 
-  // OK so, small invariant:
-  // * hoisting a wrapped node hoists all encountered wrapped nodes on its way
-  // * this means that if we encounter a transformation with IsHoisted == No we can be sure that __THERE ARE NO__ fallible nodes in 'wrapped'
-  // * type enforcement should be: if IsHoisted == No then ElemTransformation.NonFallible, every other combo is possible when IsHoisted.Yes.
+  // OK so, small invariant: hoisting a wrapped node hoists all encountered wrapped nodes on its way
   case class Hoisted[F[_]](
     source: Structure.Wrapped[F],
-    wrapped: ElemTransformation,
+    wrapped: HoistedTransformation,
     outputTpe: Type[?]
   ) extends Transformation[Fallible]
 
-  enum ElemTransformation derives Debug {
-    case HoistedFallible[F[_]](transformation: Transformation[Fallible], mode: Expr[Mode.FailFast[F]])
-    case HoistedNonFallible(transformation: Transformation[Nothing])
+  // Passthrough means that there are more wrapped nodes underneath, Bottommost means we're not hoisting anything lower than this
+  enum HoistedTransformation derives Debug {
+    case Passthrough[F[_]](transformation: Transformation[Fallible], mode: Expr[Mode.FailFast[F]])
+    case Bottommost(transformation: Transformation[Nothing])
   }
 
   case class Mapped[F[_]](
@@ -205,14 +203,14 @@ object Transformation {
                 case Plan.Hoist.Passthrough -> (TransformationMode.FailFast(mode)) =>
                   Transformation.Hoisted(
                     p.source,
-                    ElemTransformation.HoistedFallible(recurse(p.wrapped), mode),
+                    HoistedTransformation.Passthrough(recurse(p.wrapped), mode),
                     p.wrapped.calculateTpe
                   )
 
                 case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_, Some(mode)) =>
                   Transformation.Hoisted(
                     p.source,
-                    ElemTransformation.HoistedFallible(recurse(p.wrapped), mode),
+                    HoistedTransformation.Passthrough(recurse(p.wrapped), mode),
                     p.wrapped.calculateTpe
                   )
 
@@ -223,7 +221,7 @@ object Transformation {
                 case Plan.Hoist.Yes -> _ =>
                   Transformation.Hoisted(
                     p.source,
-                    Context.current.weaken.locally(ElemTransformation.HoistedNonFallible(recurse(p.wrapped))),
+                    Context.current.weaken.locally(HoistedTransformation.Bottommost(recurse(p.wrapped))),
                     p.wrapped.calculateTpe
                   )
 

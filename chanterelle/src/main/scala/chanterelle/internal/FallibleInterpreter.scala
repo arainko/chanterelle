@@ -2,7 +2,7 @@ package chanterelle.internal
 
 import chanterelle.Mode
 import chanterelle.internal.Debug.AST
-import chanterelle.internal.Transformation.{ ElemTransformation, Field }
+import chanterelle.internal.Transformation.{ HoistedTransformation, Field }
 import chanterelle.interop.Collection
 
 import scala.quoted.*
@@ -161,7 +161,7 @@ private[chanterelle] object FallibleInterpreter {
               case '[F[src]] -> '[out] =>
                 val src = source.asExprOf[F[src]]
                 (t.wrapped) match {
-                  case ElemTransformation.HoistedFallible(wrapped, mode) =>
+                  case HoistedTransformation.Passthrough(wrapped, mode) =>
                     val failFast = mode.asExprOf[Mode.FailFast[F]]
                     Value.Wrapped {
                       '{
@@ -172,7 +172,7 @@ private[chanterelle] object FallibleInterpreter {
                           )
                       }
                     }
-                  case ElemTransformation.HoistedNonFallible(wrapped) =>
+                  case HoistedTransformation.Bottommost(wrapped) =>
                     Value.Wrapped {
                       '{
                         ${ F.value }
