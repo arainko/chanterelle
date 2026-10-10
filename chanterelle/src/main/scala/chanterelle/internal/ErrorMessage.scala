@@ -3,6 +3,7 @@ package chanterelle.internal
 import chanterelle.internal.Plan.ConfedUp
 
 import scala.quoted.*
+import java.sql.Wrapper
 
 private[chanterelle] sealed trait ErrorMessage derives Debug {
   def span: Span | None = None
@@ -83,5 +84,10 @@ private[chanterelle] object ErrorMessage {
   case class CantSequenceWithoutFallibleContext() extends ErrorMessage {
     def render(using Quotes): String =
       s"Can't use fallible transformations without providing Mode[F] in scope"
+  }
+
+  case class CantHoistNestedFallibleFields(wrapper: WrapperType[?]) extends ErrorMessage {
+    def render(using Quotes): String = 
+      s"It's not possible to hoist nested fallible fields with just a Mode.Accumulating[${Type.show(using wrapper.wrapper)}] in scope - you'll need an instance of Mode.FailFast (or Mode.Accumulating & Mode.FailFast) for ${Type.show(using wrapper.wrapper)} to do so."
   }
 }

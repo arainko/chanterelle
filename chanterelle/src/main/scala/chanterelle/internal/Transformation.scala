@@ -216,7 +216,7 @@ object Transformation {
 
               //TODO: better error message - Mode.Accumulating isn't able to pass through a layer of fallible computations, you need Mode.Accumulating & Mode.FailFast in scope for that.
                 case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_, None) =>
-                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
+                  boundary.break(ErrorMessage.CantHoistNestedFallibleFields(ctx.wrapperType))
 
                 case Plan.Hoist.Yes -> _ =>
                   Transformation.Hoisted(

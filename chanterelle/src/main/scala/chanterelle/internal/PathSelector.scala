@@ -91,7 +91,7 @@ private[chanterelle] object PathSelector {
             s"Matched 'Apply(TypeApply(...)) (matching .rightElement)'",
             rightTpe.tpe.asType
           )
-          recurse(acc.prepended(Path.Segment.RightElement(rightTpe.tpe.asType)), tree)
+          recurse(acc.prepended(Path.Segment.Element(rightTpe.tpe.asType)), tree)
 
         case Apply(
               Apply(

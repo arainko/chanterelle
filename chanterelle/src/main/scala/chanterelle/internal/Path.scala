@@ -53,7 +53,6 @@ private[chanterelle] final case class Path(root: Type[?], segments: Vector[Path.
         case Path.Segment.TupleElement(_, index) => s"apply($index)"
         case Path.Segment.Element(_)             => "element"
         case Path.Segment.LeftElement(_)         => "leftElement"
-        case Path.Segment.RightElement(_)        => "rightElement"
       }.mkString(s"_.", ".", "")
   }
 }
@@ -74,6 +73,5 @@ private[chanterelle] object Path {
     case TupleElement(tpe: Type[?], index: Int)
     case Element(tpe: Type[?])
     case LeftElement(tpe: Type[?])
-    case RightElement(tpe: Type[?])
   }
 }

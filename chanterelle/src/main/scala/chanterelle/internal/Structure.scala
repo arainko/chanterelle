@@ -139,7 +139,7 @@ private[chanterelle] object Structure {
               path.appended(Path.Segment.LeftElement(Type.of[e]))
             ),
             Structure.of[a](
-              path.appended(Path.Segment.RightElement(Type.of[a]))
+              path.appended(Path.Segment.Element(Type.of[a]))
             )
           )
 
