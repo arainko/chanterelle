@@ -28,12 +28,6 @@ private[chanterelle] object WrapperType {
         case Optional            => Debug.AST.Text(s"WrapperType[Option]")
         case Wrapped(wrapperTpe) => Debug.AST.Text(s"WrapperType[${wrapperTpe.repr.show(using Printer.TypeReprShortCode)}]")
   }
-  //
-  // def unapply(using Quotes)(tpe: Type[?]) =
-  //   Context.current match {
-  //     case ctx: Context.PossiblyFallible[?] => ctx.wrapperType.unapply(tpe)
-  //     case Context.Total(_, _)              => None
-  //   }
 
   case object Optional extends WrapperType[Option] {
 

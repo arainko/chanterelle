@@ -90,4 +90,8 @@ private[chanterelle] object ErrorMessage {
     def render(using Quotes): String = 
       s"It's not possible to hoist nested fallible fields with just a Mode.Accumulating[${Type.show(using wrapper.wrapper)}] in scope - you'll need an instance of Mode.FailFast (or Mode.Accumulating & Mode.FailFast) for ${Type.show(using wrapper.wrapper)} to do so."
   }
+
+  case class CantTraverseLeftSideOfEither(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String = s"Can't traverse the left side of either when operating inside a Mode[Either[_, _]] - this path selector is only available on non-fallible transformations."
+  }
 }

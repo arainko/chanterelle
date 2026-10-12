@@ -352,7 +352,9 @@ class FallibleModifiersSpec extends ChanterelleSuite {
         toplevel2 = (nested1 = Right(1), nested2 = Left(List("two")), nested3 = Left(List("three"))),
         toplevel3 = Right(3)
       )
-      val actual: Either[List[String], (toplevel1: Int, toplevel2: (nested1: Int, nested2: Nothing, nested3: Nothing), toplevel3: Either[List[String], Int])] =
+      val actual: Either[List[
+        String
+      ], (toplevel1: Int, toplevel2: (nested1: Int, nested2: Nothing, nested3: Nothing), toplevel3: Either[List[String], Int])] =
         tup.transform(_.hoist.regional(_.toplevel2))
       val expected = Left(List("two", "three"))
       assertEquals(actual, expected)
@@ -400,6 +402,47 @@ class FallibleModifiersSpec extends ChanterelleSuite {
       }
       """
     }("No field 'nest' found")
+  }
+
+  test("interactions with .some is equivalent to .element when operating with Mode[Option]") {
+    Mode.FailFast.option {
+      val tup = (field = Some((inner = Some(1))))
+
+      val actualElem = tup.transform(_.hoist(_.field.element.inner))
+      val actualSome = tup.transform(_.hoist(_.field.some.inner))
+      val expected = Some((field = (inner = 1)))
+
+      assertEquals(actualSome, expected)
+      assertEquals(actualElem, expected)
+    }
+  }
+
+  test("interactions with .righElement is equivalent to .element with Mode[Either]") {
+    Mode.FailFast.either[String] {
+      val rightSide = (either = Right((inner = Right(1))))
+
+      val actualRight = rightSide.transform(_.hoist(_.either.rightElement.inner))
+      val actualElem = rightSide.transform(_.hoist(_.either.element.inner))
+      val expectedRight = Right((either = (inner = 1)))
+
+      assertEquals(actualRight, expectedRight)
+      assertEquals(actualElem, expectedRight)
+    }
+  }
+
+  test("using .leftElement is not possible with Mode[Either] (and the error message is nice)") {
+    Mode.FailFast.either[String] {
+      assertFailsToCompileContains {
+        """
+      val rightSide = (either = Right((inner = Right(1))))
+
+      val actualRight = rightSide.transform(_.hoist(_.either.leftElement))
+      val expectedRight = Right((either = (inner = 1)))
+
+      assertEquals(actualRight, expectedRight)
+      """
+      }("Can't traverse the left side of either when operating inside a Mode[Either[_, _]]")
+    }
   }
 
 }

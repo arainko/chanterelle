@@ -112,7 +112,7 @@ private[chanterelle] object Structure {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
 
-        case WrappedType(Res(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped], mappable = m)) =>
+        case WrappedType(ExtractedWrapper(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped], mappable = m)) =>
           @unused given Type[f] = wrapper.wrapper
           Structure.Wrapped[f](
             Type.of[f[wrapped]],
@@ -204,13 +204,13 @@ private[chanterelle] object Structure {
     def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context.Any): Option[Structure.Collection] = {
       Type.unapplied(tpe).flatMap {
         case '[type map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
-          Expr.summon[IntoIterator[(key, value), map[key, value]]].map { isColl =>
+          Expr.summon[IntoIterator[(key, value), map[key, value]]].map { intoIter =>
             Structure.Collection(
               tpe,
               path,
               Structure.Collection.Repr.MapLike(
                 Type.of[map],
-                Erased.K2(isColl),
+                Erased.K2(intoIter),
                 Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
                 Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
               )
@@ -218,13 +218,13 @@ private[chanterelle] object Structure {
           }
 
         case '[type coll[a]; coll] -> ('[elem] :: Nil) =>
-          Expr.summon[IntoIterator[elem, coll[elem]]].map { isColl =>
+          Expr.summon[IntoIterator[elem, coll[elem]]].map { intoIter =>
             Structure.Collection(
               tpe,
               path,
               Structure.Collection.Repr.IterLike(
                 Type.of[coll],
-                Erased.K2(isColl),
+                Erased.K2(intoIter),
                 Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
               )
             )
@@ -234,7 +234,7 @@ private[chanterelle] object Structure {
     }
   }
 
-  private case class Res[F[_]](wrapper: WrapperType[F], wrapped: Type[?], mappable: Expr[Mappable[F]])
+  private case class ExtractedWrapper[F[_]](wrapper: WrapperType[F], wrapped: Type[?], mappable: Expr[Mappable[F]])
 
   private object WrappedType {
     def unapply(
@@ -242,14 +242,14 @@ private[chanterelle] object Structure {
     )(using
       q: Quotes,
       context: Context.Any
-    ): Option[Res[?]] = {
+    ): Option[ExtractedWrapper[?]] = {
       def mappableCandidate = Type
         .unapplied(tpe)
         .collect {
           case (tycon = '[type f[_]; f], args = wrapped :: Nil) =>
             Expr
               .summon[Mappable[f]]
-              .map(mappable => Res(wrapper = WrapperType.create[f], wrapped = wrapped, mappable = mappable))
+              .map(mappable => ExtractedWrapper(wrapper = WrapperType.create[f], wrapped = wrapped, mappable = mappable))
         }
         .flatten
 
@@ -257,7 +257,7 @@ private[chanterelle] object Structure {
         case ctx: Context.PossibleFallible[?, ?] =>
           ctx.wrapperType
             .unapply(tpe)
-            .map((wrapper, wrapped) => Res(wrapper = wrapper, wrapped = wrapped, mappable = ctx.mode.value))
+            .map((wrapper, wrapped) => ExtractedWrapper(wrapper = wrapper, wrapped = wrapped, mappable = ctx.mode.value))
             .orElse(mappableCandidate)
         case Context.Total => mappableCandidate
       }

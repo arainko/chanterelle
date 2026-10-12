@@ -121,6 +121,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
           val traversedPath = traversed :+ elem
 
           curr.narrow[Plan.Either[Err]](_.updateLeft(recurse(next, traversedPath)))(other =>
+            if other.isInstanceOf[Plan.Wrapped[Err, ?]] then ErrorMessage.CantTraverseLeftSideOfEither(modifier.span) else
             ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
           )
 
@@ -292,9 +293,9 @@ private[chanterelle] object Plan {
 
       case coll: Structure.Collection =>
         coll.repr match
-          case source @ Structure.Collection.Repr.MapLike(tycon, isColl, key, value) =>
+          case source @ Structure.Collection.Repr.MapLike(_, _, key, value) =>
             Plan.MapLike(source, create(key), create(value), IsModified.No)
-          case source @ Structure.Collection.Repr.IterLike(tycon, isColl, element) =>
+          case source @ Structure.Collection.Repr.IterLike(_, _, element) =>
             Plan.IterLike(source, create(element), IsModified.No)
 
       case wrapped: Structure.Wrapped[f] =>
