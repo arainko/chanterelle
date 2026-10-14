@@ -65,10 +65,16 @@ lazy val chanterelleCats =
   crossProject(JSPlatform, JVMPlatform, NativePlatform)
     .withoutSuffixFor(JVMPlatform)
     .crossType(CrossType.Pure)
-    .enablePlugins(NoPublishPlugin) // disable publishing for now, this needs a revision first and I want to add tests against some libs like dynosaur and decline because they have cool applicative data types
+    .enablePlugins(
+      NoPublishPlugin
+    ) // disable publishing for now, this needs a revision first and I want to add tests against some libs like dynosaur and decline because they have cool applicative data types
     .in(file("chanterelle-cats"))
     .settings(
-      libraryDependencies ++= Seq("org.typelevel" %%% "cats-core" % "2.13.0")
+      libraryDependencies ++= Seq(
+        "org.typelevel" %%% "cats-core" % "2.13.0",
+        "com.monovore" %%% "decline" % "2.6.2" % Test,
+        "org.scalameta" %%% "munit" % "1.3.4" % Test
+      )
     )
     .jsSettings(
       bspEnabled := false,
