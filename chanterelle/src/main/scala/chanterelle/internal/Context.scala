@@ -29,6 +29,12 @@ private[chanterelle] sealed trait Context[+F <: Fallible] {
   }
 
   inline def locally[A](inline f: Context[F] ?=> A): A = f(using this)
+
+  final def isFallibleFailFast: Boolean =
+    this match {
+      case ctx: Context.PossibleFallible[?, ?] => ctx.mode.canPassthrough
+      case Context.Total => false
+    }
 }
 
 private[chanterelle] object Context {

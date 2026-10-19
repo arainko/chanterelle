@@ -11,7 +11,6 @@ import scala.util.boundary.Label
 
 import Plan.Error
 import chanterelle.internal.Modifier.Kind
-import scala.collection.immutable.Range.Partial
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -70,11 +69,11 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
   def isModified: IsModified
 
-  final def applyModifier(modifier: Modifier)(using Quotes): Plan[Err] = {
+  final def applyModifier(modifier: Modifier)(using Quotes, Context.Any): Plan[Err] = {
     def recurse(
       segments: List[Path.Segment],
       traversed: Path
-    )(curr: Plan[Err])(using Quotes, Label[ErrorMessage]): Plan[Err] = {
+    )(curr: Plan[Err])(using Quotes, Label[ErrorMessage], Context.Any): Plan[Err] = {
       segments match {
         case (seg @ Path.Segment.Field(name = name)) :: next =>
           val traversedPath = traversed :+ seg
@@ -129,7 +128,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
       }
     }
 
-    def apply(modifier: Modifier, transformation: Plan[Err], traversedPath: Path): Plan[Err] = {
+    def apply(modifier: Modifier, transformation: Plan[Err], traversedPath: Path)(using Context.Any): Plan[Err] = {
       modifier match {
         case m: Modifier.Put =>
           transformation.narrow[Plan.Named[Err]](
@@ -188,16 +187,16 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
                   modifier.span
                 )
               )
-            case Some(Modifier.Kind.Regional) =>
+            case Some(Modifier.Kind.Regional) if Context.current.isFallibleFailFast =>
               Plan.updateTransitively(
                 transformation,
                 {
-                  case wrapped: Plan.Wrapped[Err, f] =>
-                    if Plan.hasWrappedNodes(wrapped.wrapped) then wrapped.passthroughHoisted else wrapped.hoisted
-                  case other =>
-                    other
+                  case wrapped: Plan.Wrapped[Err, f] => wrapped.passthroughHoisted
+                  case other => other
                 }
               )
+            case Some(Modifier.Kind.Regional) => 
+              Plan.Error(ErrorMessage.CantUseHoistRegionalWithAccumulating(modifier.span))
           }
       }
     }
@@ -851,56 +850,6 @@ private[chanterelle] object Plan {
     }
 
     if kind.isLocal then locally(transformation) else recurse(transformation)
-  }
-
-  private def hasWrappedNodes(plan: Plan[Err]): Boolean = {
-    @tailrec def recurse(stack: List[Plan[Err]]): Boolean =
-      stack match {
-        case head :: tail =>
-          head match
-            case Plan.Named(source, allFields, _) =>
-              val plans = List.newBuilder[Plan[Err]]
-
-              allFields.foreach {
-                case (_, Plan.Field.FromSource(name, transformation)) => plans += transformation
-                case (_, Plan.Field.FromModifier(_))                  => ()
-              }
-
-              recurse(plans.result() ::: tail)
-            case Plan.Merged(_, fields) =>
-              val plans = List.newBuilder[Plan[Err]]
-
-              fields.foreach {
-                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromSource(plan = plan))) => plans += plan
-                case (_, Plan.Merged.Field.FromPrimary(underlying = Plan.Field.FromModifier(_)))         => ()
-                case (_, Plan.Merged.Field.FromSecondary(plan = plan))                                   => plans += plan
-                case (_, Plan.Merged.Field.Error(_))                                                     => ()
-              }
-
-              recurse(plans.result() ::: tail)
-            case Plan.Tuple(source, allFields, _) =>
-              recurse(allFields.values.toList ::: tail)
-            case Plan.Optional(source, paramTransformation, _) =>
-              recurse(paramTransformation :: tail)
-            case Plan.Either(source, left, right, _) =>
-              recurse(left :: right :: tail)
-            case Plan.MapLike(source, key, value, _) =>
-              recurse(value :: tail)
-            case Plan.IterLike(source, elem, _) =>
-              recurse(elem :: tail)
-            case Plan.Leaf(output) =>
-              recurse(tail)
-            case Plan.ConfedUp(config, span) =>
-              recurse(tail)
-            case Plan.Wrapped(wrapped = _) =>
-              true
-            case Plan.Error(message) =>
-              recurse(tail)
-
-        case Nil => false
-      }
-
-    recurse(plan :: Nil)
   }
 
   private def updateTransitively(plan: Plan[Err], update: Plan[Err] => Plan[Err]): Plan[Err] = {

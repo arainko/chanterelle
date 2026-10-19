@@ -316,9 +316,6 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       val actualTargeted = tup.transform(_.hoist.local(_.three))
       val actualDefault = tup.transform(_.hoist.local)
-      // val actual123 =
-      //   internal.Logger.locally:
-      //     tup.transform(_.hoist)
 
       val expectedDefault = Some((one = 1, two = 2, three = (nested1 = Some(3), nested2 = Some(2), nested3 = Some(3))))
       val expectedTargeted = Some((one = Some(1), two = Some(2), three = (nested1 = 3, nested2 = 2, nested3 = 3)))
@@ -345,7 +342,9 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }
   }
 
-  test(".hoist.regional with just a single layer of hoists works with Mode.Accumulating") {
+  test(".hoist.regional doesn't work with Mode.Accumulating and reports a nice error message") {
+    assertFailsToCompileWith {
+      """
     (Mode.Accumulating.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
       val tup = (
         toplevel1 = 1,
@@ -356,9 +355,8 @@ class FallibleModifiersSpec extends ChanterelleSuite {
         String
       ], (toplevel1: Int, toplevel2: (nested1: Int, nested2: Nothing, nested3: Nothing), toplevel3: Either[List[String], Int])] =
         tup.transform(_.hoist.regional(_.toplevel2))
-      val expected = Left(List("two", "three"))
-      assertEquals(actual, expected)
-    }
+      """
+    }("'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'")
   }
 
   test("error messages around .passthroughHoisted with Accumulating (not Accumulating & FailFast) are alright-ish") {

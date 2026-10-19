@@ -142,13 +142,22 @@ private[chanterelle] object Modifier {
           Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], None)
         )
 
-      case cfg @ '{
-            type f[_]
-            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_)
-      } =>
-        Right(
-          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
-        )
+
+      // case cfg @ '{
+      //       type f[_]
+      //       (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_)
+      //     } =>
+      //   Right(
+      //     Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+      //   )
+      // The below encoding is the same as above... BUT IT WORKS: https://github.com/scala/scala3/issues/25238
+      case cfg @ AsTerm(Lambda(_, Apply(TypeApply(Select(Ident(_), "hoist"), tpe :: Nil), _ :: Nil))) =>
+        tpe.tpe.asType match {
+          case '[type f[_]; f] =>
+            Right(
+              Modifier.Hoist(Path.empty(Type.of[Any]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+            )
+        }
 
       case cfg @ '{
             type f[_]

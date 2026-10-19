@@ -94,4 +94,8 @@ private[chanterelle] object ErrorMessage {
   case class CantTraverseLeftSideOfEither(override val span: Span) extends ErrorMessage {
     def render(using Quotes): String = s"Can't traverse the left side of either when operating inside a Mode[Either[_, _]] - this path selector is only available on non-fallible transformations."
   }
+
+  case class CantUseHoistRegionalWithAccumulating(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String = s"'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'"
+  }
 }

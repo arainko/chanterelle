@@ -223,6 +223,13 @@ private[chanterelle] object FallibleInterpreter {
 
   enum TransformationMode[F[x]] {
     def value: Expr[Mode[F]]
+    
+    def canPassthrough: Boolean = 
+      this match {
+        case Accumulating(failFast = ff) => ff.isDefined
+        case FailFast(_) => true
+        
+    }
 
     case Accumulating(value: Expr[Mode.Accumulating[F]], failFast: Option[Expr[Mode.FailFast[F]]])
     case FailFast(value: Expr[Mode.FailFast[F]])
