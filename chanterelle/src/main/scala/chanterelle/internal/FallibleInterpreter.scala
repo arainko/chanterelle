@@ -2,7 +2,7 @@ package chanterelle.internal
 
 import chanterelle.Mode
 import chanterelle.internal.Debug.AST
-import chanterelle.internal.Transformation.{ HoistedTransformation, Field }
+import chanterelle.internal.Transformation.{ Field, HoistedTransformation }
 import chanterelle.interop.Collection
 
 import scala.quoted.*
@@ -100,8 +100,13 @@ private[chanterelle] object FallibleInterpreter {
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
                   F match {
                     case TransformationMode.Accumulating(value, _) =>
-                      '{ $value.zip[A, B]($left, $right) }
+                      '{
+                        $value.costam[Int, List[Int]](??? : Collection.Builder[Int, List[Int]])
+
+                        $value.zip[A, B]($left, $right)
+                      }
                     case TransformationMode.FailFast(value) =>
+                      '{ $value.costam[Int, List[Int]](??? : Collection.Builder.Fallible[F, Int, List[Int]]) }
                       '{ $value.flatMap($left, left => $value.map($right, right => (left, right))) }
                   }
                 Value.Wrapped {
@@ -198,7 +203,7 @@ private[chanterelle] object FallibleInterpreter {
     transformation.outputTpe match {
       case '[dest] =>
         F match {
-          case TransformationMode.Accumulating(value, _) =>
+          case TransformationMode.Accumulating(value) =>
             NonEmptyList
               .fromList(wrappeds.toList)
               .map(wrappeds =>
@@ -223,25 +228,27 @@ private[chanterelle] object FallibleInterpreter {
 
   enum TransformationMode[F[x]] {
     def value: Expr[Mode[F]]
-    
-    def canPassthrough: Boolean = 
-      this match {
-        case Accumulating(failFast = ff) => ff.isDefined
-        case FailFast(_) => true
-        
-    }
 
-    case Accumulating(value: Expr[Mode.Accumulating[F]], failFast: Option[Expr[Mode.FailFast[F]]])
+    def canPassthrough: Boolean =
+      this match {
+        case Accumulating(_) => false
+        case FailFast(_)     => true
+        case Parallel(_)     => true
+
+      }
+
+    case Accumulating(value: Expr[Mode.Accumulating[F]])
     case FailFast(value: Expr[Mode.FailFast[F]])
+    case Parallel(value: Expr[Mode.Parallel[F]])
   }
 
   object TransformationMode {
     def create[F[x]: Type](expr: Expr[Mode[F]])(using Quotes): TransformationMode[F] =
       expr match
-        case '{ $acc: Mode.Accumulating[F] & Mode.FailFast[F] } =>
-          Accumulating(acc, Some(acc))
+        case '{ $acc: Mode.Parallel[F] } =>
+          Parallel(acc)
         case '{ $acc: Mode.Accumulating[F] } =>
-          Accumulating(acc, None)
+          Accumulating(acc)
         case '{ $ff: Mode.FailFast[F] } =>
           FailFast(ff)
         case _ =>
@@ -253,9 +260,26 @@ private[chanterelle] object FallibleInterpreter {
     given Debug[TransformationMode[?]] with {
       def astify(self: TransformationMode[?])(using Quotes): AST =
         self match
-          case Accumulating(value, ff) => AST.Text("Accumulating ()")
-          case FailFast(value)         => AST.Text("FailFast")
+          case Accumulating(value) => AST.Text("Accumulating")
+          case FailFast(value)     => AST.Text("FailFast")
+          case Parallel(value)     => AST.Text("Parallel")
 
+    }
+
+    extension [F[_]](self: TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]) {
+      def zip[A, B](a: Expr[F[A]], b: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
+        self match {
+          case Accumulating(value) => '{ $value.zip[A, B]($a, $b) }
+          case Parallel(value)     => '{ $value.zip[A, B]($a, $b) }
+        }
+    }
+
+    extension [F[_]](self: TransformationMode.FailFast[F] | TransformationMode.Parallel[F]) {
+      def flatMap[A, B](a: Expr[F[A]], fn: Expr[A => F[B]])(using Quotes): Expr[F[B]] =
+        self match {
+          case FailFast(value) => '{ $value.flatMap[A, B]($a, $fn) }
+          case Parallel(value) => '{ $value.flatMap[A, B]($a, $fn) }
+        }
     }
   }
   private enum Value[F[x]] {

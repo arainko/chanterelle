@@ -4,9 +4,10 @@ import chanterelle.Mode
 
 import scala.annotation.nowarn
 import scala.quoted.*
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 private[chanterelle] object ProductZipper {
-
+  type ZippableMode[F[_]] = TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]
   /**
    * 'Zips' a product using Mode.Accumulating[F]#zip into a nested Tuple2 then
    * unpacks that said tuple and allows the caller to use the unpacked fields to construct a tree of type Dest.
@@ -16,11 +17,10 @@ private[chanterelle] object ProductZipper {
    * @param construct function that allows the caller to create trees with the unpacked values
    */
   def zipAndConstruct[F[x]: Type, Dest: Type](
-    F: Expr[Mode.Accumulating[F]],
+    F: ZippableMode[F],
     wrappedFields: NonEmptyList[FieldValue.Wrapped[F]],
     unwrappedFields: List[FieldValue.Unwrapped]
   )(construct: ProductConstructor)(using Quotes): Expr[F[Dest]] = {
-    // chanterelle 0.2.x changed the zipping and unzipping algorithm, to emulate the 0.1 runtime behavior we need to zip those fields in reverse
     val reorderedFields = wrappedFields.reverse
 
     // using a method for 'transform' fixes a bunch of owner issues reported by -Xcheck-macros
@@ -28,20 +28,19 @@ private[chanterelle] object ProductZipper {
       case '{ $zipped: F[a] } =>
         '{
           def transform(value: a) = ${ unzipAndConstruct[Dest](reorderedFields, unwrappedFields, 'value, construct) }
-          $F.map($zipped, transform)
+          ${F.value}.map($zipped, transform)
         }
     }: @nowarn("msg=unused local definition")
   }
 
   private def zipFields[F[x]: Type](
-    F: Expr[Mode.Accumulating[F]],
+    F: ZippableMode[F],
     wrappedFields: NonEmptyList[FieldValue.Wrapped[F]]
   )(using Quotes) = {
     val zipped = wrappedFields.map(_.value).reduceLeft { (accumulated, current) =>
       (accumulated -> current).runtimeChecked match {
         case '{ $accumulated: F[a] } -> '{ $current: F[b] } =>
-          '{ $F.zip[`b`, `a`]($current, $accumulated) }
-        // .asInstanceOf[Expr[F[Any]]] // TODO: just to make it compile for a moment DEAL WITH THAT LATER PLEASE
+          F.zip[`b`, `a`](current, accumulated)
       }: @nowarn("msg=unused local definition")
     }
     alignOwner(zipped).asExprOf[F[Any]]

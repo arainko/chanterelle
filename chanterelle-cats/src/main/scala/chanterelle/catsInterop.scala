@@ -14,9 +14,10 @@ import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.generic.IsIterableOnce
 import scala.collection.mutable.Builder
 import chanterelle.interop.Collection
+import chanterelle.interop.Collection.Builder.Fallible
 
 extension (self: Mode.type) {
-  def parallel[F[_]: Parallel]: Mode.Accumulating[F] & Mode.FailFast[F] = ParallelMode[F]
+  def parallel[F[_]: Parallel]: Mode.Parallel[F] = ParallelMode[F]
   def applicative[F[_]: Applicative]: Mode.Accumulating[F] = ApplicativeMode[F]
   def monad[F[_]: Monad]: Mode.FailFast[F] = MonadMode[F]
 }
@@ -34,8 +35,8 @@ private final class ParallelMode[F[_]: Parallel as F] extends Mode.Accumulating[
   override def traverseCollection[AElem, BElem, AColl, BColl](
     collection: AColl,
     transformation: AElem => F[BElem]
-  )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder[BElem, BColl]): F[BColl] =
-    map(AColl.iterator(collection).toVector.parTraverse(transformation), _.to(BColl))
+  )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder.Fallible[F, BElem, BColl]): F[BColl] =
+    map(AColl.iterator(collection).toVector.parTraverse(transformation), _.to(BColl)).flatten
 
 }
 
@@ -51,7 +52,7 @@ private final class ApplicativeMode[F[_]: Applicative as F] extends Mode.Accumul
     collection: AColl,
     transformation: AElem => F[BElem]
   )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder[BElem, BColl]): F[BColl] =
-    map(AColl.iterator(collection).toVector.traverse(transformation), _.to(BColl))
+    map(AColl.iterator(collection).toVector.parTraverse(transformation), _.to(BColl))
 
 }
 

@@ -4,11 +4,13 @@ import chanterelle.Mode
 
 import scala.annotation.*
 import scala.quoted.*
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 private[chanterelle] object ProductBinder {
+  type FlatmappableMode[F[_]] = TransformationMode.FailFast[F] | TransformationMode.Parallel[F]
 
   def nestFlatMapsAndConstruct[F[x]: Type, Dest: Type](
-    F: Expr[Mode.FailFast[F]],
+    F: FlatmappableMode[F],
     unwrappedFields: List[FieldValue.Unwrapped],
     wrappedFields: List[FieldValue.Wrapped[F]],
     construct: ProductConstructor
@@ -24,7 +26,7 @@ private[chanterelle] object ProductBinder {
             case '[destField] =>
               val value = wrappedValue.asExprOf[F[destField]]
               '{
-                $F.map[`destField`, Dest](
+                ${ F.value }.map[`destField`, Dest](
                   $value,
                   ${
                     generateLambda[[A] =>> A, destField, Dest](
@@ -47,23 +49,19 @@ private[chanterelle] object ProductBinder {
           field.tpe match {
             case '[destField] =>
               val value = wrappedValue.asExprOf[F[destField]]
-              '{
-                $F.flatMap[`destField`, Dest](
-                  $value,
-                  ${
-                    generateLambda[F, destField, Dest](
-                      field,
-                      q ?=> unwrappedValue => recurse(next, field.unwrapped(unwrappedValue) :: collectedUnwrappedFields)(using q)
-                    )
-                  }
+              F.flatMap[`destField`, Dest](
+                value,
+                generateLambda[F, destField, Dest](
+                  field,
+                  q ?=> unwrappedValue => recurse(next, field.unwrapped(unwrappedValue) :: collectedUnwrappedFields)(using q)
                 )
-              }
+              )
           }
 
         case Nil =>
           val fields = collectedUnwrappedFields.sorted.map(_.value)
           def constructedValue(using Quotes) = construct(fields).asExprOf[Dest]
-          '{ $F.pure[Dest]($constructedValue) }
+          '{ ${ F.value }.pure[Dest]($constructedValue) }
       }
 
     recurse(wrappedFields, unwrappedFields)

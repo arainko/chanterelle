@@ -6,22 +6,43 @@ import chanterelle.interop.{
 }
 
 import scala.collection.Factory
+import chanterelle.interop.Collection.Builder
+import chanterelle.interop.Collection.Builder.Fallible
 
-sealed trait Mode[F[_]] extends Mappable[F] {
+sealed trait Mode[F[_]] extends Mappable[F] { self =>
+  type Builder[Elem, Collection] <: Collection.Builder[Elem, Collection] | Collection.Builder.Fallible[F, Elem, Collection]
+
   def pure[A](value: A): F[A]
 
   def traverseCollection[AElem, BElem, AColl, BColl](
     collection: AColl,
     transformation: AElem => F[BElem]
-  )(using Collection.IntoIterator[AElem, AColl], Collection.Builder[BElem, BColl]): F[BColl]
+  )(using Collection.IntoIterator[AElem, AColl], Builder[BElem, BColl]): F[BColl]
+
+
+  def costam[Elem, Coll](b: Builder[Elem, Coll]): Nothing
 }
 
 object Mode {
+  val whatevs: Mode.Accumulating[Option] = ???
+
+
   trait FailFast[F[_]] extends Mode[F] {
+    final type Builder[Elem, Collection] = Collection.Builder.Fallible[F, Elem, Collection]
+
     def flatMap[A, B](fa: F[A], f: A => F[B]): F[B]
   }
 
   trait Accumulating[F[_]] extends Mode[F] {
+    final type Builder[Elem, Collection] = Collection.Builder[Elem, Collection]
+
+    def zip[A, B](left: F[A], right: F[B]): F[(A, B)]
+  }
+
+  trait Parallel[F[_]] extends Mode[F] {
+    final type Builder[Elem, Collection] = Collection.Builder.Fallible[F, Elem, Collection]
+
+    def flatMap[A, B](fa: F[A], f: A => F[B]): F[B]
     def zip[A, B](left: F[A], right: F[B]): F[(A, B)]
   }
 
@@ -32,12 +53,13 @@ object Mode {
   object Accumulating {
     def either[Coll[x] <: Iterable[x], E](using
       Factory[E, Coll[E]]
-    ): Mode.Accumulating[scala.Either[Coll[E], _]] & Mode.FailFast[scala.Either[Coll[E], _]] = Either[E, Coll]
+    ): Mode.Parallel[scala.Either[Coll[E], _]] = Either[E, Coll]
 
     private final class Either[E, Coll[x] <: Iterable[x]](using Errors: Factory[E, Coll[E]])
-        extends Mode.Accumulating[[A] =>> scala.Either[Coll[E], A]],
-          Mode.FailFast[[A] =>> scala.Either[Coll[E], A]] {
+        extends Mode.Parallel[[A] =>> scala.Either[Coll[E], A]] {
 
+      def costam[Elem, Collection](b: Builder.Fallible[[a] =>> scala.Either[Coll[E], a], Elem, Collection]): Nothing = ???
+  
       override def flatMap[A, B](fa: scala.Either[Coll[E], A], f: A => scala.Either[Coll[E], B]): scala.Either[Coll[E], B] =
         fa.flatMap(f)
 
@@ -60,7 +82,7 @@ object Mode {
       override def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Either[Coll[E], B]
-      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder[B, BColl]): scala.Either[Coll[E], BColl] = {
+      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder.Fallible[scala.Either[Coll[E], _], B, BColl]): scala.Either[Coll[E], BColl] = {
         val accumulatedErrors = Errors.newBuilder
         val accumulatedSuccesses = BColl.newBuilder
         var isErroredOut = false
@@ -82,7 +104,7 @@ object Mode {
           }
         }
 
-        if isErroredOut then Left(accumulatedErrors.result()) else Right(accumulatedSuccesses.result())
+        if isErroredOut then Left(accumulatedErrors.result()) else accumulatedSuccesses.result()
       }
     }
   }
@@ -96,6 +118,8 @@ object Mode {
     private final class Either[E] extends Mode.FailFast[[A] =>> scala.Either[E, A]] {
       final def pure[A](value: A): scala.Either[E, A] = Right(value)
 
+      def costam[Elem, Coll](b: Fallible[[A] =>> scala.Either[E, A], Elem, Coll]): Nothing = ???
+
       final def map[A, B](fa: scala.Either[E, A], f: A => B): scala.Either[E, B] = fa.map(f)
 
       final def flatMap[A, B](fa: scala.Either[E, A], f: A => scala.Either[E, B]): scala.Either[E, B] = fa.flatMap(f)
@@ -103,7 +127,7 @@ object Mode {
       final def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Either[E, B]
-      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder[B, BColl]): scala.Either[E, BColl] = {
+      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder.Fallible[scala.Either[E, _], B, BColl]): scala.Either[E, BColl] = {
         var error: Left[E, Nothing] = null
         def isErroredOut = !(error eq null)
 
@@ -119,7 +143,7 @@ object Mode {
           }
         }
 
-        if isErroredOut then error else Right(resultBuilder.result())
+        if isErroredOut then error else resultBuilder.result()
       }
 
     }
@@ -127,6 +151,8 @@ object Mode {
     val option: Mode.FailFast[scala.Option] = Option
 
     private object Option extends Mode.FailFast[scala.Option] {
+
+      def costam[Elem, Coll](b: Fallible[scala.Option, Elem, Coll]): Nothing = ???
 
       final def pure[A](value: A): scala.Option[A] = Some(value)
 
@@ -137,7 +163,7 @@ object Mode {
       final def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Option[B]
-      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder[B, BColl]): scala.Option[BColl] = {
+      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder.Fallible[Option, B, BColl]): scala.Option[BColl] = {
         var isErroredOut = false
         val resultBuilder = BColl.newBuilder
         val iterator = AColl.iterator(collection)
@@ -151,7 +177,7 @@ object Mode {
           }
         }
 
-        if isErroredOut then None else Some(resultBuilder.result())
+        if isErroredOut then None else resultBuilder.result()
       }
 
     }
