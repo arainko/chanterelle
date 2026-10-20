@@ -60,6 +60,7 @@ private[chanterelle] object Context {
   }
 
   case object Total extends Context[Nothing]
+  //TODO: rename to 'weakened'
   case class NonFallible[G[_]](mode: TransformationMode[G], wrapperType: WrapperType[G]) extends PossibleFallible[Nothing, G]
   case class PossiblyFallible[G[_]](mode: TransformationMode[G], wrapperType: WrapperType[G])
       extends PossibleFallible[Fallible, G]

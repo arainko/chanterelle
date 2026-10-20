@@ -99,15 +99,17 @@ private[chanterelle] object FallibleInterpreter {
                 val isColl = sourceStruct.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
                   F match {
-                    case TransformationMode.Accumulating(value, _) =>
+                    case TransformationMode.Accumulating(value) =>
                       '{
-                        $value.costam[Int, List[Int]](??? : Collection.Builder[Int, List[Int]])
-
                         $value.zip[A, B]($left, $right)
                       }
                     case TransformationMode.FailFast(value) =>
-                      '{ $value.costam[Int, List[Int]](??? : Collection.Builder.Fallible[F, Int, List[Int]]) }
-                      '{ $value.flatMap($left, left => $value.map($right, right => (left, right))) }
+                      '{ $value.flatMap[A, (A, B)]($left, left => $value.map($right, right => (left, right))) }
+
+                    case TransformationMode.Parallel(value) =>
+                      '{
+                        $value.zip[A, B]($left, $right)
+                      }
                   }
                 Value.Wrapped {
                   '{
@@ -126,7 +128,7 @@ private[chanterelle] object FallibleInterpreter {
                               recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
                             )
                           }
-                      )(using $isColl, $fac)
+                      )(using $isColl, ???) // TODO: FIX!
                   }
                 }
 
@@ -145,7 +147,7 @@ private[chanterelle] object FallibleInterpreter {
                     ${ F.value }.traverseCollection[srcElem, elem, coll[srcElem], coll[elem]](
                       $srcValue,
                       srcElem => ${ recurse(elem, 'srcElem, F).wrapped(F).asExprOf[F[elem]] }
-                    )(using $isColl, $f)
+                    )(using $isColl, ???) // TODO: FIX!
                   }
                 }
             }
@@ -167,15 +169,28 @@ private[chanterelle] object FallibleInterpreter {
                 val src = source.asExprOf[F[src]]
                 (t.wrapped) match {
                   case HoistedTransformation.Passthrough(wrapped, mode) =>
-                    val failFast = mode.asExprOf[Mode.FailFast[F]]
-                    Value.Wrapped {
-                      '{
-                        $failFast
-                          .flatMap(
-                            $src,
-                            src => ${ recurse[F](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
-                          )
-                      }
+                    val failFast = mode.assertWrapper[F]
+                    mode match {
+                      case TransformationMode.FailFast(ff) =>
+                        val failFast = ff.asExprOf[Mode.FailFast[F]]
+                        Value.Wrapped {
+                          '{
+                            $failFast.flatMap(
+                              $src,
+                              src => ${ recurse[F](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
+                            )
+                          }
+                        }
+                      case TransformationMode.Parallel(par) =>
+                        val parallel = par.asExprOf[Mode.Parallel[F]]
+                        Value.Wrapped {
+                          '{
+                            $parallel.flatMap(
+                              $src,
+                              src => ${ recurse[F](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
+                            )
+                          }
+                        }
                     }
                   case HoistedTransformation.Bottommost(wrapped) =>
                     Value.Wrapped {
@@ -203,21 +218,21 @@ private[chanterelle] object FallibleInterpreter {
     transformation.outputTpe match {
       case '[dest] =>
         F match {
-          case TransformationMode.Accumulating(value) =>
+          case mode: (TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]) =>
             NonEmptyList
               .fromList(wrappeds.toList)
               .map(wrappeds =>
                 Value.Wrapped(
-                  ProductZipper.zipAndConstruct[F, dest](value, wrappeds, unwrappeds.toList)(
+                  ProductZipper.zipAndConstruct[F, dest](mode, wrappeds, unwrappeds.toList)(
                     construct
                   )
                 )
               )
               .getOrElse(Value.Unwrapped(construct(unwrappeds.map(_.value).toSeq)))
-          case TransformationMode.FailFast(value) =>
+          case mode: TransformationMode.FailFast[F] =>
             Value.Wrapped[F] {
               ProductBinder.nestFlatMapsAndConstruct[F, dest](
-                value,
+                mode,
                 unwrappeds.toList,
                 wrappeds.toList,
                 construct
@@ -235,6 +250,13 @@ private[chanterelle] object FallibleInterpreter {
         case FailFast(_)     => true
         case Parallel(_)     => true
 
+      }
+
+    def assertWrapper[G[_]: Type](using Quotes): TransformationMode[G] =
+      this match {
+        case Accumulating(value) => TransformationMode.Accumulating(value.asExprOf[Mode.Accumulating[G]])
+        case FailFast(value)     => TransformationMode.FailFast(value.asExprOf[Mode.FailFast[G]])
+        case Parallel(value)     => TransformationMode.Parallel(value.asExprOf[Mode.Parallel[G]])
       }
 
     case Accumulating(value: Expr[Mode.Accumulating[F]])
@@ -266,16 +288,16 @@ private[chanterelle] object FallibleInterpreter {
 
     }
 
-    extension [F[_]](self: TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]) {
-      def zip[A, B](a: Expr[F[A]], b: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
+    extension [F[_]: Type](self: TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]) {
+      def zip[A: Type, B: Type](a: Expr[F[A]], b: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
         self match {
           case Accumulating(value) => '{ $value.zip[A, B]($a, $b) }
           case Parallel(value)     => '{ $value.zip[A, B]($a, $b) }
         }
     }
 
-    extension [F[_]](self: TransformationMode.FailFast[F] | TransformationMode.Parallel[F]) {
-      def flatMap[A, B](a: Expr[F[A]], fn: Expr[A => F[B]])(using Quotes): Expr[F[B]] =
+    extension [F[_]: Type](self: TransformationMode.FailFast[F] | TransformationMode.Parallel[F]) {
+      def flatMap[A: Type, B: Type](a: Expr[F[A]], fn: Expr[A => F[B]])(using Quotes): Expr[F[B]] =
         self match {
           case FailFast(value) => '{ $value.flatMap[A, B]($a, $fn) }
           case Parallel(value) => '{ $value.flatMap[A, B]($a, $fn) }

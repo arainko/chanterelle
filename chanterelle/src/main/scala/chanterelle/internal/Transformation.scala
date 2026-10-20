@@ -9,6 +9,7 @@ import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
+import scala.annotation.unused
 
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
@@ -83,7 +84,7 @@ object Transformation {
 
   // Passthrough means that there are more wrapped nodes underneath, Bottommost means we're not hoisting anything lower than this
   enum HoistedTransformation derives Debug {
-    case Passthrough[F[_]](transformation: Transformation[Fallible], mode: Expr[Mode.FailFast[F]])
+    case Passthrough[F[_]](transformation: Transformation[Fallible], mode: TransformationMode.FailFast[F] | TransformationMode.Parallel[F])
     case Bottommost(transformation: Transformation[Nothing])
   }
 
@@ -178,7 +179,9 @@ object Transformation {
           (source.tycon, elem.calculateTpe).runtimeChecked match {
             case ('[type coll[a]; coll], '[elem]) =>
               val factory =
-                Expr.summon[Collection.Builder[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
+                Expr
+                  .summon[Collection.Builder[elem, coll[elem]]]
+                  .getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
               IterLike(source, recurse(elem), Erased.K2(factory), tpe)
           }
 
@@ -200,22 +203,21 @@ object Transformation {
               }
             case ctx @ given Context.PossiblyFallible[`f`] =>
               (p.isHoisted, ctx.mode) match
-                case Plan.Hoist.Passthrough -> (TransformationMode.FailFast(mode)) =>
+                case Plan.Hoist.Passthrough -> (tm @ TransformationMode.FailFast(mode)) =>
                   Transformation.Hoisted(
                     p.source,
-                    HoistedTransformation.Passthrough(recurse(p.wrapped), mode),
+                    HoistedTransformation.Passthrough(recurse(p.wrapped), tm),
                     p.wrapped.calculateTpe
                   )
 
-                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_, Some(mode)) =>
+                case Plan.Hoist.Passthrough -> (tm @ TransformationMode.Parallel(_)) =>
                   Transformation.Hoisted(
                     p.source,
-                    HoistedTransformation.Passthrough(recurse(p.wrapped), mode),
+                    HoistedTransformation.Passthrough(recurse(p.wrapped), tm),
                     p.wrapped.calculateTpe
                   )
 
-              //TODO: better error message - Mode.Accumulating isn't able to pass through a layer of fallible computations, you need Mode.Accumulating & Mode.FailFast in scope for that.
-                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_, None) =>
+                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_) =>
                   boundary.break(ErrorMessage.CantHoistNestedFallibleFields(ctx.wrapperType))
 
                 case Plan.Hoist.Yes -> _ =>
@@ -274,6 +276,32 @@ object Transformation {
         accessibleFrom: Set[Sources.Ref],
         transformation: Leaf | Merged
       )
+    }
+  }
+}
+
+enum CollBuilder[+F <: Fallible] {
+  case Total(builder: Erased.K2[Collection.Builder]) extends CollBuilder[Nothing]
+  case PossiblyFallible[G[_]](builder: Erased.K2[Collection.Builder.Fallible[G, _, _]]) extends CollBuilder[Fallible]
+}
+
+object CollBuilder {
+  def make[F <: Fallible](using Quotes, Context.Of[F])[Elem: Type, Coll: Type]: Option[CollBuilder[F]] = {
+    Context.current match {
+      case Context.Total =>
+        Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
+      case ctx: Context.NonFallible[f] =>
+        Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
+      case ctx: Context.PossiblyFallible[f] =>
+        @unused given Type[`f`] = ctx.wrapperType.wrapper
+        Expr
+          .summon[Collection.Builder[Elem, Coll]]
+          .map(builder => CollBuilder.Total(Erased.K2(builder)))
+          .orElse(
+            Expr
+              .summon[Collection.Builder.Fallible[f, Elem, Coll]]
+              .map(builder => CollBuilder.PossiblyFallible(Erased.K2(builder)))
+          )
     }
   }
 }
