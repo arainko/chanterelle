@@ -1,10 +1,7 @@
 package chanterelle.internal
 
 import chanterelle.internal.Configured.NamedSpecific
-import chanterelle.internal.Sources.{
-  Ref,
-  Scope
-}
+import chanterelle.internal.Sources.{ Ref, Scope }
 import chanterelle.internal.Structure.*
 import chanterelle.internal.Transformation.Field
 import chanterelle.interop.Collection
@@ -109,7 +106,7 @@ private[chanterelle] object Interpreter {
           @unused given Type[coll] = source.tycon
           (source.element.tpe, paramTransformation.outputTpe).runtimeChecked match {
             case '[srcElem] -> '[elem] =>
-              val f = factory.unerase[elem, coll[elem]]
+              val f = factory match { case CollBuilder.Total(builder) => builder.unerase[elem, coll[elem]] }
               primary match {
                 case '{ $srcValue: Iterable[`srcElem`] } =>
                   Logger.debug(s"coll[elem] is ${Type.show[coll[elem]]}")
@@ -142,7 +139,10 @@ private[chanterelle] object Interpreter {
                   '[`outMap`[outKey, outValue]],
                   '{ $srcValue: collection.Map[srcKey, srcValue] }
                 ) =>
-              val factory = fac.unerase[(outKey, outValue), outMap[outKey, outValue]]
+              val factory = fac match {
+                case CollBuilder.Total(builder) => builder.unerase[(outKey, outValue), outMap[outKey, outValue]]
+              }
+
               '{
                 $srcValue
                   .map[outKey, outValue]((k, v) =>
@@ -158,7 +158,10 @@ private[chanterelle] object Interpreter {
                   '{ $srcValue: `outMap`[srcKey, srcValue] }
                 ) =>
               val isColl = source.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
-              val factory = fac.unerase[(outKey, outValue), outMap[outKey, outValue]]
+              val factory = fac match {
+                case CollBuilder.Total(builder) => builder.unerase[(outKey, outValue), outMap[outKey, outValue]]
+              }
+
               '{
                 $isColl
                   .iterator(

@@ -9,6 +9,7 @@ import scala.quoted.*
 import chanterelle.internal.Structure.Collection.Repr.MapLike
 import scala.annotation.unused
 import chanterelle.internal.Structure.Collection.Repr.IterLike
+import scala.collection.View.Collect
 
 private[chanterelle] object FallibleInterpreter {
 
@@ -26,7 +27,7 @@ private[chanterelle] object FallibleInterpreter {
     }
   }
 
-  private def recurse[F[_]: Type](transformation: Transformation[Fallible], source: Expr[Any], F: TransformationMode[F])(using
+  private def recurse[F[_]: Type](transformation: Transformation[Fallible], source: Expr[Any], F: TransformationMode[F, ?])(using
     Quotes,
     Sources,
     Context.PossiblyFallible[F]
@@ -89,13 +90,22 @@ private[chanterelle] object FallibleInterpreter {
             }
           case Transformation.MapLike(sourceStruct: MapLike[outMap], key, value, factory, outputTpe) =>
             @unused given Type[outMap] = sourceStruct.tycon
-            (key.outputTpe, value.outputTpe, source).runtimeChecked match {
+            (F.value, key.outputTpe, value.outputTpe, source).runtimeChecked match {
               case (
+                    '{
+                      type builder[elem, coll]
+                      $mode: Mode[F] { type Builder[Elem, Coll] = builder[Elem, Coll] }
+                    },
                     '[outKey],
                     '[outValue],
                     '{ $srcValue: `outMap`[srcKey, srcValue] }
                   ) =>
-                val fac = factory.unerase[(outKey, outValue), outMap[outKey, outValue]]
+
+                // val fac = factory.unerase[(outKey, outValue), outMap[outKey, outValue]]
+                val fac = factory match {
+                  case b: CollBuilder.PossiblyFallible[`builder`] => b.builder.unerase[(outKey, outValue), outMap[outKey, outValue]]
+                  case b: CollBuilder.Total => ???
+                }
                 val isColl = sourceStruct.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
                   F match {
@@ -113,7 +123,7 @@ private[chanterelle] object FallibleInterpreter {
                   }
                 Value.Wrapped {
                   '{
-                    ${ F.value }
+                    $mode
                       .traverseCollection[
                         (srcKey, srcValue),
                         (outKey, outValue),
@@ -128,7 +138,7 @@ private[chanterelle] object FallibleInterpreter {
                               recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
                             )
                           }
-                      )(using $isColl, ???) // TODO: FIX!
+                      )(using $isColl, $fac) // TODO: FIX!
                   }
                 }
 
@@ -140,7 +150,8 @@ private[chanterelle] object FallibleInterpreter {
                     '[elem],
                     '{ $srcValue: `coll`[srcElem] }
                   ) =>
-                val f = factory.unerase[elem, coll[elem]]
+                // val f = factory.unerase[elem, coll[elem]]
+                val f = ???
                 val isColl = sourceStruct.intoIter.unerase[srcElem, coll[srcElem]]
                 Value.Wrapped {
                   '{
@@ -169,7 +180,6 @@ private[chanterelle] object FallibleInterpreter {
                 val src = source.asExprOf[F[src]]
                 (t.wrapped) match {
                   case HoistedTransformation.Passthrough(wrapped, mode) =>
-                    val failFast = mode.assertWrapper[F]
                     mode match {
                       case TransformationMode.FailFast(ff) =>
                         val failFast = ff.asExprOf[Mode.FailFast[F]]
@@ -209,7 +219,7 @@ private[chanterelle] object FallibleInterpreter {
   }
 
   private def handleTransformation[F[_]](
-    F: TransformationMode[F],
+    F: TransformationMode[F, ?],
     transformation: Transformation[Fallible],
     unwrappeds: Iterable[FieldValue.Unwrapped],
     wrappeds: Iterable[FieldValue.Wrapped[F]],
@@ -241,46 +251,42 @@ private[chanterelle] object FallibleInterpreter {
         }
     }
 
-  enum TransformationMode[F[x]] {
-    def value: Expr[Mode[F]]
+  sealed trait TransformationMode[F[x], CollBuilder[Elem, Coll]](val builderTpe: Quotes ?=> Type[CollBuilder]) {
+    def exact: Expr[Mode[F] { type Builder[Elem, Coll] = CollBuilder[Elem, Coll] }]
+    def value: Expr[Mode[F]] = exact
 
-    def canPassthrough: Boolean =
+    def canPassthrough: Boolean = 
       this match {
-        case Accumulating(_) => false
-        case FailFast(_)     => true
-        case Parallel(_)     => true
+        case TransformationMode.Accumulating(_) => false
+        case TransformationMode.FailFast(_)     => true
+        case TransformationMode.Parallel(_)     => true
 
       }
-
-    def assertWrapper[G[_]: Type](using Quotes): TransformationMode[G] =
-      this match {
-        case Accumulating(value) => TransformationMode.Accumulating(value.asExprOf[Mode.Accumulating[G]])
-        case FailFast(value)     => TransformationMode.FailFast(value.asExprOf[Mode.FailFast[G]])
-        case Parallel(value)     => TransformationMode.Parallel(value.asExprOf[Mode.Parallel[G]])
-      }
-
-    case Accumulating(value: Expr[Mode.Accumulating[F]])
-    case FailFast(value: Expr[Mode.FailFast[F]])
-    case Parallel(value: Expr[Mode.Parallel[F]])
   }
 
   object TransformationMode {
-    def create[F[x]: Type](expr: Expr[Mode[F]])(using Quotes): TransformationMode[F] =
+    case class Accumulating[F[_]: Type](exact: Expr[Mode.Accumulating[F]]) extends TransformationMode[F, Collection.Builder](Type.of)
+    case class FailFast[F[_]: Type](exact: Expr[Mode.FailFast[F]])
+        extends TransformationMode[F, Collection.Builder.Fallible[F, _, _]](Type.of)
+    case class Parallel[F[_]: Type](exact: Expr[Mode.Parallel[F]])
+        extends TransformationMode[F, Collection.Builder.Fallible[F, _, _]](Type.of)
+
+    def create[F[x]: Type](expr: Expr[Mode[F]])(using Quotes) =
       expr match
         case '{ $acc: Mode.Parallel[F] } =>
-          Parallel(acc)
+          Parallel[F](acc)
         case '{ $acc: Mode.Accumulating[F] } =>
-          Accumulating(acc)
+          Accumulating[F](acc)
         case '{ $ff: Mode.FailFast[F] } =>
-          FailFast(ff)
+          FailFast[F](ff)
         case _ =>
           val rendered = Type.show[F]
           quotes.reflect.report.errorAndAbort(
-            s"Couldn't determine the transformation mode, make sure an instance of either Mode.FailFast[$$rendered] or Mode.Accumulating[$rendered] is in implicit scope"
+            s"Couldn't determine the transformation mode, make sure an instance of either Mode.FailFast[$rendered] or Mode.Accumulating[$rendered] is in implicit scope"
           )
 
-    given Debug[TransformationMode[?]] with {
-      def astify(self: TransformationMode[?])(using Quotes): AST =
+    given Debug[TransformationMode[?, ?]] with {
+      def astify(self: TransformationMode[?, ?])(using Quotes): AST =
         self match
           case Accumulating(value) => AST.Text("Accumulating")
           case FailFast(value)     => AST.Text("FailFast")
@@ -305,7 +311,7 @@ private[chanterelle] object FallibleInterpreter {
     }
   }
   private enum Value[F[x]] {
-    final def wrapped(F: TransformationMode[F])(using Quotes, Type[F]) = {
+    final def wrapped(F: TransformationMode[F, ?])(using Quotes, Type[F]) = {
 
       this.runtimeChecked match
         case Unwrapped('{ $value: a }) =>

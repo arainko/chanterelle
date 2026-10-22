@@ -48,14 +48,14 @@ object Transformation {
     source: Structure.Collection.Repr.MapLike[map],
     key: Transformation[F],
     value: Transformation[F],
-    builder: Erased.K2[Collection.Builder],
+    builder: CollBuilder[F],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
   case class IterLike[+F <: Fallible, iter[elem]](
     source: Structure.Collection.Repr.IterLike[iter],
     elem: Transformation[F],
-    builder: Erased.K2[Collection.Builder],
+    builder: CollBuilder[F],
     outputTpe: Type[?]
   ) extends Transformation[F]
 
@@ -84,7 +84,10 @@ object Transformation {
 
   // Passthrough means that there are more wrapped nodes underneath, Bottommost means we're not hoisting anything lower than this
   enum HoistedTransformation derives Debug {
-    case Passthrough[F[_]](transformation: Transformation[Fallible], mode: TransformationMode.FailFast[F] | TransformationMode.Parallel[F])
+    case Passthrough[F[_]](
+      transformation: Transformation[Fallible],
+      mode: TransformationMode.FailFast[F] | TransformationMode.Parallel[F]
+    )
     case Bottommost(transformation: Transformation[Nothing])
   }
 
@@ -168,10 +171,10 @@ object Transformation {
           (source.tycon, key.calculateTpe, value.calculateTpe).runtimeChecked match {
             case ('[type map[k, v]; map], '[key], '[value]) =>
               val factory =
-                Expr
-                  .summon[Collection.Builder[(key, value), map[key, value]]]
+                CollBuilder
+                  .make[(key, value), map[key, value]]
                   .getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
-              MapLike(source, recurse(key), recurse(value), Erased.K2(factory), tpe)
+              MapLike(source, recurse(key), recurse(value), factory, tpe)
           }
 
         case t @ Plan.IterLike(source, elem, _) =>
@@ -179,10 +182,10 @@ object Transformation {
           (source.tycon, elem.calculateTpe).runtimeChecked match {
             case ('[type coll[a]; coll], '[elem]) =>
               val factory =
-                Expr
-                  .summon[Collection.Builder[elem, coll[elem]]]
+                CollBuilder
+                  .make[elem, coll[elem]]
                   .getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
-              IterLike(source, recurse(elem), Erased.K2(factory), tpe)
+              IterLike(source, recurse(elem), factory, tpe)
           }
 
         case p: Plan.Merged[Nothing] =>
@@ -280,28 +283,24 @@ object Transformation {
   }
 }
 
-enum CollBuilder[+F <: Fallible] {
+enum CollBuilder[+F <: Fallible] derives Debug {
   case Total(builder: Erased.K2[Collection.Builder]) extends CollBuilder[Nothing]
-  case PossiblyFallible[G[_]](builder: Erased.K2[Collection.Builder.Fallible[G, _, _]]) extends CollBuilder[Fallible]
+  case PossiblyFallible[Builder[Elem, Coll]](builder: Erased.K2[Builder]) extends CollBuilder[Fallible]
 }
 
 object CollBuilder {
-  def make[F <: Fallible](using Quotes, Context.Of[F])[Elem: Type, Coll: Type]: Option[CollBuilder[F]] = {
+  def make[Elem: Type, Coll: Type](using Quotes)[F <: Fallible](using Context.Of[F]): Option[CollBuilder[F]] = {
     Context.current match {
       case Context.Total =>
         Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
       case ctx: Context.NonFallible[f] =>
         Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
       case ctx: Context.PossiblyFallible[f] =>
-        @unused given Type[`f`] = ctx.wrapperType.wrapper
-        Expr
-          .summon[Collection.Builder[Elem, Coll]]
-          .map(builder => CollBuilder.Total(Erased.K2(builder)))
-          .orElse(
-            Expr
-              .summon[Collection.Builder.Fallible[f, Elem, Coll]]
-              .map(builder => CollBuilder.PossiblyFallible(Erased.K2(builder)))
-          )
+        ctx.mode.builderTpe match {
+          case '[type builder[elem, coll]; builder] =>
+            Expr.summon[builder[Elem, Coll]].map(builder => CollBuilder.PossiblyFallible(Erased.K2(builder)))
+        }
+
     }
   }
 }

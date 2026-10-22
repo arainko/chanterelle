@@ -47,21 +47,21 @@ private[chanterelle] object Context {
     Expr
       .summon[Mode[?]]
       .map {
-        case '{ type f[_]; $mode: Mode[f] } => Context.PossiblyFallible(TransformationMode.create(mode), WrapperType.create[f])
+        case '{ type f[_]; $mode: Mode[f] } => Context.PossiblyFallible(TransformationMode.create[f](mode), WrapperType.create[f])
       }
       .getOrElse(Context.Total)
 
   sealed trait PossibleFallible[+F <: Fallible, G[_]] extends Context[F], Product {
-    def mode: TransformationMode[G]
+    def mode: TransformationMode[G, ?]
     def wrapperType: WrapperType[G]
 
-    def _1: TransformationMode[G]
+    def _1: TransformationMode[G, ?]
     def _2: WrapperType[G]
   }
 
   case object Total extends Context[Nothing]
   //TODO: rename to 'weakened'
-  case class NonFallible[G[_]](mode: TransformationMode[G], wrapperType: WrapperType[G]) extends PossibleFallible[Nothing, G]
-  case class PossiblyFallible[G[_]](mode: TransformationMode[G], wrapperType: WrapperType[G])
+  case class NonFallible[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G]) extends PossibleFallible[Nothing, G]
+  case class PossiblyFallible[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G])
       extends PossibleFallible[Fallible, G]
 }
