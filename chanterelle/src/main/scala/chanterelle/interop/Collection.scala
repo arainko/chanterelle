@@ -35,6 +35,7 @@ object Collection {
     }
   }
 
+  //TODO: experiment with making Elem contravariant?
   opaque type Builder[Elem, Collection] <: Builder.Fallible[[a] =>> a, Elem, Collection] =
     Builder.Fallible[[a] =>> a, Elem, Collection]
 
@@ -72,6 +73,9 @@ object Collection {
     extension [Elem, Collection](self: Builder[Elem, Collection]) {
       def transform[DestColl](f: Collection => DestColl): Builder[Elem, DestColl] =
         TransformedFactory[[a] =>> a, [a] =>> a, Elem, Collection, DestColl](self, f)
+
+      def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
+        self.transform(ev.apply)
     }
 
     private final class TransformedFactory[F[_], G[_], Elem, SourceColl, DestColl](

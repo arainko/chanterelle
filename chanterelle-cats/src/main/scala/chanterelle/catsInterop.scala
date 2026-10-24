@@ -22,7 +22,7 @@ extension (self: Mode.type) {
   def monad[F[_]: Monad]: Mode.FailFast[F] = MonadMode[F]
 }
 
-private final class ParallelMode[F[_]: Parallel as F] extends Mode.Accumulating[F], Mode.FailFast[F] {
+private final class ParallelMode[F[_]: Parallel as F] extends Mode.Parallel[F] {
   override def flatMap[A, B](fa: F[A], f: A => F[B]): F[B] = F.monad.flatMap(fa)(f)
 
   override def zip[A, B](left: F[A], right: F[B]): F[(A, B)] = Parallel.parProduct(left, right)
@@ -36,7 +36,7 @@ private final class ParallelMode[F[_]: Parallel as F] extends Mode.Accumulating[
     collection: AColl,
     transformation: AElem => F[BElem]
   )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder.Fallible[F, BElem, BColl]): F[BColl] =
-    map(AColl.iterator(collection).toVector.parTraverse(transformation), _.to(BColl)).flatten
+    flatMap(AColl.iterator(collection).toVector.parTraverse(transformation), _.to(BColl))
 
 }
 
@@ -52,7 +52,7 @@ private final class ApplicativeMode[F[_]: Applicative as F] extends Mode.Accumul
     collection: AColl,
     transformation: AElem => F[BElem]
   )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder[BElem, BColl]): F[BColl] =
-    map(AColl.iterator(collection).toVector.parTraverse(transformation), _.to(BColl))
+    map(AColl.iterator(collection).toVector.traverse(transformation), _.to(BColl))
 
 }
 
@@ -67,7 +67,7 @@ private final class MonadMode[F[_]: Monad as F] extends Mode.FailFast[F] {
   override def traverseCollection[AElem, BElem, AColl, BColl](
     collection: AColl,
     transformation: AElem => F[BElem]
-  )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder[BElem, BColl]): F[BColl] =
-    map(AColl.iterator(collection).toVector.traverse(transformation), _.to(BColl))
+  )(using AColl: Collection.IntoIterator[AElem, AColl], BColl: Collection.Builder.Fallible[F, BElem, BColl]): F[BColl] =
+    flatMap(AColl.iterator(collection).toVector.traverse(transformation), _.to(BColl))
 
 }

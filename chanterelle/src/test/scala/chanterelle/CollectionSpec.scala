@@ -20,6 +20,7 @@ class CollectionSpec extends ChanterelleSuite {
     }
   }
 
+
   test("hoisting wrapped fields out of elements accumulates errors (Accumulating)") {
     Mode.Accumulating.either[List, String] {
       val tup = (list =

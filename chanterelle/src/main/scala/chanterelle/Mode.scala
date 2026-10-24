@@ -18,14 +18,9 @@ sealed trait Mode[F[_]] extends Mappable[F] { self =>
     collection: AColl,
     transformation: AElem => F[BElem]
   )(using Collection.IntoIterator[AElem, AColl], Builder[BElem, BColl]): F[BColl]
-
-
-  def costam[Elem, Coll](b: Builder[Elem, Coll]): Nothing
 }
 
 object Mode {
-  val whatevs: Mode.Accumulating[Option] = ???
-
 
   trait FailFast[F[_]] extends Mode[F] {
     final type Builder[Elem, Collection] = Collection.Builder.Fallible[F, Elem, Collection]
@@ -58,8 +53,6 @@ object Mode {
     private final class Either[E, Coll[x] <: Iterable[x]](using Errors: Factory[E, Coll[E]])
         extends Mode.Parallel[[A] =>> scala.Either[Coll[E], A]] {
 
-      def costam[Elem, Collection](b: Builder.Fallible[[a] =>> scala.Either[Coll[E], a], Elem, Collection]): Nothing = ???
-  
       override def flatMap[A, B](fa: scala.Either[Coll[E], A], f: A => scala.Either[Coll[E], B]): scala.Either[Coll[E], B] =
         fa.flatMap(f)
 
@@ -118,7 +111,6 @@ object Mode {
     private final class Either[E] extends Mode.FailFast[[A] =>> scala.Either[E, A]] {
       final def pure[A](value: A): scala.Either[E, A] = Right(value)
 
-      def costam[Elem, Coll](b: Fallible[[A] =>> scala.Either[E, A], Elem, Coll]): Nothing = ???
 
       final def map[A, B](fa: scala.Either[E, A], f: A => B): scala.Either[E, B] = fa.map(f)
 
@@ -151,8 +143,6 @@ object Mode {
     val option: Mode.FailFast[scala.Option] = Option
 
     private object Option extends Mode.FailFast[scala.Option] {
-
-      def costam[Elem, Coll](b: Fallible[scala.Option, Elem, Coll]): Nothing = ???
 
       final def pure[A](value: A): scala.Option[A] = Some(value)
 

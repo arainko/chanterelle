@@ -154,7 +154,6 @@ object Transformation {
                 Type.of[values],
                 Type.of[NamedTuple.NamedTuple[names, values]]
               )
-
           }
 
         case p @ Plan.Tuple(source, fields, _) =>

@@ -1,9 +1,6 @@
 package chanterelle.internal
 
-import chanterelle.internal.Transformation.{
-  Field,
-  Merged
-}
+import chanterelle.internal.Transformation.{ Field, Merged }
 
 import scala.annotation.publicInBinary
 import scala.util.boundary
@@ -27,9 +24,11 @@ private[chanterelle] object FallibilityRefiner {
         case Transformation.EitherLike(source, left, right, outputTpe) =>
           recurse(right)
         case Transformation.MapLike(source, key, value, factory, outputTpe) =>
+          evaluateCollBuilder(factory)
           recurse(key)
           recurse(value)
         case Transformation.IterLike(source, elem, factory, outputTpe) =>
+          evaluateCollBuilder(factory)
           recurse(elem)
         case Transformation.Leaf(output) =>
           ()
@@ -37,7 +36,7 @@ private[chanterelle] object FallibilityRefiner {
           ()
         case Transformation.ConfedUp(config) =>
           config match
-            case Configured.Update(tpe, fn)                      => ()
+            case Configured.Update(tpe, fn) => ()
 
         case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, _) =>
           evaluate(fields.collect {
@@ -46,7 +45,6 @@ private[chanterelle] object FallibilityRefiner {
           })
         case Transformation.Hoisted(source, wrapped, outputTpe) =>
           boundary.break(None)
-
     }
 
   private inline def evaluate(plans: Iterable[Transformation[Fallible]])(using inline label: boundary.Label[None | Unit]) =
@@ -56,5 +54,10 @@ private[chanterelle] object FallibilityRefiner {
         case None => boundary.break(None)
         case ()   => ()
       }
+
+  private inline def evaluateCollBuilder(builder: CollBuilder[Fallible])(using inline label: boundary.Label[None | Unit]) =
+    builder match
+      case CollBuilder.Total(builder)            => ()
+      case CollBuilder.PossiblyFallible(builder) => boundary.break(None)
 
 }

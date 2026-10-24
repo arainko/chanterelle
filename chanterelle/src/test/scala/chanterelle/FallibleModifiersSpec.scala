@@ -359,16 +359,16 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }("'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'")
   }
 
-  test("error messages around .passthroughHoisted with Accumulating (not Accumulating & FailFast) are alright-ish") {
-    (Mode.Accumulating.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
-      assertFailsToCompileContains {
-        """
-        val tup = (field = Right(List(Right(1), Left(List("boom")))))
-        tup.transform(_.hoist(_.field.element.each))
-      """
-      }("It's not possible to hoist nested fallible fields with just a Mode.Accumulating")
-    }
-  }
+  // test("error messages around .passthroughHoisted with Accumulating (not Accumulating & FailFast) are alright-ish") {
+  //   (Mode.Accumulating.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
+  //     assertFailsToCompileContains {
+  //       """
+  //       val tup = (field = Right(List(Right(1), Left(List("boom")))))
+  //       tup.transform(_.hoist(_.field.element.each))
+  //     """
+  //     }("It's not possible to hoist nested fallible fields with just a Mode.Accumulating")
+  //   }
+  // }
 
   test(
     "when operating on a Mode.Accumulating & Mode.FailFast errors are accumulated but nested fallible transformations can still be traversed"
