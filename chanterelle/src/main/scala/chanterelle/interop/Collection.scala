@@ -58,7 +58,6 @@ object Collection {
 
     def from[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
 
-    // TODO: better name! this sucks
     def fromAppendable[Elem, Coll[+elem]](
       empty: Coll[Nothing],
       append: (Coll[Elem], Elem) => Coll[Elem]
