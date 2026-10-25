@@ -14,26 +14,24 @@ import cats.data.NonEmptyMapImpl
 
 class DeclineSuite extends FunSuite {
 
-  test("interops") {
-    given nelBuilder[A]: Fallible[[a] =>> Either[String, a], A, NonEmptyList[A]] =
-      Collection.Builder
-        .from[List[A]]
-        .transform(NonEmptyList.fromList)
-        .fallible
-        .transformK([a] => _.toRight("costam"))
+  given nelBuilder[A]: Fallible[[a] =>> Either[String, a], A, NonEmptyList[A]] =
+    Collection.Builder
+      .from[List[A]]
+      .transform(NonEmptyList.fromList)
+      .fallible
+      .transformK([a] => _.toRight("costam"))
 
-    given nelIntoIter[A]: Collection.IntoIterator[A, NonEmptyList[A]] =
-      Collection.IntoIterator.from(_.iterator)
+  given nelIntoIter[A]: Collection.IntoIterator[A, NonEmptyList[A]] =
+    Collection.IntoIterator.from(_.iterator)
 
-    given nem[K: Ordering, V]: Collection.Builder.Fallible[Option, (K, V), NonEmptyMap[K, V]] =
-      Collection.Builder.from[SortedMap[K, V]].transform(NonEmptyMap.fromMap).fallible
+  given nem[K: Ordering, V]: Collection.Builder.Fallible[Option, (K, V), NonEmptyMap[K, V]] =
+    Collection.Builder.from[SortedMap[K, V]].transform(NonEmptyMap.fromMap).fallible
 
-    given nemIntoIter[K, V]: Collection.IntoIterator[(K, V), NonEmptyMap[K, V]] = 
-      Collection.IntoIterator.from(_.toSortedMap.iterator)
+  given nemIntoIter[K, V]: Collection.IntoIterator[(K, V), NonEmptyMap[K, V]] =
+    Collection.IntoIterator.from(_.toSortedMap.iterator)
 
-    given chainBuilder[A]: Collection.Builder[A, Chain[A]] = Collection.Builder.fromAppendable(Chain.empty, _.append(_))
-    given chainIntoIter[A]: Collection.IntoIterator[A, Chain[A]] = Collection.IntoIterator.from(_.iterator)
-  }
+  given chainBuilder[A]: Collection.Builder[A, Chain[A]] = Collection.Builder.fromAppendable(Chain.empty, _.append(_))
+  given chainIntoIter[A]: Collection.IntoIterator[A, Chain[A]] = Collection.IntoIterator.from(_.iterator)
 
   test("costam") {
     Mode.applicative[Opts] {
