@@ -158,7 +158,7 @@ class CollectionSpec extends ChanterelleSuite {
       chanterelle.interop.Collection.IntoIterator.from(_.vec.iterator)
 
     given [A]: chanterelle.interop.Collection.Builder[A, CusVector[A]] =
-      chanterelle.interop.Collection.Builder.from(Vector).transform(CusVector.apply)
+      chanterelle.interop.Collection.Builder.fromFactory(Vector).transform(CusVector.apply)
 
     Mode.FailFast.either[String] {
       val ok = (field = CusVector(Vector(Right(1), Right(2))))

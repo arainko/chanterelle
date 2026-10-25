@@ -7,7 +7,6 @@ import scala.collection.SortedSet
 import scala.collection.immutable.HashMap
 import scala.compiletime.ops.string.*
 import scala.collection.immutable.SortedMap
-import chanterelle.hidden.Selector
 import chanterelle.interop.Collection
 import chanterelle.interop.Mappable
 
@@ -986,7 +985,7 @@ class ModifiersSpec extends ChanterelleSuite {
 
     given [A]: Collection.Builder[A, CusVector[A]] =
       Collection.Builder
-        .from(Vector)
+        .fromFactory(Vector)
         .transform(CusVector.apply)
 
     val actual = tup.transform(_.update(_.someField.each)(_.toString))
@@ -1002,7 +1001,7 @@ class ModifiersSpec extends ChanterelleSuite {
 
     given [K, V]: Collection.IntoIterator[(K, V), CusMap[K, V]] = Collection.IntoIterator.from(_.map.iterator)
 
-    given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.from(HashMap).transform(CusMap.apply)
+    given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.fromFactory(HashMap).transform(CusMap.apply)
   
     val actual = tup.transform(_.update(_.someField.each._2)(_ * 2))
     val expected = (someField = CusMap(HashMap(1 -> 4, 3 -> 8)))

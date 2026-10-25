@@ -4,10 +4,8 @@ import scala.collection.Factory
 import scala.collection.generic.IsIterableOnce
 import scala.collection.mutable.Builder as MutBuilder
 import chanterelle.Mode
-import scala.collection.mutable
 
 object Collection {
-
   opaque type IntoIterator[Elem, Collection] = IsIterableOnce[Collection] { type A = Elem }
 
   object IntoIterator extends IntoIterator.LowPriority {
@@ -35,7 +33,7 @@ object Collection {
     }
   }
 
-  //TODO: experiment with making Elem contravariant?
+  // TODO: experiment with making Elem contravariant?
   opaque type Builder[Elem, Collection] <: Builder.Fallible[[a] =>> a, Elem, Collection] =
     Builder.Fallible[[a] =>> a, Elem, Collection]
 
@@ -52,11 +50,23 @@ object Collection {
       extension [F[_], Elem, Coll](self: Builder.Fallible[F, Elem, Coll]) {
         def transformK[G[_]](fk: [a] => F[a] => G[a]): Builder.Fallible[G, Elem, Coll] =
           TransformedFactory[F, G, Elem, Coll, Coll](self, fk.apply)
-
       }
+
+      def fromFactory[F[_], Elem, Collection](factory: Factory[Elem, F[Collection]]): Builder.Fallible[F, Elem, Collection] =
+        factory
     }
 
-    def from[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
+    extension [Elem, Collection](self: Builder[Elem, Collection]) {
+      def transform[DestColl](f: Collection => DestColl): Builder[Elem, DestColl] =
+        TransformedFactory[[a] =>> a, [a] =>> a, Elem, Collection, DestColl](self, f)
+
+      def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
+        self.transform(ev.apply)
+    }
+
+    def from[Collection](using DummyImplicit)[Elem](using factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
+
+    def fromFactory[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
 
     def fromAppendable[Elem, Coll[+elem]](
       empty: Coll[Nothing],
@@ -66,15 +76,6 @@ object Collection {
       override def fromSpecific(it: IterableOnce[Elem]): Coll[Elem] = newBuilder.addAll(it).result()
 
       override def newBuilder: MutBuilder[Elem, Coll[Elem]] = BuilderFromImmutableAppend(empty, append)
-
-    }
-
-    extension [Elem, Collection](self: Builder[Elem, Collection]) {
-      def transform[DestColl](f: Collection => DestColl): Builder[Elem, DestColl] =
-        TransformedFactory[[a] =>> a, [a] =>> a, Elem, Collection, DestColl](self, f)
-
-      def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
-        self.transform(ev.apply)
     }
 
     private final class TransformedFactory[F[_], G[_], Elem, SourceColl, DestColl](
