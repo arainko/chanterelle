@@ -1,9 +1,6 @@
 package chanterelle
 
-import chanterelle.interop.{
-  Collection,
-  Mappable
-}
+import chanterelle.interop.{ Collection, Mappable }
 
 import scala.collection.Factory
 import chanterelle.interop.Collection.Builder
@@ -45,37 +42,43 @@ object Mode {
     inline def apply[A](inline f: M ?=> A): A = f(using self)
   }
 
-  object Accumulating {
-    def either[Coll[x] <: Iterable[x], E](using
-      Factory[E, Coll[E]]
-    ): Mode.Parallel[scala.Either[Coll[E], _]] = Either[E, Coll]
+  object Parallel {
+    def either[Errors](using
+      DummyImplicit
+    )[E](using Collection.IntoIterator[E, Errors], Collection.Builder[E, Errors]): Mode.Parallel[scala.Either[Errors, _]] =
+      Either[E, Errors]
 
-    private final class Either[E, Coll[x] <: Iterable[x]](using Errors: Factory[E, Coll[E]])
-        extends Mode.Parallel[[A] =>> scala.Either[Coll[E], A]] {
+    private final class Either[E, Errors](using
+      IntoIter: Collection.IntoIterator[E, Errors],
+      Errors: Collection.Builder[E, Errors]
+    ) extends Mode.Parallel[[A] =>> scala.Either[Errors, A]] {
 
-      override def flatMap[A, B](fa: scala.Either[Coll[E], A], f: A => scala.Either[Coll[E], B]): scala.Either[Coll[E], B] =
+      override def flatMap[A, B](fa: scala.Either[Errors, A], f: A => scala.Either[Errors, B]): scala.Either[Errors, B] =
         fa.flatMap(f)
 
-      override def pure[A](value: A): scala.Either[Coll[E], A] = Right(value)
+      override def pure[A](value: A): scala.Either[Errors, A] = Right(value)
 
-      override def map[A, B](fa: scala.Either[Coll[E], A], f: A => B): scala.Either[Coll[E], B] = fa.map(f)
+      override def map[A, B](fa: scala.Either[Errors, A], f: A => B): scala.Either[Errors, B] = fa.map(f)
 
-      override def zip[A, B](fa: scala.Either[Coll[E], A], fb: scala.Either[Coll[E], B]): scala.Either[Coll[E], (A, B)] =
+      override def zip[A, B](fa: scala.Either[Errors, A], fb: scala.Either[Errors, B]): scala.Either[Errors, (A, B)] =
         (fa, fb) match {
           case (Right(a), Right(b))           => Right(a -> b)
-          case (Right(_), err @ Left(_))      => err.asInstanceOf[scala.Either[Coll[E], (A, B)]]
-          case (err @ Left(_), Right(_))      => err.asInstanceOf[scala.Either[Coll[E], (A, B)]]
+          case (Right(_), err @ Left(_))      => err.asInstanceOf[scala.Either[Errors, (A, B)]]
+          case (err @ Left(_), Right(_))      => err.asInstanceOf[scala.Either[Errors, (A, B)]]
           case (Left(errorsA), Left(errorsB)) =>
             val builder = Errors.newBuilder
-            val accumulated = builder ++= errorsA ++= errorsB
+            val accumulated = builder ++= IntoIter.iterator(errorsA) ++= IntoIter.iterator(errorsB)
             Left(accumulated.result())
         }
 
       // Inspired by chimney's implementation: https://github.com/scalalandio/chimney/blob/53125c0a55479763157909ef920e11f5b487b182/chimney/src/main/scala/io/scalaland/chimney/TransformerFSupport.scala#L153
       override def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
-        transformation: A => scala.Either[Coll[E], B]
-      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder.Fallible[scala.Either[Coll[E], _], B, BColl]): scala.Either[Coll[E], BColl] = {
+        transformation: A => scala.Either[Errors, B]
+      )(using
+        AColl: Collection.IntoIterator[A, AColl],
+        BColl: Collection.Builder.Fallible[scala.Either[Errors, _], B, BColl]
+      ): scala.Either[Errors, BColl] = {
         val accumulatedErrors = Errors.newBuilder
         val accumulatedSuccesses = BColl.newBuilder
         var isErroredOut = false
@@ -85,7 +88,7 @@ object Mode {
           val elem = iter.next()
           transformation(elem) match {
             case Left(errors) =>
-              accumulatedErrors.addAll(errors)
+              accumulatedErrors.addAll(IntoIter.iterator(errors))
               if isErroredOut == false then {
                 isErroredOut = true
                 accumulatedSuccesses.clear()
@@ -108,9 +111,8 @@ object Mode {
     def either[E]: Mode.FailFast[scala.Either[E, _]] =
       eitherInstance.asInstanceOf[Mode.FailFast[scala.Either[E, _]]]
 
-    private final class Either[E] extends Mode.FailFast[[A] =>> scala.Either[E, A]] {
+    private final class Either[E] extends Mode.FailFast[scala.Either[E, _]] {
       final def pure[A](value: A): scala.Either[E, A] = Right(value)
-
 
       final def map[A, B](fa: scala.Either[E, A], f: A => B): scala.Either[E, B] = fa.map(f)
 
@@ -119,7 +121,10 @@ object Mode {
       final def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Either[E, B]
-      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder.Fallible[scala.Either[E, _], B, BColl]): scala.Either[E, BColl] = {
+      )(using
+        AColl: Collection.IntoIterator[A, AColl],
+        BColl: Collection.Builder.Fallible[scala.Either[E, _], B, BColl]
+      ): scala.Either[E, BColl] = {
         var error: Left[E, Nothing] = null
         def isErroredOut = !(error eq null)
 
@@ -153,7 +158,10 @@ object Mode {
       final def traverseCollection[A, B, AColl, BColl](
         collection: AColl,
         transformation: A => scala.Option[B]
-      )(using AColl: Collection.IntoIterator[A, AColl], BColl: Collection.Builder.Fallible[Option, B, BColl]): scala.Option[BColl] = {
+      )(using
+        AColl: Collection.IntoIterator[A, AColl],
+        BColl: Collection.Builder.Fallible[Option, B, BColl]
+      ): scala.Option[BColl] = {
         var isErroredOut = false
         val resultBuilder = BColl.newBuilder
         val iterator = AColl.iterator(collection)

@@ -100,13 +100,14 @@ private[chanterelle] object FallibleInterpreter {
             }
           case Transformation.MapLike(sourceStruct: MapLike[outMap], key, value, factory, outputTpe) =>
             @unused given Type[outMap] = sourceStruct.tycon
-            (key.outputTpe, value.outputTpe, source).runtimeChecked match {
+            (key.outputTpe, value.outputTpe, sourceStruct.key.tpe, sourceStruct.value.tpe).runtimeChecked match {
               case (
                     '[outKey],
                     '[outValue],
-                    '{ $srcValue: `outMap`[srcKey, srcValue] }
+                    '[srcKey],
+                    '[srcValue]
                   ) =>
-
+                val srcValue = source.asExprOf[outMap[srcKey, srcValue]]
                 val fac = resolveCollBuilder[(outKey, outValue), outMap[outKey, outValue]](F, factory)
                 val isColl = sourceStruct.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
                 def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
@@ -140,18 +141,19 @@ private[chanterelle] object FallibleInterpreter {
                               recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
                             )
                           }
-                      )(using $isColl, $fac) // TODO: FIX!
+                      )(using $isColl, $fac)
                   }
                 }
 
             }
           case Transformation.IterLike(sourceStruct: IterLike[coll], elem, factory, outputTpe) =>
             @unused given Type[coll] = sourceStruct.tycon
-            (elem.outputTpe, source).runtimeChecked match {
+            (elem.outputTpe, sourceStruct.element.tpe).runtimeChecked match {
               case (
                     '[elem],
-                    '{ $srcValue: `coll`[srcElem] }
+                    '[srcElem]
                   ) =>
+                val srcValue = source.asExprOf[coll[srcElem]]
                 val fac = resolveCollBuilder[elem, coll[elem]](F, factory)
                 val isColl = sourceStruct.intoIter.unerase[srcElem, coll[srcElem]]
                 Value.Wrapped {
@@ -159,7 +161,7 @@ private[chanterelle] object FallibleInterpreter {
                     ${ F.exact }.traverseCollection[srcElem, elem, coll[srcElem], coll[elem]](
                       $srcValue,
                       srcElem => ${ recurse(elem, 'srcElem, F).wrapped(F).asExprOf[F[elem]] }
-                    )(using $isColl, $fac) // TODO: FIX!
+                    )(using $isColl, $fac)
                   }
                 }
             }

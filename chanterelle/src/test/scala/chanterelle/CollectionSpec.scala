@@ -22,7 +22,7 @@ class CollectionSpec extends ChanterelleSuite {
 
 
   test("hoisting wrapped fields out of elements accumulates errors (Accumulating)") {
-    Mode.Accumulating.either[List, String] {
+    Mode.Parallel.either[List[String]] {
       val tup = (list =
         List[(count: Either[List[String], Int])]((count = Left(List("one"))), (count = Right(1)), (count = Left(List("two"))))
       )

@@ -88,7 +88,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   }
 
   test("Accumulating mode gathers errors from all hoisted fields") {
-    Mode.Accumulating.either[List, String] {
+    Mode.Parallel.either[List[String]] {
 
       val tup = (
         one = Left(List("one")),
@@ -103,7 +103,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   }
 
   test("Accumulating mode gathers errors from all failing elements of a hoisted collection") {
-    Mode.Accumulating.either[List, String] {
+    Mode.Parallel.either[List[String]] {
 
       val tup = (list = List(Right(1), Left(List("boom")), Right(2), Left(List("bang"))))
 
@@ -115,7 +115,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   }
 
   test(".? hoisting through nested wrappers flattens them (Accumulating Either mode)") {
-    Mode.Accumulating.either[List, String] {
+    Mode.Parallel.either[List[String]] {
 
       val tup = (nest = Right(Right((leaf = Right(1)))))
 
@@ -345,7 +345,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   test(".hoist.regional doesn't work with Mode.Accumulating and reports a nice error message") {
     assertFailsToCompileWith {
       """
-    (Mode.Accumulating.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
+    (Mode.Parallel.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
       val tup = (
         toplevel1 = 1,
         toplevel2 = (nested1 = Right(1), nested2 = Left(List("two")), nested3 = Left(List("three"))),
@@ -360,7 +360,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   }
 
   // test("error messages around .passthroughHoisted with Accumulating (not Accumulating & FailFast) are alright-ish") {
-  //   (Mode.Accumulating.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
+  //   (Mode.Parallel.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
   //     assertFailsToCompileContains {
   //       """
   //       val tup = (field = Right(List(Right(1), Left(List("boom")))))
@@ -373,7 +373,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   test(
     "when operating on a Mode.Accumulating & Mode.FailFast errors are accumulated but nested fallible transformations can still be traversed"
   ) {
-    Mode.Accumulating.either[List, String] {
+    Mode.Parallel.either[List[String]] {
       val tup = (
         toplevel1 = 1,
         toplevel2 = (nested1 = Right(1), nested2 = Right(Left(List("two"))), nested3 = Right(Left(List("three")))),
