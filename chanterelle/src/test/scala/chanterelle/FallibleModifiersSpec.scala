@@ -356,7 +356,9 @@ class FallibleModifiersSpec extends ChanterelleSuite {
       ], (toplevel1: Int, toplevel2: (nested1: Int, nested2: Nothing, nested3: Nothing), toplevel3: Either[List[String], Int])] =
         tup.transform(_.hoist.regional(_.toplevel2))
       """
-    }("'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'")
+    }(
+      "'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'"
+    )
   }
 
   // test("error messages around .passthroughHoisted with Accumulating (not Accumulating & FailFast) are alright-ish") {

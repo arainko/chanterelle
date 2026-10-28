@@ -1,9 +1,10 @@
 package chanterelle.interop
 
+import chanterelle.Mode
+
 import scala.collection.Factory
 import scala.collection.generic.IsIterableOnce
 import scala.collection.mutable.Builder as MutBuilder
-import chanterelle.Mode
 
 object Collection {
   opaque type IntoIterator[Elem, Collection] = IsIterableOnce[Collection] { type A = Elem }

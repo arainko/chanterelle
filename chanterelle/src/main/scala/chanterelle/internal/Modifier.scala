@@ -142,7 +142,6 @@ private[chanterelle] object Modifier {
           Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], None)
         )
 
-
       // case cfg @ '{
       //       type f[_]
       //       (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_)

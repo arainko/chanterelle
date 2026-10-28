@@ -1,10 +1,7 @@
 package chanterelle
 
 import chanterelle.hidden.Tuples.Mapped
-import chanterelle.hidden.{
-  TupleModifier,
-  Tuples
-}
+import chanterelle.hidden.{ TupleModifier, Tuples }
 import chanterelle.internal.EntryPoint
 
 import scala.NamedTuple.*

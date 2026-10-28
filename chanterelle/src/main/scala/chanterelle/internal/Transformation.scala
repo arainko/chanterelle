@@ -1,6 +1,5 @@
 package chanterelle.internal
 
-import chanterelle.Mode
 import chanterelle.internal.FallibleInterpreter.TransformationMode
 import chanterelle.internal.Plan.Hoist
 import chanterelle.interop.Collection
@@ -9,7 +8,6 @@ import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
-import scala.annotation.unused
 
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 

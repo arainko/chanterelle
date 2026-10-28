@@ -1,10 +1,8 @@
 package chanterelle
 
-import chanterelle.interop.{ Collection, Mappable }
-
-import scala.collection.Factory
 import chanterelle.interop.Collection.Builder
 import chanterelle.interop.Collection.Builder.Fallible
+import chanterelle.interop.{ Collection, Mappable }
 
 sealed trait Mode[F[_]] extends Mappable[F] { self =>
   type Builder[Elem, Collection] <: Collection.Builder[Elem, Collection] | Collection.Builder.Fallible[F, Elem, Collection]

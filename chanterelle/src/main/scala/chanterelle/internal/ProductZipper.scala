@@ -1,13 +1,13 @@
 package chanterelle.internal
 
-import chanterelle.Mode
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 import scala.annotation.nowarn
 import scala.quoted.*
-import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 private[chanterelle] object ProductZipper {
   type ZippableMode[F[_]] = TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]
+
   /**
    * 'Zips' a product using Mode.Accumulating[F]#zip into a nested Tuple2 then
    * unpacks that said tuple and allows the caller to use the unpacked fields to construct a tree of type Dest.
@@ -28,7 +28,7 @@ private[chanterelle] object ProductZipper {
       case '{ $zipped: F[a] } =>
         '{
           def transform(value: a) = ${ unzipAndConstruct[Dest](reorderedFields, unwrappedFields, 'value, construct) }
-          ${F.value}.map($zipped, transform)
+          ${ F.value }.map($zipped, transform)
         }
     }: @nowarn("msg=unused local definition")
   }

@@ -1,6 +1,6 @@
 package chanterelle
 
-import chanterelle.hidden.Selector
+
 
 class CollectionSpec extends ChanterelleSuite {
 
@@ -19,7 +19,6 @@ class CollectionSpec extends ChanterelleSuite {
       assertEquals(actualFailed, expectedFailed)
     }
   }
-
 
   test("hoisting wrapped fields out of elements accumulates errors (Accumulating)") {
     Mode.Parallel.either[List[String]] {
@@ -74,7 +73,6 @@ class CollectionSpec extends ChanterelleSuite {
         tup.transform(
           _.hoist(_.list),
           _.update(_.list.element.each.x)(_ * 10)
-
         )
 
       val expected = Right((list = List((x = 10), (x = 20))))

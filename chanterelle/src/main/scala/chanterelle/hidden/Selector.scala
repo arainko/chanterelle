@@ -2,9 +2,6 @@ package chanterelle.hidden
 
 import chanterelle.interop.{ Collection, Mappable }
 
-import scala.annotation.{ compileTimeOnly, unused }
-import chanterelle.Mode
-
 sealed trait Selector {
   extension [A](self: Option[A] | Iterable[A]) @deprecated("use .some for Option and .each for Iterable") def element: A
 

@@ -1,15 +1,18 @@
 package chanterelle
 
+import chanterelle.interop.{
+  Collection,
+  Mappable
+}
 import munit.FunSuite
 
 import scala.annotation.nowarn
 import scala.collection.SortedSet
-import scala.collection.immutable.HashMap
+import scala.collection.immutable.{
+  HashMap,
+  SortedMap
+}
 import scala.compiletime.ops.string.*
-import scala.collection.immutable.SortedMap
-import chanterelle.interop.Collection
-import chanterelle.interop.Mappable
-
 
 class ModifiersSpec extends ChanterelleSuite {
   test(".put puts a new field into a named tuple") {
@@ -1002,7 +1005,7 @@ class ModifiersSpec extends ChanterelleSuite {
     given [K, V]: Collection.IntoIterator[(K, V), CusMap[K, V]] = Collection.IntoIterator.from(_.map.iterator)
 
     given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.fromFactory(HashMap).transform(CusMap.apply)
-  
+
     val actual = tup.transform(_.update(_.someField.each._2)(_ * 2))
     val expected = (someField = CusMap(HashMap(1 -> 4, 3 -> 8)))
 

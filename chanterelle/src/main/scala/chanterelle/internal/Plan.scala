@@ -1,5 +1,6 @@
 package chanterelle.internal
 
+import chanterelle.internal.Modifier.Kind
 import chanterelle.internal.Plan.IsModified
 import chanterelle.internal.Plan.Merged.Field
 
@@ -10,7 +11,6 @@ import scala.util.boundary
 import scala.util.boundary.Label
 
 import Plan.Error
-import chanterelle.internal.Modifier.Kind
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -61,7 +61,7 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
       case a: A  => fnA(a)
       case b: B  => fnB(b)
       case c: C  => fnC(c)
-      case d: D => fnD(d)
+      case d: D  => fnD(d)
       case other => Error(errorMessage(other))
     }
 
@@ -120,8 +120,8 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
           val traversedPath = traversed :+ elem
 
           curr.narrow[Plan.Either[Err]](_.updateLeft(recurse(next, traversedPath)))(other =>
-            if other.isInstanceOf[Plan.Wrapped[Err, ?]] then ErrorMessage.CantTraverseLeftSideOfEither(modifier.span) else
-            ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
+            if other.isInstanceOf[Plan.Wrapped[Err, ?]] then ErrorMessage.CantTraverseLeftSideOfEither(modifier.span)
+            else ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
           )
 
         case Nil => apply(modifier, curr, traversed)
@@ -192,10 +192,10 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
                 transformation,
                 {
                   case wrapped: Plan.Wrapped[Err, f] => wrapped.passthroughHoisted
-                  case other => other
+                  case other                         => other
                 }
               )
-            case Some(Modifier.Kind.Regional) => 
+            case Some(Modifier.Kind.Regional) =>
               Plan.Error(ErrorMessage.CantUseHoistRegionalWithAccumulating(modifier.span))
           }
       }

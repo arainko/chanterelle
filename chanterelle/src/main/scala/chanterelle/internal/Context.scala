@@ -1,18 +1,11 @@
 package chanterelle.internal
 
 import chanterelle.Mode
-import chanterelle.internal.Context.{
-  NonFallible,
-  PossiblyFallible,
-  Total
-}
+import chanterelle.internal.Context.{ NonFallible, PossiblyFallible, Total }
 import chanterelle.internal.Debug.AST
 import chanterelle.internal.FallibleInterpreter.TransformationMode
 
-import scala.quoted.{
-  Expr,
-  Quotes
-}
+import scala.quoted.{ Expr, Quotes }
 
 private[chanterelle] object Fallible {
   given Debug[Fallible] with {
@@ -33,7 +26,7 @@ private[chanterelle] sealed trait Context[+F <: Fallible] {
   final def isFallibleFailFast: Boolean =
     this match {
       case ctx: Context.PossibleFallible[?, ?] => ctx.mode.canPassthrough
-      case Context.Total => false
+      case Context.Total                       => false
     }
 }
 
@@ -60,7 +53,7 @@ private[chanterelle] object Context {
   }
 
   case object Total extends Context[Nothing]
-  //TODO: rename to 'weakened'
+  // TODO: rename to 'weakened'
   case class NonFallible[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G]) extends PossibleFallible[Nothing, G]
   case class PossiblyFallible[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G])
       extends PossibleFallible[Fallible, G]

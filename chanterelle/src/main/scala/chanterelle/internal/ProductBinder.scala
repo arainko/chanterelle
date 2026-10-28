@@ -1,10 +1,9 @@
 package chanterelle.internal
 
-import chanterelle.Mode
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 import scala.annotation.*
 import scala.quoted.*
-import chanterelle.internal.FallibleInterpreter.TransformationMode
 
 private[chanterelle] object ProductBinder {
   type FlatmappableMode[F[_]] = TransformationMode.FailFast[F] | TransformationMode.Parallel[F]

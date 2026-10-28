@@ -3,7 +3,6 @@ package chanterelle.internal
 import chanterelle.internal.Plan.ConfedUp
 
 import scala.quoted.*
-import java.sql.Wrapper
 
 private[chanterelle] sealed trait ErrorMessage derives Debug {
   def span: Span | None = None
@@ -58,7 +57,9 @@ private[chanterelle] object ErrorMessage {
     def render(using Quotes) = {
 
       import quotes.reflect.*
-      s"Couldn't find an implicit instance of chanterelle.interop.Collection.Builder for ${tpe.repr.show(using Printer.TypeReprCode)}"
+      s"Couldn't find an implicit instance of chanterelle.interop.Collection.Builder for ${tpe.repr.show(using
+          Printer.TypeReprCode
+        )}"
     }
 
   }
@@ -87,15 +88,18 @@ private[chanterelle] object ErrorMessage {
   }
 
   case class CantHoistNestedFallibleFields(wrapper: WrapperType[?]) extends ErrorMessage {
-    def render(using Quotes): String = 
-      s"It's not possible to hoist nested fallible fields with just a Mode.Accumulating[${Type.show(using wrapper.wrapper)}] in scope - you'll need an instance of Mode.FailFast (or Mode.Accumulating & Mode.FailFast) for ${Type.show(using wrapper.wrapper)} to do so."
+    def render(using Quotes): String =
+      s"It's not possible to hoist nested fallible fields with just a Mode.Accumulating[${Type.show(using wrapper.wrapper)}] in scope - you'll need an instance of Mode.FailFast (or Mode.Accumulating & Mode.FailFast) for ${Type
+          .show(using wrapper.wrapper)} to do so."
   }
 
   case class CantTraverseLeftSideOfEither(override val span: Span) extends ErrorMessage {
-    def render(using Quotes): String = s"Can't traverse the left side of either when operating inside a Mode[Either[_, _]] - this path selector is only available on non-fallible transformations."
+    def render(using Quotes): String =
+      s"Can't traverse the left side of either when operating inside a Mode[Either[_, _]] - this path selector is only available on non-fallible transformations."
   }
 
   case class CantUseHoistRegionalWithAccumulating(override val span: Span) extends ErrorMessage {
-    def render(using Quotes): String = s"'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'"
+    def render(using Quotes): String =
+      s"'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'"
   }
 }

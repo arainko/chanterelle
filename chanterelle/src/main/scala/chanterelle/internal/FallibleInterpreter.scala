@@ -2,17 +2,20 @@ package chanterelle.internal
 
 import chanterelle.Mode
 import chanterelle.internal.Debug.AST
+import chanterelle.internal.FallibleInterpreter.TransformationMode.{
+  Accumulating,
+  FailFast,
+  Parallel
+}
+import chanterelle.internal.Structure.Collection.Repr.{
+  IterLike,
+  MapLike
+}
 import chanterelle.internal.Transformation.{ Field, HoistedTransformation }
 import chanterelle.interop.Collection
 
-import scala.quoted.*
-import chanterelle.internal.Structure.Collection.Repr.MapLike
 import scala.annotation.unused
-import chanterelle.internal.Structure.Collection.Repr.IterLike
-import scala.collection.View.Collect
-import chanterelle.internal.FallibleInterpreter.TransformationMode.Accumulating
-import chanterelle.internal.FallibleInterpreter.TransformationMode.FailFast
-import chanterelle.internal.FallibleInterpreter.TransformationMode.Parallel
+import scala.quoted.*
 
 private[chanterelle] object FallibleInterpreter {
 
@@ -316,7 +319,6 @@ private[chanterelle] object FallibleInterpreter {
   }
   private enum Value[F[x]] {
     final def wrapped(F: TransformationMode[F, ?])(using Quotes, Type[F]) = {
-
       this.runtimeChecked match
         case Unwrapped('{ $value: a }) =>
           '{ ${ F.value }.pure[a](${ value }) }
@@ -360,6 +362,6 @@ private[chanterelle] object FallibleInterpreter {
           case CollBuilder.Total(builder) =>
             '{ Collection.Builder.Fallible.fromTotal(using $exact, ${ builder.unerase[Elem, Coll] }) }
           case cb: CollBuilder.PossiblyFallible[Builder @unchecked] => cb.builder.unerase[Elem, Coll]
-    
+
   }
 }

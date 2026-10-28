@@ -91,7 +91,7 @@ private[chanterelle] object Structure {
   }
 
   case class Wrapped[F[_]](
-    tpe: Type[?], // <-- it's supposed to be F[underlying.tpe]
+    tpe: Type[?], // the literal source slot type; may be narrower than F[underlying] (e.g. Right[Int] for Either[String, Int])
     wrapper: WrapperType[F],
     path: Path,
     mappable: Expr[Mappable[F]],
@@ -112,10 +112,10 @@ private[chanterelle] object Structure {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
 
-        case WrappedType(ExtractedWrapper(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped], mappable = m)) =>
+        case tpe @ WrappedType(ExtractedWrapper(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped], mappable = m)) =>
           @unused given Type[f] = wrapper.wrapper
           Structure.Wrapped[f](
-            Type.of[f[wrapped]],
+            tpe,
             wrapper,
             path,
             m,
