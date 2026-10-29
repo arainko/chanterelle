@@ -2,15 +2,8 @@ package chanterelle.internal
 
 import chanterelle.Mode
 import chanterelle.internal.Debug.AST
-import chanterelle.internal.FallibleInterpreter.TransformationMode.{
-  Accumulating,
-  FailFast,
-  Parallel
-}
-import chanterelle.internal.Structure.Collection.Repr.{
-  IterLike,
-  MapLike
-}
+import chanterelle.internal.FallibleInterpreter.TransformationMode.{ Accumulating, FailFast, Parallel }
+import chanterelle.internal.Structure.Collection.Repr.{ IterLike, MapLike }
 import chanterelle.internal.Transformation.{ Field, HoistedTransformation }
 import chanterelle.interop.Collection
 

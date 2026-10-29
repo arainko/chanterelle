@@ -67,32 +67,12 @@ private[chanterelle] object Interpreter {
           config match {
             case Configured.Update(fn = fn) =>
               Sources.current.get(fn) match { case '{ $fn: (src => out) } => '{ $fn(${ primary.asExprOf[src] }) } }
-
-            // Context.current match {
-            //   case ctx: Context.PossiblyFallible[f] =>
-            //     given Type[f] = ctx.wrapperType.wrapper
-            //     val mode = ctx.mode.asExprOf[Mode.FailFast[f]]
-            //     val prim = StructuredValue.of(source, primary)
-            //     val fields = (0 until source.elements.size).map(idx =>
-            //       new FieldValue.Wrapped[f](
-            //         idx,
-            //         source.elements(idx).asInstanceOf[Structure.Wrapped[f]].wrapped.tpe,
-            //         prim.elementValue(idx).asExprOf[f[Any]]
-            //       )
-            //     )
-            //     val res = unwrappedDest match {
-            //       case '[dest] =>
-            //         ProductBinder.nestFlatMapsAndConstruct[f, dest](mode, Nil, fields.toList, ProductConstructor.Tuple(source))
-            //     }
-            //     res
-            //   case _ => ???
-            // }
           }
 
         case mapped: Transformation.Mapped[f] =>
           @unused given Type[f] = mapped.source.wrapper.wrapper
-          (mapped.source.tpe, mapped.wrapped.outputTpe).runtimeChecked match {
-            case '[`f`[a]] -> '[b] =>
+          (mapped.source.wrapped.tpe, mapped.wrapped.outputTpe).runtimeChecked match {
+            case '[a] -> '[b] =>
               val src = primary.asExprOf[f[a]]
               '{ ${ mapped.source.mappable }.map[a, b]($src, a => ${ runTransformation('a, mapped.wrapped).asExprOf[b] }) }
           }
@@ -115,7 +95,8 @@ private[chanterelle] object Interpreter {
                       .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
                       .to[coll[elem]]($f)
                   }
-                case '{ $srcValue: `coll`[`srcElem`] } =>
+                case _ =>
+                  val srcValue = primary.asExprOf[coll[srcElem]]
                   val isColl = source.intoIter.unerase[srcElem, coll[srcElem]]
                   '{
                     $isColl
@@ -134,7 +115,8 @@ private[chanterelle] object Interpreter {
               outputTpe
             ) =>
           @unused given Type[outMap] = source.tycon
-          (outputTpe, primary).runtimeChecked match {
+
+          (outputTpe, primary) match {
             case (
                   '[`outMap`[outKey, outValue]],
                   '{ $srcValue: collection.Map[srcKey, srcValue] }
@@ -153,27 +135,38 @@ private[chanterelle] object Interpreter {
                   )
                   .to[outMap[outKey, outValue]]($factory)
               }
-            case (
-                  '[`outMap`[outKey, outValue]],
-                  '{ $srcValue: `outMap`[srcKey, srcValue] }
-                ) =>
-              val isColl = source.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
-              val factory = fac match {
-                case CollBuilder.Total(builder) => builder.unerase[(outKey, outValue), outMap[outKey, outValue]]
-              }
 
-              '{
-                $isColl
-                  .iterator(
-                    $srcValue
-                  )
-                  .map[(outKey, outValue)]((k, v) =>
-                    (
-                      ${ runTransformation('k, keyTransformation).asExprOf[outKey] },
-                      ${ runTransformation('v, valueTransformation).asExprOf[outValue] }
-                    )
-                  )
-                  .to[outMap[outKey, outValue]]($factory)
+            case _ =>
+              (
+                keyTransformation.outputTpe,
+                valueTransformation.outputTpe,
+                source.key.tpe,
+                source.value.tpe
+              ).runtimeChecked match {
+                case (
+                      '[outKey],
+                      '[outValue],
+                      '[srcKey],
+                      '[srcValue]
+                    ) =>
+                  val srcValue = primary.asExprOf[outMap[srcKey, srcValue]]
+                  val isColl = source.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
+                  val factory = fac match {
+                    case CollBuilder.Total(builder) => builder.unerase[(outKey, outValue), outMap[outKey, outValue]]
+                  }
+                  '{
+                    $isColl
+                      .iterator(
+                        $srcValue
+                      )
+                      .map[(outKey, outValue)]((k, v) =>
+                        (
+                          ${ runTransformation('k, keyTransformation).asExprOf[outKey] },
+                          ${ runTransformation('v, valueTransformation).asExprOf[outValue] }
+                        )
+                      )
+                      .to[outMap[outKey, outValue]]($factory)
+                  }
               }
           }
 

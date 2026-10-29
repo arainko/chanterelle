@@ -1,7 +1,5 @@
 package chanterelle
 
-
-
 class CollectionSpec extends ChanterelleSuite {
 
   test("hoisting a wrapped field of every element escapes through the collection (FailFast)") {

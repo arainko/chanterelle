@@ -1,17 +1,11 @@
 package chanterelle
 
-import chanterelle.interop.{
-  Collection,
-  Mappable
-}
+import chanterelle.interop.{ Collection, Mappable }
 import munit.FunSuite
 
 import scala.annotation.nowarn
 import scala.collection.SortedSet
-import scala.collection.immutable.{
-  HashMap,
-  SortedMap
-}
+import scala.collection.immutable.{ HashMap, SortedMap }
 import scala.compiletime.ops.string.*
 
 class ModifiersSpec extends ChanterelleSuite {
