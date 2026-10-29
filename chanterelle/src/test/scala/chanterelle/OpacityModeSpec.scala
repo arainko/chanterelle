@@ -1,5 +1,7 @@
 package chanterelle
 
+import scala.collection.immutable.HashMap
+
 class OpacityModeSpec extends ChanterelleSuite {
 
   import OpaqueFixtures.*
@@ -172,6 +174,131 @@ class OpacityModeSpec extends ChanterelleSuite {
       val actualFailed = failing.transform(_.hoist(_.vec.each))
 
       val expectedOk = OpqEitherAcc(Right((vec = OpqVec(Vector(1, 2)))))
+      val expectedFailed = OpqEitherAcc(Left(List("boom")))
+
+      assertEquals(actualOk, expectedOk)
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+
+// TODO: crashes :(:(:()))
+  test("hoisting through an opaque custom Mappable wrapper in the opaque FailFast mode") {
+    OpqOpt.failFast {
+      val ok = (field = OpqOpt(Some(OpqBox((inner = OpqOpt(Some(1))), "t"))))
+      val failing = (field = OpqOpt(Some(OpqBox((inner = OpqOpt(None)), "t"))))
+
+      val actualOk = ok.transform(_.hoist(_.field.element.element.inner))
+      val actualFailed = failing.transform(_.hoist(_.field.element.element.inner))
+
+      val expectedOk = OpqOpt(Some((field = OpqBox((inner = 1), "t"))))
+      val expectedFailed = OpqOpt(None)
+
+      assertEquals(actualOk, expectedOk)
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+//
+  test("hoisting through an opaque custom collection in the opaque FailFast mode") {
+    OpqOpt.failFast {
+      val ok = (field = OpqOpt(Some(OpqVec(Vector(OpqOpt(Some((inner = 1))), OpqOpt(Some((inner = 2))))))))
+      val failing = (field = OpqOpt(Some(OpqVec(Vector(OpqOpt(Some((inner = 1))), OpqOpt(None))))))
+
+      val actualOk = ok.transform(_.hoist(_.field.element.each))
+      val actualFailed = failing.transform(_.hoist(_.field.element.each))
+
+      val expectedOk = OpqOpt(Some((field = OpqVec(Vector((inner = 1), (inner = 2))))))
+      val expectedFailed = OpqOpt(None)
+
+      assertEquals(actualOk, expectedOk)
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+
+  test("hoisting through an opaque custom map in the opaque FailFast mode") {
+    OpqOpt.failFast {
+      val ok = (field = OpqOpt(Some(OpqMap(HashMap("a" -> OpqOpt(Some((inner = 1))))))))
+      val failing = (field = OpqOpt(Some(OpqMap(HashMap("a" -> OpqOpt(None))))))
+
+      val actualOk = ok.transform(_.hoist(_.field.element.each._2))
+      val actualFailed = failing.transform(_.hoist(_.field.element.each._2))
+
+      val expectedOk = OpqOpt(Some((field = OpqMap(HashMap("a" -> (inner = 1))))))
+      val expectedFailed = OpqOpt(None)
+
+      assertEquals(actualOk, expectedOk)
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+
+// TODO: crashes :(
+  test("hoisting through an opaque custom Mappable wrapper in the opaque parallel mode") {
+    OpqEither.parallel {
+      val ok = (field = OpqEither(Right(OpqBox((inner = OpqEither(Right(1))), "t"))))
+      val failing = (field = OpqEither(Right(OpqBox((inner = OpqEither(Left(List("boom")))), "t"))))
+
+      val actualOk = ok.transform(_.hoist(_.field.element.element.inner))
+      val actualFailed = failing.transform(_.hoist(_.field.element.element.inner))
+
+      val expectedOk = OpqEither(Right((field = OpqBox((inner = 1), "t"))))
+      val expectedFailed = OpqEither(Left(List("boom")))
+
+      assertEquals(actualOk, expectedOk)
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+//
+  test("hoisting through an opaque custom collection in the opaque parallel mode") {
+    OpqEither.parallel {
+      val ok = (field = OpqEither(Right(OpqVec(Vector(OpqEither(Right((inner = 1))), OpqEither(Right((inner = 2))))))))
+      val failing = (field = OpqEither(Right(OpqVec(Vector(OpqEither(Right((inner = 1))), OpqEither(Left(List("boom"))))))))
+
+      val actualOk = ok.transform(_.hoist(_.field.element.each))
+      val actualFailed = failing.transform(_.hoist(_.field.element.each))
+
+      val expectedOk = OpqEither(Right((field = OpqVec(Vector((inner = 1), (inner = 2))))))
+      val expectedFailed = OpqEither(Left(List("boom")))
+
+      assertEquals(actualOk, expectedOk)
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+
+  test("hoisting through an opaque custom map in the opaque parallel mode") {
+    OpqEither.parallel {
+      val ok = (field = OpqEither(Right(OpqMap(HashMap("a" -> OpqEither(Right((inner = 1))))))))
+      val failing = (field = OpqEither(Right(OpqMap(HashMap("a" -> OpqEither(Left(List("boom"))))))))
+
+      val actualOk = ok.transform(_.hoist(_.field.element.each._2))
+      val actualFailed = failing.transform(_.hoist(_.field.element.each._2))
+
+      val expectedOk = OpqEither(Right((field = OpqMap(HashMap("a" -> (inner = 1))))))
+      val expectedFailed = OpqEither(Left(List("boom")))
+
+      assertEquals(actualOk, expectedOk)
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+
+  test("hoisting through an opaque custom Mappable wrapper needs FailFast in the opaque accumulating mode") {
+    assertFailsToCompileContains {
+      """
+      OpqEitherAcc.accumulating {
+        val tup = (field = OpqBox((inner = OpqEitherAcc(Right(1))), "t"))
+        tup.transform(_.hoist(_.field.element.inner))
+      }
+      """
+    }("It's not possible to hoist nested fallible fields with just a Mode.Accumulating")
+  }
+
+  test("hoisting through an opaque custom map in the opaque accumulating mode") {
+    OpqEitherAcc.accumulating {
+      val ok = (field = OpqMap(HashMap("a" -> OpqEitherAcc(Right((inner = 1))))))
+      val failing = (field = OpqMap(HashMap("a" -> OpqEitherAcc(Left(List("boom"))))))
+
+      val actualOk = ok.transform(_.hoist(_.field.each._2))
+      val actualFailed = failing.transform(_.hoist(_.field.each._2))
+
+      val expectedOk = OpqEitherAcc(Right((field = OpqMap(HashMap("a" -> (inner = 1))))))
       val expectedFailed = OpqEitherAcc(Left(List("boom")))
 
       assertEquals(actualOk, expectedOk)

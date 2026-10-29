@@ -14,5 +14,5 @@ sealed trait Selector {
 
   extension [Coll](self: Coll) def each[Elem](using Collection.IntoIterator[Elem, Coll]): Elem
 
-  extension [A](self: A) def element[F[_], Elem](using ev: A <:< F[Elem], mappable: Mappable[F]): Elem
+  extension [A](self: A) def element[F[_], Elem](using A <:< F[Elem], Mappable[F]): Elem
 }
