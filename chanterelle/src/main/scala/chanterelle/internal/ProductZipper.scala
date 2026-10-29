@@ -23,27 +23,30 @@ private[chanterelle] object ProductZipper {
   )(construct: ProductConstructor)(using Quotes): Expr[F[Dest]] = {
     val reorderedFields = wrappedFields.reverse
 
+    val (zippedValue, zippedTpe) = zipFields[F](F, reorderedFields)
+
     // using a method for 'transform' fixes a bunch of owner issues reported by -Xcheck-macros
-    zipFields[F](F, reorderedFields) match {
-      case '{ $zipped: F[a] } =>
+    zippedTpe match {
+      case '[a] =>
         '{
           def transform(value: a) = ${ unzipAndConstruct[Dest](reorderedFields, unwrappedFields, 'value, construct) }
-          ${ F.value }.map($zipped, transform)
+          ${ F.value }.map(${ zippedValue.asExprOf[F[a]] }, transform)
         }
     }: @nowarn("msg=unused local definition")
   }
 
+  // so this could be implemented in a way way way WAY easier way without tracking the zipped type but it falls apart in presence of opaque types :):):)
   private def zipFields[F[x]: Type](
     F: ZippableMode[F],
     wrappedFields: NonEmptyList[FieldValue.Wrapped[F]]
   )(using Quotes) = {
-    val zipped = wrappedFields.map(_.value).reduceLeft { (accumulated, current) =>
-      (accumulated -> current).runtimeChecked match {
-        case '{ $accumulated: F[a] } -> '{ $current: F[b] } =>
-          F.zip[`b`, `a`](current, accumulated)
-      }: @nowarn("msg=unused local definition")
-    }
-    alignOwner(zipped).asExprOf[F[Any]]
+    val first = wrappedFields.head
+    val (zippedValue, zippedTpe) = wrappedFields.tail.foldLeft((first.value, first.tpe)) {
+      case (accValue, '[accTpe]) -> FieldValue.Wrapped(tpe = '[fieldTpe], value = fieldValue) =>
+        val nextTpe = Type.of[(fieldTpe, accTpe)]
+        F.zip[fieldTpe, accTpe](fieldValue.asExprOf[F[fieldTpe]], accValue.asExprOf[F[accTpe]]) -> nextTpe
+    }: @nowarn("msg=match may not be exhaustive")
+    alignOwner(zippedValue) -> zippedTpe
   }
 
   private def unzipAndConstruct[Dest: Type](

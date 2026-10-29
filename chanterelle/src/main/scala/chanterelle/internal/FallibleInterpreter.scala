@@ -174,8 +174,8 @@ private[chanterelle] object FallibleInterpreter {
           case merged: (Transformation.Merged | Transformation.Mapped[f]) =>
             Value.Unwrapped(nonfallibleTransformation(source, merged))
           case t: Transformation.Hoisted[f] =>
-            (t.source.tpe, t.outputTpe).runtimeChecked match {
-              case '[F[src]] -> '[out] =>
+            (t.source.wrapped.tpe, t.outputTpe).runtimeChecked match {
+              case '[src] -> '[out] =>
                 val src = source.asExprOf[F[src]]
                 (t.wrapped) match {
                   case HoistedTransformation.Passthrough(wrapped, mode) =>
@@ -315,7 +315,7 @@ private[chanterelle] object FallibleInterpreter {
       this.runtimeChecked match
         case Unwrapped('{ $value: a }) =>
           '{ ${ F.value }.pure[a](${ value }) }
-        case Wrapped('{ $value: F[a] }) =>
+        case Wrapped(value) =>
           value
     }
 
