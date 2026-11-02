@@ -6,9 +6,22 @@ class MappableSpec extends ChanterelleSuite {
 
   private case class Box[+A](value: A, tag: String)
 
-  private given Mappable[Box] = new Mappable[Box] {
-    def map[A, B](fa: Box[A], f: A => B): Box[B] = Box(f(fa.value), fa.tag)
+  private object Box {
+
+    given Mappable[Box] = new Mappable[Box] {
+      def map[A, B](fa: Box[A], f: A => B): Box[B] = Box(f(fa.value), fa.tag)
+    }
   }
+
+  private case class Box2[+A](value: A, tag: String)
+
+  private object Box2 {
+
+    given Mappable[Box2] = new Mappable[Box2] {
+      def map[A, B](fa: Box2[A], f: A => B): Box2[B] = Box2(f(fa.value), fa.tag)
+    }
+  }
+
 
   test("update inside a custom Mappable wrapper maps over it non-fallibly (wrapper data preserved)") {
     val tup = (field = Box((x = 1), "keep me"))
@@ -76,10 +89,10 @@ class MappableSpec extends ChanterelleSuite {
   }
 
   test("custom Mappable wrapper nested in another custom Mappable wrapper") {
-    val tup = (field = Box(Box((x = 1), "inner"), "outer"))
+    val tup = (field = Box(Box2((x = 1), "inner"), "outer"))
 
     val actual = tup.transform(_.update(_.field.element.element.x)(_ + 1))
-    val expected = (field = Box(Box((x = 2), "inner"), "outer"))
+    val expected = (field = Box(Box2((x = 2), "inner"), "outer"))
 
     assertEquals(actual, expected)
   }

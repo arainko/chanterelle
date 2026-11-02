@@ -2,7 +2,7 @@ package chanterelle
 
 import scala.collection.immutable.HashMap
 
-class OpacityModeSpec extends ChanterelleSuite {
+class OpaqueModeSpec extends ChanterelleSuite {
 
   import OpaqueFixtures.*
 

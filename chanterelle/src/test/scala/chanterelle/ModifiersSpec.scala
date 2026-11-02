@@ -959,8 +959,11 @@ class ModifiersSpec extends ChanterelleSuite {
 
   test("custom mappable type works") {
     case class CusVector[+A](vec: Vector[A])
-    given Mappable[CusVector] with {
-      def map[A, B](fa: CusVector[A], f: A => B) = fa.copy(vec = fa.vec.map(f))
+
+    object CusVector {
+      given Mappable[CusVector] with {
+        def map[A, B](fa: CusVector[A], f: A => B) = fa.copy(vec = fa.vec.map(f))
+      }
     }
 
     val tup = (someField = CusVector(Vector(1, 2, 3, 4)))
@@ -975,15 +978,16 @@ class ModifiersSpec extends ChanterelleSuite {
   test("custom collection type works") {
     case class CusVector[+A](vec: Vector[A])
 
+    object CusVector {
+      given [A]: Collection.IntoIterator[A, CusVector[A]] =
+        Collection.IntoIterator.from(_.vec.iterator)
+
+      given [A]: Collection.Builder[A, CusVector[A]] =
+        Collection.Builder
+          .fromFactory(Vector)
+          .transform(CusVector.apply)
+    }
     val tup = (someField = CusVector(Vector(1, 2, 3, 4)))
-
-    given [A]: Collection.IntoIterator[A, CusVector[A]] =
-      Collection.IntoIterator.from(_.vec.iterator)
-
-    given [A]: Collection.Builder[A, CusVector[A]] =
-      Collection.Builder
-        .fromFactory(Vector)
-        .transform(CusVector.apply)
 
     val actual = tup.transform(_.update(_.someField.each)(_.toString))
     val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
@@ -994,11 +998,12 @@ class ModifiersSpec extends ChanterelleSuite {
   test("custom map type works") {
     case class CusMap[K, +V](map: HashMap[K, V])
 
+    object CusMap {
+      given [K, V]: Collection.IntoIterator[(K, V), CusMap[K, V]] = Collection.IntoIterator.from(_.map.iterator)
+
+      given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.fromFactory(HashMap).transform(CusMap.apply)
+    }
     val tup = (someField = CusMap(HashMap(1 -> 2, 3 -> 4)))
-
-    given [K, V]: Collection.IntoIterator[(K, V), CusMap[K, V]] = Collection.IntoIterator.from(_.map.iterator)
-
-    given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.fromFactory(HashMap).transform(CusMap.apply)
 
     val actual = tup.transform(_.update(_.someField.each._2)(_ * 2))
     val expected = (someField = CusMap(HashMap(1 -> 4, 3 -> 8)))

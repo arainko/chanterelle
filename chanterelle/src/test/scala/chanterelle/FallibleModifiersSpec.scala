@@ -459,7 +459,6 @@ class FallibleModifiersSpec extends ChanterelleSuite {
             val actualOk = ok.transform(
               _.hoist(_.field.some.element.inner)
             )
-            // assertEquals(actualOk, Some((field = OpqBox((inner = 1), "t"))))
         }
       """
     }("Using '.element' inside of a '.hoist' with just an implicit instance of Mappable[NonOpqBox] is not possible.")

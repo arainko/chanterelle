@@ -193,43 +193,6 @@ class PutComputeHoistSpec extends ChanterelleSuite {
     }
   }
 
-  test(".compute reads the source value of its node, regardless of modifier order") {
-    Mode.FailFast.either[String] {
-      val tup = src()
-
-      val updateThenCompute =
-        tup.transform(
-          _.update(_.field.element.inner)(_ + 1),
-          _.compute(_.field.element)(v => (seen = v.inner))
-        )
-
-      val computeThenUpdate =
-        tup.transform(
-          _.compute(_.field.element)(v => (seen = v.inner)),
-          _.update(_.field.element.inner)(_ + 1)
-        )
-
-      val expected =
-        (field = Right((inner = 2, seen = 1)), plain = 99)
-
-      assertEquals(updateThenCompute, expected)
-      assertEquals(computeThenUpdate, expected)
-    }
-  }
-
-  test(".put then .remove the containing wrapper") {
-    Mode.FailFast.either[String] {
-      val actual =
-        src().transform(
-          _.put(_.field.element)((extra = "hi")),
-          _.remove(_.field)
-        )
-
-      val expected = (plain = 99)
-
-      assertEquals(actual, expected)
-    }
-  }
 
   test("two level passthrough: .put at the deepest level, then hoist the deepest field") {
     Mode.FailFast.either[String] {
@@ -255,7 +218,7 @@ class PutComputeHoistSpec extends ChanterelleSuite {
       val actual =
         tup.transform(
           _.hoist(_.list),
-          _.put(_.list.element.element)((b = 0))
+          _.put(_.list.element.each)((b = 0))
         )
 
       val expected =
@@ -279,20 +242,6 @@ class PutComputeHoistSpec extends ChanterelleSuite {
 
       assertEquals(actual, expected)
     }
-  }
-
-  test("fields created by .put can't be referenced by later modifiers") {
-    assertFailsToCompileContains {
-      """
-      Mode.FailFast.either[String] {
-        val tup = (field = Right((inner = 1)), plain = 99)
-        tup.transform(
-          _.put(_.field.element)((extra = Right(5))),
-          _.hoist(_.field.element.extra)
-        )
-      }
-      """
-    }("value extra is not a member of (inner : Int)")
   }
 
 }

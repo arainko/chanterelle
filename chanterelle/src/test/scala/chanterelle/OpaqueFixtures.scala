@@ -5,6 +5,7 @@ import chanterelle.interop.Collection.IntoIterator
 import chanterelle.interop.{ Collection, Mappable }
 
 import scala.collection.immutable.HashMap
+import scala.annotation.nowarn
 
 object OpaqueFixtures {
 
@@ -70,6 +71,8 @@ object OpaqueFixtures {
     def apply[A](e: Either[List[String], A]): OpqEitherAcc[A] = e
 
     private val underlyingMode = Mode.Parallel.either[List[String]]
+    
+    @nowarn("msg=unused")
     val accumulating: Mode.Accumulating[OpqEitherAcc] = new {
       export underlyingMode.{ Builder as _, traverseCollection as _, * }
 
