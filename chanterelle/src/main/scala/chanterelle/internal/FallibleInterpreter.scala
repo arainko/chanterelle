@@ -184,7 +184,7 @@ private[chanterelle] object FallibleInterpreter {
                         val failFast = ff.asExprOf[Mode.FailFast[F]]
                         Value.Wrapped {
                           '{
-                            $failFast.flatMap(
+                            $failFast.flatMap[src, out](
                               $src,
                               src => ${ recurse[F, CollBuilder](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
                             )
@@ -194,7 +194,7 @@ private[chanterelle] object FallibleInterpreter {
                         val parallel = par.asExprOf[Mode.Parallel[F]]
                         Value.Wrapped {
                           '{
-                            $parallel.flatMap(
+                            $parallel.flatMap[src, out](
                               $src,
                               src => ${ recurse[F, CollBuilder](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
                             )
@@ -205,7 +205,7 @@ private[chanterelle] object FallibleInterpreter {
                     Value.Wrapped {
                       '{
                         ${ F.value }
-                          .map(
+                          .map[src, out](
                             $src,
                             src => ${ Context.current.weaken.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
                           )

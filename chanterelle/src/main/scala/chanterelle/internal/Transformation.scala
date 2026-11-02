@@ -8,13 +8,16 @@ import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
+import chanterelle.internal.Debug.LabelColor
 
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
   def outputTpe: Type[?]
 }
 
-object Transformation {
+private[chanterelle] object Transformation {
+  private[chanterelle] given LabelColor = LabelColor.create(_.MAGENTA)
+
   case class Named[+F <: Fallible](
     source: Structure.Named,
     fields: VectorMap[String, Transformation.Field[F]],

@@ -15,6 +15,11 @@ private[chanterelle] trait Debug[-A] {
 @scala.annotation.publicInBinary
 private[chanterelle] object Debug extends LowPriorityDebug {
   import AST.*
+  opaque type LabelColor <: String = String
+
+  object LabelColor {
+    def create(console: Console.type => String): LabelColor = console(Console)
+  }
 
   val nonShowable: Debug[Any] = new:
     def astify(self: Any)(using Quotes): AST = Empty
@@ -23,7 +28,7 @@ private[chanterelle] object Debug extends LowPriorityDebug {
 
   given pair[A, B](using A: Debug[A], B: Debug[B]): Debug[(A, B)] with {
     override def astify(self: (A, B))(using Quotes): AST =
-      AST.Product("Tuple2", VectorMap("_1" -> A.astify(self._1), "_2" -> B.astify(self._2)))
+      AST.Product("Tuple2", VectorMap("_1" -> A.astify(self._1), "_2" -> B.astify(self._2)), LabelColor.create(_.YELLOW))
   }
 
   given string: Debug[String] with {
@@ -65,7 +70,13 @@ private[chanterelle] object Debug extends LowPriorityDebug {
       Collection(
         "Map",
         self
-          .map((key, value) => Product("Entry", VectorMap("key" -> debugKey.astify(key), "value" -> debugValue.astify(value))))
+          .map((key, value) =>
+            Product(
+              "Entry",
+              VectorMap("key" -> debugKey.astify(key), "value" -> debugValue.astify(value)),
+              LabelColor.create(_.YELLOW)
+            )
+          )
           .toVector
       )
     }
@@ -106,13 +117,21 @@ private[chanterelle] object Debug extends LowPriorityDebug {
       case Logger.Level.Off => nonShowable
       case _                =>
         inline A match {
-          case given Mirror.ProductOf[A] => product
-          case given Mirror.SumOf[A]     => coproduct
+          case given Mirror.ProductOf[A] =>
+            summonFrom {
+              case color @ given LabelColor => product
+              case _                        => product(using summon, LabelColor.create(_.YELLOW))
+            }
+          case given Mirror.SumOf[A] => coproduct
         }
     }
 
-  private[chanterelle] class ForProduct[A](tpeName: String, fieldNames: List[String], _instances: => IArray[Debug[Any]])
-      extends Debug[A] {
+  private[chanterelle] class ForProduct[A](
+    tpeName: String,
+    fieldNames: List[String],
+    _instances: => IArray[Debug[Any]],
+    color: LabelColor
+  ) extends Debug[A] {
     private lazy val instances = _instances
     def astify(self: A)(using Quotes): AST = {
       val prod = self.asInstanceOf[scala.Product]
@@ -125,11 +144,11 @@ private[chanterelle] object Debug extends LowPriorityDebug {
         }
         .to(VectorMap)
 
-      Product(tpeName, fields)
+      Product(tpeName, fields, color)
     }
   }
 
-  private inline def product[A](using A: Mirror.ProductOf[A]): Debug[A] = {
+  private inline def product[A](using A: Mirror.ProductOf[A], Color: LabelColor): Debug[A] = {
     val tpeName =
       inline erasedValue[A] match {
         case _: NamedTuple.AnyNamedTuple => ""
@@ -139,7 +158,7 @@ private[chanterelle] object Debug extends LowPriorityDebug {
       case fields: List[String] => fields
     }
     def instances = summonAll[Tuple.Map[A.MirroredElemTypes, Debug]].toIArray.map(_.asInstanceOf[Debug[Any]])
-    ForProduct(tpeName, fieldNames, instances)
+    ForProduct(tpeName, fieldNames, instances, Color)
   }
 
   private[chanterelle] class ForCoproduct[A](instances: Vector[Debug[Any]])(using A: Mirror.SumOf[A]) extends Debug[A] {
@@ -162,22 +181,23 @@ private[chanterelle] object Debug extends LowPriorityDebug {
   enum AST {
     case Empty
     case Text(value: String)
-    case Product(name: String, fields: VectorMap[String, AST])
+    case Product(name: String, fields: VectorMap[String, AST], labelColor: String)
     case Collection(name: String, values: Vector[AST])
 
     final def dropEmpty: AST =
       this match
-        case Empty                 => Empty
-        case t @ Text(_)           => t
-        case Product(name, fields) => Product(name, fields.collect { case (name, ast) if ast != Empty => name -> ast.dropEmpty })
+        case Empty                        => Empty
+        case t @ Text(_)                  => t
+        case Product(name, fields, color) =>
+          Product(name, fields.collect { case (name, ast) if ast != Empty => name -> ast.dropEmpty }, color)
         case Collection(name, values) => Collection(name, values.collect { case ast if ast != Empty => ast.dropEmpty })
 
     final def length: Int =
       this match
-        case Empty                    => 0
-        case Text(value)              => value.length
-        case Product(name, fields)    => name.length + fields.map((name, ast) => name.length + ast.length).sum
-        case Collection(name, values) => name.length + values.map(_.length).sum
+        case Empty                        => 0
+        case Text(value)                  => value.length
+        case Product(name, fields, color) => name.length + fields.map((name, ast) => name.length + ast.length).sum
+        case Collection(name, values)     => name.length + values.map(_.length).sum
 
     final def show(using UseColors): String = {
       def ident(n: Int) = "  " * n
@@ -187,17 +207,17 @@ private[chanterelle] object Debug extends LowPriorityDebug {
 
       def recurse(ast: AST, depth: Int): String = {
         ast match
-          case Empty                     => ""
-          case Text(value)               => value
-          case p @ Product(name, fields) =>
+          case Empty                            => ""
+          case Text(value)                      => value
+          case p @ Product(name, fields, color) =>
             if p.length >= 80 then {
               s"$name(".bold + Separator +
                 fields.map { (name, ast) =>
-                  ident(depth + 1) + name.yellow + " = ".yellow + recurse(ast, depth + 1)
+                  ident(depth + 1) + name.custom(color) + " = ".custom(color) + recurse(ast, depth + 1)
                 }.mkString("," + Separator) + Separator + ident(depth) + ")".bold
             } else {
               name.bold + "(".bold + fields
-                .map((name, ast) => name.yellow + " = ".yellow + recurse(ast, 0))
+                .map((name, ast) => name.custom(color) + " = ".custom(color) + recurse(ast, 0))
                 .mkString(", ") + ")".bold
             }
 
@@ -219,9 +239,9 @@ private[chanterelle] object Debug extends LowPriorityDebug {
         if useColors == UseColors.Yes then s"${Console.BOLD}$self${Console.RESET}"
         else self
       }
-      private def yellow: String =
-        if useColors == UseColors.Yes then s"${Console.YELLOW}$self${Console.RESET}"
-        else self
+
+      private def custom(colorEscape: String): String =
+        if useColors == UseColors.Yes then s"$colorEscape$self${Console.RESET}" else self
     }
 
   }

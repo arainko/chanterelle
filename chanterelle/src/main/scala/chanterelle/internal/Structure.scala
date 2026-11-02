@@ -7,6 +7,7 @@ import scala.annotation.unused
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
+import chanterelle.internal.Debug.LabelColor
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -19,6 +20,7 @@ private[chanterelle] sealed trait Structure extends scala.Product derives Debug 
 }
 
 private[chanterelle] object Structure {
+  private[chanterelle] given LabelColor = LabelColor.create(_.GREEN)
 
   def unapply(struct: Structure): Structure = struct
 

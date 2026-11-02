@@ -11,6 +11,7 @@ import scala.util.boundary
 import scala.util.boundary.Label
 
 import Plan.Error
+import chanterelle.internal.Debug.LabelColor
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type
@@ -264,6 +265,8 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 }
 
 private[chanterelle] object Plan {
+  private[chanterelle] given LabelColor = LabelColor.create(_.BLUE)
+
   given Debug[Plan[Err]] = Debug.derived
 
   def create(structure: Structure): Plan[Nothing] = {
