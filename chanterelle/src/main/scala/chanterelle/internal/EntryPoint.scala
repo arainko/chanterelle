@@ -32,6 +32,8 @@ object EntryPoint {
         .refine
         .leftMap(ErrorsWithSpan)
       given Sources = builder.build
+      _ = Logger.debug("Initial plan", plan)
+      _ = Logger.debug("Refined plan", refinedPlan)
       expr <- Context.current match {
         case ctx @ given (Context.Total.type | Context.NonFallible[f]) =>
           Transformation

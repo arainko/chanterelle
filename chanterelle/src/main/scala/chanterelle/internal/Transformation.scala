@@ -1,14 +1,15 @@
 package chanterelle.internal
 
+import chanterelle.internal.Debug.LabelColor
 import chanterelle.internal.FallibleInterpreter.TransformationMode
 import chanterelle.internal.Plan.Hoist
+import chanterelle.internal.Structure.MappableInstance
 import chanterelle.interop.Collection
 
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
-import chanterelle.internal.Debug.LabelColor
 
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
@@ -202,26 +203,29 @@ private[chanterelle] object Transformation {
                     p.calculateTpe
                   )
                 case Hoist.Passthrough | Hoist.Yes =>
-                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext())
+                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
               }
             case ctx @ given Context.PossiblyFallible[`f`] =>
-              (p.isHoisted, ctx.mode) match
-                case Plan.Hoist.Passthrough -> (tm @ TransformationMode.FailFast(mode)) =>
+              (p.isHoisted, p.source.mappable) match
+                case Plan.Hoist.Passthrough -> (MappableInstance.Contextual(tm @ TransformationMode.FailFast(_))) =>
                   Transformation.Hoisted(
                     p.source,
                     HoistedTransformation.Passthrough(recurse(p.wrapped), tm),
                     p.wrapped.calculateTpe
                   )
 
-                case Plan.Hoist.Passthrough -> (tm @ TransformationMode.Parallel(_)) =>
+                case Plan.Hoist.Passthrough -> (MappableInstance.Contextual(tm @ TransformationMode.Parallel(_))) =>
                   Transformation.Hoisted(
                     p.source,
                     HoistedTransformation.Passthrough(recurse(p.wrapped), tm),
                     p.wrapped.calculateTpe
                   )
 
-                case Plan.Hoist.Passthrough -> TransformationMode.Accumulating(_) =>
+                case Plan.Hoist.Passthrough -> MappableInstance.Contextual(TransformationMode.Accumulating(_)) =>
                   boundary.break(ErrorMessage.CantHoistNestedFallibleFields(ctx.wrapperType))
+
+                case (Plan.Hoist.Passthrough | Plan.Hoist.Yes) -> MappableInstance.TypeSpecific(mappable) =>
+                  boundary.break(ErrorMessage.CantHoistThroughMappable(p.source.wrapper))
 
                 case Plan.Hoist.Yes -> _ =>
                   Transformation.Hoisted(

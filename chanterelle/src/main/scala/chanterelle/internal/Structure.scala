@@ -1,4 +1,6 @@
 package chanterelle.internal
+import chanterelle.internal.Debug.LabelColor
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 import chanterelle.internal.Structure.Leaf
 import chanterelle.interop.Collection.IntoIterator
 import chanterelle.interop.Mappable
@@ -7,7 +9,6 @@ import scala.annotation.unused
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
-import chanterelle.internal.Debug.LabelColor
 
 private[chanterelle] sealed trait Structure extends scala.Product derives Debug {
   def tpe: Type[?]
@@ -96,7 +97,7 @@ private[chanterelle] object Structure {
     tpe: Type[?], // the literal source slot type; may be narrower than F[underlying] (e.g. Right[Int] for Either[String, Int])
     wrapper: WrapperType[F],
     path: Path,
-    mappable: Expr[Mappable[F]],
+    mappable: MappableInstance[F],
     wrapped: Structure
   ) extends Structure
 
@@ -236,7 +237,17 @@ private[chanterelle] object Structure {
     }
   }
 
-  private case class ExtractedWrapper[F[_]](wrapper: WrapperType[F], wrapped: Type[?], mappable: Expr[Mappable[F]])
+  enum MappableInstance[F[_]](val value: Expr[Mappable[F]]) {
+
+    case Contextual(mode: TransformationMode[F, ?]) extends MappableInstance(mode.value)
+    case TypeSpecific(mappable: Expr[Mappable[F]]) extends MappableInstance(mappable)
+  }
+
+  object MappableInstance {
+    given Debug[MappableInstance[?]] = Debug.derived
+  }
+
+  private case class ExtractedWrapper[F[_]](wrapper: WrapperType[F], wrapped: Type[?], mappable: MappableInstance[F])
 
   private object WrappedType {
     def unapply(
@@ -251,7 +262,13 @@ private[chanterelle] object Structure {
           case (tycon = '[type f[_]; f], args = wrapped :: Nil) =>
             Expr
               .summon[Mappable[f]]
-              .map(mappable => ExtractedWrapper(wrapper = WrapperType.create[f], wrapped = wrapped, mappable = mappable))
+              .map(mappable =>
+                ExtractedWrapper(
+                  wrapper = WrapperType.create[f],
+                  wrapped = wrapped,
+                  mappable = MappableInstance.TypeSpecific(mappable)
+                )
+              )
         }
         .flatten
 
@@ -259,7 +276,9 @@ private[chanterelle] object Structure {
         case ctx: Context.PossibleFallible[?, ?] =>
           ctx.wrapperType
             .unapply(tpe)
-            .map((wrapper, wrapped) => ExtractedWrapper(wrapper = wrapper, wrapped = wrapped, mappable = ctx.mode.value))
+            .map((wrapper, wrapped) =>
+              ExtractedWrapper(wrapper = wrapper, wrapped = wrapped, mappable = MappableInstance.Contextual(ctx.mode))
+            )
             .orElse(mappableCandidate)
         case Context.Total => mappableCandidate
       }

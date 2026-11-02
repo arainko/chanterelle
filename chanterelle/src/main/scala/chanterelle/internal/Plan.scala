@@ -1,5 +1,6 @@
 package chanterelle.internal
 
+import chanterelle.internal.Debug.LabelColor
 import chanterelle.internal.Modifier.Kind
 import chanterelle.internal.Plan.IsModified
 import chanterelle.internal.Plan.Merged.Field
@@ -11,7 +12,6 @@ import scala.util.boundary
 import scala.util.boundary.Label
 
 import Plan.Error
-import chanterelle.internal.Debug.LabelColor
 
 private[chanterelle] case object Err
 private[chanterelle] type Err = Err.type

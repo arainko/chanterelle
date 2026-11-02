@@ -48,7 +48,12 @@ private[chanterelle] object WrapperType {
       @unused given Type[F] = wrapperTpe
       tpe match
         case '[F[underlying]] => Some(this -> Type.of[underlying])
-        case _                => None
+        case _                =>
+          // opaque types :):), the above will not match for those so we gotta do this bs
+          val wrapperRepr = wrapperTpe.repr
+          val tpeRepr = tpe.repr
+          val tpeArgs = tpeRepr.typeArgs
+          if wrapperRepr.typeSymbol == tpeRepr.typeSymbol && tpeArgs.size == 1 then Some(this -> tpeArgs.head.asType) else None
 
     }
   }

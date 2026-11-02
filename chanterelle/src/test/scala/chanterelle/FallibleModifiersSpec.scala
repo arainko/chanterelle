@@ -345,19 +345,17 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   test(".hoist.regional doesn't work with Mode.Accumulating and reports a nice error message") {
     assertFailsToCompileWith {
       """
-    (Mode.Parallel.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
-      val tup = (
-        toplevel1 = 1,
-        toplevel2 = (nested1 = Right(1), nested2 = Left(List("two")), nested3 = Left(List("three"))),
-        toplevel3 = Right(3)
-      )
-      val actual: Either[List[
-        String
-      ], (toplevel1: Int, toplevel2: (nested1: Int, nested2: Nothing, nested3: Nothing), toplevel3: Either[List[String], Int])] =
-        tup.transform(_.hoist.regional(_.toplevel2))
+      (??? : Mode.Accumulating[Either[List[String], _]]) {
+        val tup = (
+          toplevel1 = 1,
+          toplevel2 = (nested1 = Right(1), nested2 = Left(List("two")), nested3 = Left(List("three"))),
+          toplevel3 = Right(3)
+        )
+        val actual = tup.transform(_.hoist.regional(_.toplevel2))
+      }
       """
     }(
-      "'.hoist.regional' is only available with a Mode.FailFast in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'"
+      "'.hoist.regional' is only available with a Mode.FailFast or Mode.Parallel in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'"
     )
   }
 
@@ -445,4 +443,25 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }
   }
 
+  test("using .element on a just a Mappable instance is not possible inside .hoist") {
+    assertFailsToCompileContains {
+      """
+        final class NonOpqBox[+A](val value: A)
+
+        object NonOpqBox {
+
+          given Mappable[NonOpqBox] with {
+            def map[A, B](fa: NonOpqBox[A], f: A => B): NonOpqBox[B] = NonOpqBox(f(fa.value))
+          }
+        }
+        Mode.FailFast.option {
+          val ok = (field = Some(NonOpqBox((inner = Some(1)))))
+            val actualOk = ok.transform(
+              _.hoist(_.field.some.element.inner)
+            )
+            // assertEquals(actualOk, Some((field = OpqBox((inner = 1), "t"))))
+        }
+      """
+    }("Using '.element' inside of a '.hoist' with just an implicit instance of Mappable[NonOpqBox] is not possible.")
+  }
 }
