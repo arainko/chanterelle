@@ -6,6 +6,7 @@ import scala.deriving.Mirror
 import scala.quoted.*
 import scala.reflect.ClassTag
 import chanterelle.internal.Debug.AST
+import chanterelle.internal.Debug.LabelColor
 
 trait Show[-A] {
   def astify(self: A): Debug.AST
@@ -51,7 +52,7 @@ object Show extends LowPriorityShow {
       Collection(
         "Map",
         self
-          .map((key, value) => Product("Entry", VectorMap("key" -> K.astify(key), "value" -> V.astify(value))))
+          .map((key, value) => Product("Entry", VectorMap("key" -> K.astify(key), "value" -> V.astify(value)), LabelColor.create(_.YELLOW)))
           .toVector
       )
     }
@@ -91,7 +92,7 @@ object Show extends LowPriorityShow {
         }
         .to(VectorMap)
 
-      Product(tpeName, fields)
+      Product(tpeName, fields, LabelColor.create(_.YELLOW))
     }
   }
 

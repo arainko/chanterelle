@@ -371,7 +371,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   // }
 
   test(
-    "when operating on a Mode.Accumulating & Mode.FailFast errors are accumulated but nested fallible transformations can still be traversed"
+    "when operating on a Mode.Parallel errors are accumulated but nested fallible transformations can still be traversed"
   ) {
     Mode.Parallel.either[List[String]] {
       val tup = (
@@ -393,12 +393,12 @@ class FallibleModifiersSpec extends ChanterelleSuite {
         val wrapped =
           Right((keep = Right(1), drop = Right(2)))
         val tup = (before = 0, nest = wrapped, plain = 99)
-        tup.transform(
+        val actual = tup.transform(
           _.remove(_.nest),
           _.hoist(_.nest.element.keep)
         )
       }
-      """
+    """
     }("No field 'nest' found")
   }
 
@@ -446,6 +446,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
   test("using .element on a just a Mappable instance is not possible inside .hoist") {
     assertFailsToCompileContains {
       """
+        import chanterelle.interop.Mappable
         final class NonOpqBox[+A](val value: A)
 
         object NonOpqBox {

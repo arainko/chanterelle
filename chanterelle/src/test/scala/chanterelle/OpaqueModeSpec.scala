@@ -248,16 +248,28 @@ class OpaqueModeSpec extends ChanterelleSuite {
   test("hoisting through an opaque custom map in the opaque accumulating mode") {
     OpqEitherAcc.accumulating {
       val ok = (field = OpqMap(HashMap("a" -> OpqEitherAcc(Right((inner = 1))))))
-      val failing = (field = OpqMap(HashMap("a" -> OpqEitherAcc(Left(List("boom"))))))
+      val failing = (field = OpqMap(HashMap("a" -> OpqEitherAcc(Left(List("boom"))), "b" -> OpqEitherAcc(Left(List("dead"))))))
 
       val actualOk = ok.transform(_.hoist(_.field.each._2))
       val actualFailed = failing.transform(_.hoist(_.field.each._2))
 
       val expectedOk = OpqEitherAcc(Right((field = OpqMap(HashMap("a" -> (inner = 1))))))
-      val expectedFailed = OpqEitherAcc(Left(List("boom")))
+      val expectedFailed = OpqEitherAcc(Left(List("boom", "dead")))
 
       assertEquals(actualOk, expectedOk)
       assertEquals(actualFailed, expectedFailed)
+    }
+  }
+
+  test("hoisting a wrapped field typed as a type alias of the opaque Mode wrapper type works") {
+    OpqOpt.failFast {
+      type Alias[+A] = OpqOpt[A]
+      val tup: (field : Alias[(inner : Int)]) = (field = OpqOpt.empty[(inner: Int)])
+
+      val actual = tup.transform(_.hoist(_.field))
+      val expected = OpqOpt.empty
+
+      assertEquals(actual, expected)
     }
   }
 }
