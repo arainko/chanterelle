@@ -193,7 +193,6 @@ class PutComputeHoistSpec extends ChanterelleSuite {
     }
   }
 
-
   test("two level passthrough: .put at the deepest level, then hoist the deepest field") {
     Mode.FailFast.either[String] {
       val tup = (nest = Right(Right((keep = Right(1)))), plain = 99)

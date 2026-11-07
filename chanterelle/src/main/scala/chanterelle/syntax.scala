@@ -1,11 +1,9 @@
 package chanterelle
 
-import chanterelle.hidden.Tuples.Mapped
-import chanterelle.hidden.{ TupleModifier, Tuples }
+import chanterelle.hidden.TupleModifier
 import chanterelle.internal.EntryPoint
 
 import scala.NamedTuple.*
-import scala.annotation.nowarn
 
 extension [Tup <: AnyNamedTuple | Tuple](self: Tup) {
 

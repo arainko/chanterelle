@@ -264,7 +264,7 @@ class OpaqueModeSpec extends ChanterelleSuite {
   test("hoisting a wrapped field typed as a type alias of the opaque Mode wrapper type works") {
     OpqOpt.failFast {
       type Alias[+A] = OpqOpt[A]
-      val tup: (field : Alias[(inner : Int)]) = (field = OpqOpt.empty[(inner: Int)])
+      val tup: (field: Alias[(inner: Int)]) = (field = OpqOpt.empty[(inner: Int)])
 
       val actual = tup.transform(_.hoist(_.field))
       val expected = OpqOpt.empty

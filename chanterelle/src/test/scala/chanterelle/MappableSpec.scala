@@ -22,7 +22,6 @@ class MappableSpec extends ChanterelleSuite {
     }
   }
 
-
   test("update inside a custom Mappable wrapper maps over it non-fallibly (wrapper data preserved)") {
     val tup = (field = Box((x = 1), "keep me"))
 

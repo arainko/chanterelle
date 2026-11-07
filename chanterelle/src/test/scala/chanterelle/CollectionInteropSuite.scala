@@ -2,6 +2,7 @@ package chanterelle
 
 import chanterelle.interop.Collection.{ Builder, IntoIterator }
 import munit.Location
+
 import scala.collection.immutable.HashMap
 
 class CollectionInteropSuite extends ChanterelleSuite {
@@ -82,11 +83,11 @@ class CollectionInteropSuite extends ChanterelleSuite {
       assertEquals(roundtripped, coll)
     }
 
-      roundTrip(List(1, 2, 3))
-      roundTrip(Vector(1, 2))
-      roundTrip(Set('a', 'b'))
-      roundTrip("ab".iterator)
-      roundTrip(Map("a" -> 1, "b" -> 2))
-      roundTrip(HashMap("a" -> 1, "b" -> 2))
+    roundTrip(List(1, 2, 3))
+    roundTrip(Vector(1, 2))
+    roundTrip(Set('a', 'b'))
+    roundTrip("ab".iterator)
+    roundTrip(Map("a" -> 1, "b" -> 2))
+    roundTrip(HashMap("a" -> 1, "b" -> 2))
   }
 }
