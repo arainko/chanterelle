@@ -2,15 +2,20 @@ package chanterelle.internal
 
 import chanterelle.internal.Debug.LabelColor
 import chanterelle.internal.FallibleInterpreter.TransformationMode
-import chanterelle.internal.Plan.Hoist
+import chanterelle.internal.Plan.{
+  Hoist,
+  IsModified
+}
 import chanterelle.internal.Structure.MappableInstance
 import chanterelle.interop.Collection
 
+import scala.annotation.nowarn
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
 
+@nowarn("msg=unused implicit")
 private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
   def outputTpe: Type[?]
@@ -142,10 +147,10 @@ private[chanterelle] object Transformation {
     def recurse[F <: Fallible](transformation: Plan[Nothing])(using Label[ErrorMessage], Context.Of[F]): Transformation[F] =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
-        // case plan if plan.isModified == IsModified.No =>
-        //   val tpe = plan.calculateTpe
-        //   Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
-        //
+        case plan if plan.isModified == IsModified.No =>
+          val tpe = plan.calculateTpe
+          Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
+
         case p @ Plan.Named(source, fields, _) =>
           (p.calculateNamesTpe, p.calculateValuesTpe).runtimeChecked match {
             case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
@@ -268,6 +273,7 @@ private[chanterelle] object Transformation {
 
   def fromLeaf(leaf: Plan.Leaf): Transformation.Leaf = Transformation.Leaf(leaf.output)
 
+  @nowarn("msg=unused implicit")
   enum Field[+F <: Fallible] derives Debug {
     case FromSource(name: String, transformation: Transformation[F])
     case FromModifier(modifier: Configured.NamedSpecific)
@@ -287,6 +293,7 @@ private[chanterelle] object Transformation {
   }
 }
 
+@nowarn("msg=unused implicit")
 enum CollBuilder[+F <: Fallible] derives Debug {
   case Total(builder: Erased.K2[Collection.Builder]) extends CollBuilder[Nothing]
   case PossiblyFallible[Builder[Elem, Coll]](builder: Erased.K2[Builder]) extends CollBuilder[Fallible]
@@ -297,7 +304,7 @@ object CollBuilder {
     Context.current match {
       case Context.Total =>
         Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
-      case ctx: Context.NonFallible[f] =>
+      case _: Context.NonFallible[f] =>
         Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
       case ctx: Context.PossiblyFallible[f] =>
         ctx.mode.builderTpe match {

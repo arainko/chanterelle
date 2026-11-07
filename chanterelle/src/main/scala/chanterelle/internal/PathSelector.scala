@@ -130,7 +130,7 @@ private[chanterelle] object PathSelector {
           val pos = expr.pos
           val code = pos.sourceCode.mkString
           outer.reflect.report
-            .errorAndAbort(s"Couldn't parse '${Printer.TreeStructure.show(other)}' as a valid path selector", pos)
+            .errorAndAbort(s"Couldn't parse '$code' as a valid path selector", pos)
       }
     }
 

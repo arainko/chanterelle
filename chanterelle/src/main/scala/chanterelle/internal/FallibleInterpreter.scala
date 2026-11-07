@@ -46,12 +46,12 @@ private[chanterelle] object FallibleInterpreter {
         Value.Unwrapped(nonfallibleTransformation(source, nonfallible))
       case None =>
         transformation match {
-          case t @ Transformation.Named(_, fields, namesTpe, valuesTpe, outTpe) =>
+          case t @ Transformation.Named(_, fields, namesTpe, valuesTpe, _) =>
             val (unwrappeds, wrappeds) = t.fields.zipWithIndex.partitionMap {
               case (_, Field.FromSource(name, transformation)) -> idx =>
                 val fieldValue = StructuredValue.of(t.source, source).fieldValue(name)
                 recurse(transformation, fieldValue, F).asFieldValue(idx, transformation.outputTpe)
-              case (fieldName, Field.FromModifier(modifier)) -> idx =>
+              case (_, Field.FromModifier(modifier)) -> idx =>
                 Sources.current.withPrimary(source) {
                   Left(new FieldValue.Unwrapped(idx, modifier.tpe, Interpreter.handleNamedSpecific(modifier)))
                 }
@@ -288,9 +288,9 @@ private[chanterelle] object FallibleInterpreter {
     given Debug[TransformationMode[?, ?]] with {
       def astify(self: TransformationMode[?, ?])(using Quotes): AST =
         self match
-          case Accumulating(value) => AST.Text("Accumulating")
-          case FailFast(value)     => AST.Text("FailFast")
-          case Parallel(value)     => AST.Text("Parallel")
+          case Accumulating(_) => AST.Text("Accumulating")
+          case FailFast(_)     => AST.Text("FailFast")
+          case Parallel(_)     => AST.Text("Parallel")
 
     }
 

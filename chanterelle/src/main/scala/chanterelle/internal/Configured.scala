@@ -1,7 +1,9 @@
 package chanterelle.internal
 
+import scala.annotation.nowarn
 import scala.quoted.*
 
+@nowarn("msg=unused implicit")
 private[chanterelle] enum Configured[+F <: Fallible] derives Debug {
   def tpe: Type[?]
 

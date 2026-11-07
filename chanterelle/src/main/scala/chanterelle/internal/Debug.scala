@@ -194,10 +194,10 @@ private[chanterelle] object Debug extends LowPriorityDebug {
 
     final def length: Int =
       this match
-        case Empty                        => 0
-        case Text(value)                  => value.length
-        case Product(name, fields, color) => name.length + fields.map((name, ast) => name.length + ast.length).sum
-        case Collection(name, values)     => name.length + values.map(_.length).sum
+        case Empty                    => 0
+        case Text(value)              => value.length
+        case Product(name, fields, _) => name.length + fields.map((name, ast) => name.length + ast.length).sum
+        case Collection(name, values) => name.length + values.map(_.length).sum
 
     final def show(using UseColors): String = {
       def ident(n: Int) = "  " * n
