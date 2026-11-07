@@ -1,78 +1,161 @@
 package chanterelle
 
-import munit.DisciplineSuite
-import org.typelevel.discipline.*
-import org.scalacheck.Gen
-import org.scalacheck.Prop
-import org.scalacheck.Prop.*
-import org.scalacheck.Arbitrary
-import munit.Compare
 import chanterelle.interop.Collection
-import scala.util.control.TailCalls.*
-import scala.util.control.TailCalls
+import munit.DisciplineSuite
+import org.scalacheck.Prop.*
+import org.scalacheck.{ Arbitrary, Prop }
+import org.typelevel.discipline.*
 
-final class FailFastModeLaws[F[_]](val F: Mode.FailFast[F]) extends Laws {
-
-  // def traverseCollectionStacksafe[Elem](using Elem: Gen[Elem], Builder: Mode[F] ?=> F.Builder[Elem, Vector[Elem]]): RuleSet = SimpleRuleSet(
-  //   "mode",
-  //   ""
-  // )
-  //
-
-  def mapIsFlatMapPureIdentity[A, B](fa: F[A], f: A => B): Prop =
-    F.map(fa, f) ?= F.flatMap(fa, f.andThen(F.pure))
-
-  def traverseCollectionConsistency[AElem, AColl, BElem, BColl](aColl: AColl, f: AElem => F[BElem])(using
-    AColl: Collection.IntoIterator[AElem, AColl],
-    BColl: Mode.FailFast[F] ?=> Collection.Builder.Fallible[F, BElem, BColl]
-  ): Prop = F {
-
-    // this is not stack safe (:c) but .traverseCollection needs to be
-    def traversedViaVector = {
-      F.flatMap(
-        AColl
-          .iterator(aColl)
-          .foldLeft(F.pure(Vector.empty[BElem])) { (acc, curr) =>
-            F.flatMap(acc, acc => F.map(f(curr), curr => acc.appended(curr)))
-          },
-        BColl.fromSpecific
-      )
-    }
-
-     F.traverseCollection(aColl, f) ?= traversedViaVector
-  }
-
-
-  def apply[A, B](using A: Arbitrary[A], FA: Arbitrary[F[A]], Fn: Arbitrary[A => B], FnF: Arbitrary[A => F[B]]) = SimpleRuleSet(
-    "Mode.FailFast",
-    "map is consistent with flatMap and pure" -> Prop.forAll(mapIsFlatMapPureIdentity[A, B]),
-    "traverseCollection is consistent with a foldLeft with a Vector accumulator" -> Prop.forAll(traverseCollectionConsistency[A, List[A], B, List[B]])
-  )
+final class ModeLawsSuite extends DisciplineSuite {
+  checkAll("Mode.FailFast for Option laws", ModeLaws.FailFast(Mode.FailFast.option)[Int, Int])
+  checkAll("Mode.FailFast for Either laws", ModeLaws.FailFast(Mode.FailFast.either[String])[Int, Int])
+  checkAll("Mode.Parallel for Either laws", ModeLaws.Parallel(Mode.Parallel.either[List[String]])[Int, Int, Int])
 }
 
-abstract class ModeSuite[F[_]](F: Mode[F])(using Builder: Mode[F] ?=> F.Builder[Int, Vector[Int]])
-    extends ChanterelleSuite,
-      DisciplineSuite {
-
-  protected given mode: Mode[F] = F
-
-  test("big collections do not overflow the stack") {
+sealed abstract class ModeLaws[F[_]](val F: Mode[F]) extends Laws {
+  final def traverseCollectionStackSafety(using F.Builder[Int, Vector[Int]]) = F {
     val vec = Vector.range(0, 1_000_000)
     val wrappedVec = vec.map(F.pure)
-    val traversed = F.traverseCollection[F[Int], Int, Vector[F[Int]], Vector[Int]](wrappedVec, identity)
+    val traversed: F[Vector[Int]] = F.traverseCollection(wrappedVec, identity[F[Int]])
     val expected = F.pure(vec)
-    assertEquals(traversed, expected)
+    traversed ?= expected
   }
 }
 
-final class OptionFailFastModeSuite extends ModeSuite(Mode.FailFast.option) {
-  val laws = FailFastModeLaws[Option](Mode.FailFast.option)
+object ModeLaws {
+  final class FailFast[F[_]](override val F: Mode.FailFast[F]) extends ModeLaws[F](F) {
 
-  checkAll("laws", laws[Int, Int])
-}
-final class EitherFailFastModeSuite extends ModeSuite(Mode.FailFast.either) {
-  val laws = FailFastModeLaws(Mode.FailFast.either[String])
+    def apply[A, B](using Arbitrary[A], Arbitrary[F[A]], Arbitrary[A => B], Arbitrary[A => F[B]]) = SimpleRuleSet(
+      "Mode.FailFast",
+      "map is consistent with flatMap and pure" -> Prop.forAll(mapConsistency[A, B]),
+      "traverseCollection is consistent with a foldLeft with a Vector accumulator" -> Prop.forAll(
+        F { traverseCollectionConsistency[A, List[A], B, List[B]] }
+      ),
+      "traverseCollection is stack safe" -> F { traverseCollectionStackSafety }
+    )
+    private def mapConsistency[A, B](fa: F[A], f: A => B): Prop =
+      F.map(fa, f) ?= F.flatMap(fa, f.andThen(F.pure))
 
-  checkAll("laws", laws[Int, Int])
+    private def traverseCollectionConsistency[AElem, AColl, BElem, BColl](aColl: AColl, f: AElem => F[BElem])(using
+      AColl: Collection.IntoIterator[AElem, AColl],
+      BColl: F.Builder[BElem, BColl]
+    ): Prop = {
+
+      // this is not stack safe (:c) but .traverseCollection needs to be
+      def traversedViaVector = {
+        F.flatMap(
+          AColl
+            .iterator(aColl)
+            .foldLeft(F.pure(Vector.empty[BElem])) { (acc, curr) =>
+              F.flatMap(acc, acc => F.map(f(curr), curr => acc.appended(curr)))
+            },
+          BColl.fromSpecific
+        )
+      }
+
+      F.traverseCollection(aColl, f) ?= traversedViaVector
+    }
+
+  }
+
+  final class Parallel[F[_]](override val F: Mode.Parallel[F]) extends ModeLaws[F](F) {
+
+    def apply[A, B, C](using
+      Arbitrary[A],
+      Arbitrary[F[A]],
+      Arbitrary[F[B]],
+      Arbitrary[F[C]],
+      Arbitrary[A => B],
+      Arbitrary[A => F[B]]
+    ) = SimpleRuleSet(
+      "Mode.Parallel",
+      "map is consistent with flatMap and pure" -> Prop.forAll(mapConsistency[A, B]),
+      "traverseCollection is consistent with a foldLeft with a Vector accumulator" -> Prop.forAll(
+        F { traverseCollectionConsistency[A, List[A], B, List[B]] }
+      ),
+      "traverseCollection is stack safe" -> F { traverseCollectionStackSafety },
+      "zip is associative" -> Prop.forAll(zipAssociativity[A, B, C]),
+      "zip left identity" -> Prop.forAll(leftIdentity[A]),
+      "zip right identity" -> Prop.forAll(rightIdentity[A])
+    )
+
+    private def zipAssociativity[A, B, C](fa: F[A], fb: F[B], fc: F[C]) =
+      F.zip(F.zip(fa, fb), fc) ?= F.map(F.zip(fa, F.zip(fb, fc)), { case (a, (b, c)) => ((a, b), c) })
+
+    private def leftIdentity[A](fa: F[A]) = F.map(F.zip(F.pure(()), fa), ((_, a) => a)) ?= fa
+
+    private def rightIdentity[A](fa: F[A]) = F.map(F.zip(fa, F.pure(())), ((a, _) => a)) ?= fa
+
+    private def mapConsistency[A, B](fa: F[A], f: A => B): Prop =
+      F.map(fa, f) ?= F.flatMap(fa, f.andThen(F.pure))
+
+    private def traverseCollectionConsistency[AElem, AColl, BElem, BColl](aColl: AColl, f: AElem => F[BElem])(using
+      AColl: Collection.IntoIterator[AElem, AColl],
+      BColl: F.Builder[BElem, BColl]
+    ): Prop = {
+
+      // this is not stack safe (:c) but .traverseCollection needs to be
+      def traversedViaVector = {
+        F.flatMap(
+          AColl
+            .iterator(aColl)
+            .foldLeft(F.pure(Vector.empty[BElem])) { (acc, curr) =>
+              F.map(F.zip(acc, f(curr)), (acc, curr) => acc.appended(curr))
+            },
+          BColl.fromSpecific
+        )
+      }
+
+      F.traverseCollection(aColl, f) ?= traversedViaVector
+    }
+
+  }
+  final class Accumulating[F[_]](override val F: Mode.Accumulating[F]) extends ModeLaws[F](F) {
+
+    def apply[A, B, C](using
+      Arbitrary[A],
+      Arbitrary[F[A]],
+      Arbitrary[F[B]],
+      Arbitrary[F[C]],
+      Arbitrary[A => F[B]]
+    ) = SimpleRuleSet(
+      "Mode.Accumulating",
+      "traverseCollection is consistent with a foldLeft with a Vector accumulator" -> Prop.forAll(
+        traverseCollectionConsistency[A, List[A], B, List[B]]
+      ),
+      "traverseCollection is stack safe" -> F { traverseCollectionStackSafety },
+      "zip is associative" -> Prop.forAll(zipAssociativity[A, B, C]),
+      "zip left identity" -> Prop.forAll(leftIdentity[A]),
+      "zip right identity" -> Prop.forAll(rightIdentity[A])
+    )
+
+    private def zipAssociativity[A, B, C](fa: F[A], fb: F[B], fc: F[C]) =
+      F.zip(F.zip(fa, fb), fc) ?= F.map(F.zip(fa, F.zip(fb, fc)), { case (a, (b, c)) => ((a, b), c) })
+
+    private def leftIdentity[A](fa: F[A]) = F.map(F.zip(F.pure(()), fa), ((_, a) => a)) ?= fa
+
+    private def rightIdentity[A](fa: F[A]) = F.map(F.zip(fa, F.pure(())), ((a, _) => a)) ?= fa
+
+    private def traverseCollectionConsistency[AElem, AColl, BElem, BColl](aColl: AColl, f: AElem => F[BElem])(using
+      AColl: Collection.IntoIterator[AElem, AColl],
+      BColl: F.Builder[BElem, BColl]
+    ): Prop = {
+
+      // this is not stack safe (:c) but .traverseCollection needs to be
+      def traversedViaVector = {
+        F.map(
+          AColl
+            .iterator(aColl)
+            .foldLeft(F.pure(Vector.empty[BElem])) { (acc, curr) =>
+              F.map(F.zip(acc, f(curr)), (acc, curr) => acc.appended(curr))
+            },
+          BColl.fromSpecific
+        )
+      }
+
+      F.traverseCollection(aColl, f) ?= traversedViaVector
+    }
+
+  }
+
 }
-final class EitherParallelModeSuite extends ModeSuite(Mode.Parallel.either[List[String]])

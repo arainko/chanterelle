@@ -85,7 +85,7 @@ lazy val chanterelleCats =
       bspEnabled := false,
       mimaPreviousArtifacts := Set.empty
     )
-    .dependsOn(chanterelle)
+    .dependsOn(chanterelle % "compile->compile;test->test")
 
 lazy val docs =
   project

@@ -9,10 +9,12 @@ import cats.data.Validated.Invalid
 import cats.data.Validated.Valid
 import scala.collection.immutable.SortedMap
 import chanterelle.interop.*
+import cats.data.ValidatedNel
+import munit.DisciplineSuite
+import org.scalacheck.Arbitrary
 
 class ModesSuite extends FunSuite {
   import ModesSuite.*
-
 
   given nelBuilderFailFast[A]: Collection.Builder.Fallible[FailFast, A, NonEmptyList[A]] =
     Collection.Builder.from[List[A]].transform(NonEmptyList.fromList).fallible.transformK([a] => _.toRight("empty NonEmptyList"))
