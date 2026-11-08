@@ -7,11 +7,47 @@ import scala.collection.generic.IsIterableOnce
 import scala.collection.mutable.Builder as MutBuilder
 
 object Collection {
+
+  /**
+   * An interop typeclass representing types that can be converted into iterators.
+   * Instances of `Collection.IntoIterator` are usually created with `Collection.IntoIterator.from`, for example:
+   *  {{{
+   *  import chanterelle.interop.*
+   *
+   *  given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = Collection.IntoIterator.from(_.iterator)
+   *
+   *  // or for a Map-shaped collection:
+   *  given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = Collection.IntoIterator.from(_.iterator)
+   *  }}}
+   *
+   * This typeclass requires its 2 type parameters to be fully-applied and that's because it abstracts over both 'classic' collection shapes (i.e. ones with a single elem type constructor - like List)
+   * and Map-shaped ones (i.e. with a two elem type constructor - like HashMap).
+   *
+   * **Note** that `chanterelle` will only consider `Coll[_]` and `Map[_, _]` shaped instances (like the two aforementioned examples) when looking for candidates during the expansion of its `.transform` macro.
+   *
+   * An instance of `Collection.IntoIterator` and `Collection.Builder` (or `Collection.Builder.Fallible`) will allow `chanterelle` to consider a given type as a collection type which enables some additional combinators inside the `.transform` macro,
+   * like the `.each` operator that 'cuts through' collection shapes when configuring transformations.
+   */
   opaque type IntoIterator[Elem, Collection] = IsIterableOnce[Collection] { type A = Elem }
 
   object IntoIterator extends IntoIterator.LowPriority {
 
-    def from[Elem, Coll](toIterator: Coll => Iterator[Elem]): IntoIterator[Elem, Coll] = IntoIter(toIterator)
+    /**
+     * The default way of creating instances of `Collection.IntoIterator`.
+     * {{{
+     * import chanterelle.interop.*
+     * given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = Collection.IntoIterator.from(_.iterator)
+     *
+     * // or for a Map-shaped collection:
+     * given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = Collection.IntoIterator.from(_.iterator)
+     * }}}
+     *
+     * The `Coll` type parameter can (usually) be used to infer the type of the `Elem` type param, for example:
+     * {{{
+     * val intoIter = Collection.IntoIterator.from[List[String]](_.iterator)
+     * }}}
+     */
+    def from[Coll](using DummyImplicit)[Elem](toIterator: Coll => Iterator[Elem]): IntoIterator[Elem, Coll] = IntoIter(toIterator)
 
     private final class IntoIter[Elem, Coll](toIterator: Coll => Iterator[Elem]) extends IsIterableOnce[Coll] {
       type A = Elem
@@ -34,11 +70,38 @@ object Collection {
     }
   }
 
-  // TODO: experiment with making Elem contravariant?
+  /**
+   * An interop typeclass that abstracts over collection builders where the collectiom being built can be empty, its fallible sibling `Collect.Builder.Fallible` allows for
+   * construction collections that are meant to be non-empty (eg. like `cats'` `NonEmptyList`).
+   */
   opaque type Builder[Elem, Collection] <: Builder.Fallible[[a] =>> a, Elem, Collection] =
     Builder.Fallible[[a] =>> a, Elem, Collection]
 
   object Builder {
+    def from[Collection](using DummyImplicit)[Elem](using factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
+
+    def fromFactory[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
+
+    def fromAppendable[Elem, Coll[+elem]](
+      empty: Coll[Nothing],
+      append: (Coll[Elem], Elem) => Coll[Elem]
+    ): Builder[Elem, Coll[Elem]] = new Factory[Elem, Coll[Elem]] {
+
+      override def fromSpecific(it: IterableOnce[Elem]): Coll[Elem] = newBuilder.addAll(it).result()
+
+      override def newBuilder: MutBuilder[Elem, Coll[Elem]] = BuilderFromImmutableAppend(empty, append)
+    }
+
+    extension [Elem, Collection](self: Builder[Elem, Collection]) {
+      def transform[DestColl](f: Collection => DestColl): Builder[Elem, DestColl] =
+        TransformedFactory[[a] =>> a, [a] =>> a, Elem, Collection, DestColl](self, f)
+
+      def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
+        self.transform(ev.apply)
+    }
+
+    given default[Elem, Collection](using factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
+
     opaque type Fallible[F[_], Elem, Collection] <: Factory[Elem, F[Collection]] = Factory[Elem, F[Collection]]
 
     object Fallible {
@@ -55,28 +118,6 @@ object Collection {
 
       def fromFactory[F[_], Elem, Collection](factory: Factory[Elem, F[Collection]]): Builder.Fallible[F, Elem, Collection] =
         factory
-    }
-
-    extension [Elem, Collection](self: Builder[Elem, Collection]) {
-      def transform[DestColl](f: Collection => DestColl): Builder[Elem, DestColl] =
-        TransformedFactory[[a] =>> a, [a] =>> a, Elem, Collection, DestColl](self, f)
-
-      def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
-        self.transform(ev.apply)
-    }
-
-    def from[Collection](using DummyImplicit)[Elem](using factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
-
-    def fromFactory[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
-
-    def fromAppendable[Elem, Coll[+elem]](
-      empty: Coll[Nothing],
-      append: (Coll[Elem], Elem) => Coll[Elem]
-    ): Builder[Elem, Coll[Elem]] = new Factory[Elem, Coll[Elem]] {
-
-      override def fromSpecific(it: IterableOnce[Elem]): Coll[Elem] = newBuilder.addAll(it).result()
-
-      override def newBuilder: MutBuilder[Elem, Coll[Elem]] = BuilderFromImmutableAppend(empty, append)
     }
 
     private final class TransformedFactory[F[_], G[_], Elem, SourceColl, DestColl](
@@ -105,6 +146,5 @@ object Collection {
 
     }
 
-    given default[Elem, Collection](using factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
   }
 }

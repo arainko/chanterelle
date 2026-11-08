@@ -31,7 +31,7 @@ class CollectionInteropSuite extends ChanterelleSuite {
   }
 
   test("IntoIterator.from works") {
-    val str = IntoIterator.from[Char, String](_.iterator)
+    val str = IntoIterator.from[String](_.iterator)
     assertEquals(str.iterator("abc").toList, List('a', 'b', 'c'))
   }
 
