@@ -46,8 +46,15 @@ object Collection {
      * {{{
      * val intoIter = Collection.IntoIterator.from[List[String]](_.iterator)
      * }}}
+     * However, given than `Collection.IntoIterator` is a typeclass it's usually inferred from the its `given` definition (and those always have their type ascription anyway) so users can just drop the type ascriptions altogether.
      */
     def from[Coll](using DummyImplicit)[Elem](toIterator: Coll => Iterator[Elem]): IntoIterator[Elem, Coll] = IntoIter(toIterator)
+
+    extension [Elem, Collection](self: IntoIterator[Elem, Collection])
+      def iterator(coll: Collection): Iterator[Elem] = self(coll).iterator
+
+    given iterableOnce[Elem, Coll[a] <: IterableOnce[a]]: IntoIterator[Elem, Coll[Elem]] =
+      iterableOnceColl.asInstanceOf[IntoIterator[Elem, Coll[Elem]]]
 
     private final class IntoIter[Elem, Coll](toIterator: Coll => Iterator[Elem]) extends IsIterableOnce[Coll] {
       type A = Elem
@@ -58,12 +65,6 @@ object Collection {
     private val iterableOnceColl: IsIterableOnce[IterableOnce[Any]] { type A = Any } =
       IsIterableOnce.iterableOnceIsIterableOnce
 
-    extension [Elem, Collection](self: IntoIterator[Elem, Collection])
-      def iterator(coll: Collection): Iterator[Elem] = self(coll).iterator
-
-    given iterableOnce[Elem, Coll[a] <: IterableOnce[a]]: IntoIterator[Elem, Coll[Elem]] =
-      iterableOnceColl.asInstanceOf[IntoIterator[Elem, Coll[Elem]]]
-
     private[chanterelle] transparent trait LowPriority { self: IntoIterator.type =>
       given default[Elem, Collection](using Coll: IsIterableOnce[Collection] { type A = Elem }): IntoIterator[Elem, Collection] =
         Coll
@@ -72,14 +73,68 @@ object Collection {
 
   /**
    * An interop typeclass that abstracts over collection builders where the collectiom being built can be empty, its fallible sibling `Collect.Builder.Fallible` allows for
-   * construction collections that are meant to be non-empty (eg. like `cats'` `NonEmptyList`).
+   * constructing collections that are meant to be non-empty (eg. like `cats'` `NonEmptyList`).
+   *
+   * Custom instances of `Collection.Builder` are usually meant to be built using `Collection.Builder.from` as the starting point and then transforming it into our target type with `.transform`, for example:
+   *
+   * {{{
+   * import chanterelle.interop.*
+   *
+   * case class MyVector[A](underlying: Vector[A])
+   *
+   * given [Elem]: Collection.Builder[Elem, MyVector[Elem]] =
+   *   Collection.Builder.from[Vector[Elem]].transform(MyVector.apply)
+   * }}}
+   *
+   * ...or if we're operating on a custom Map:
+   *
+   * {{{
+   * import chanterelle.interop.*
+   *
+   * case class MyMap[K, V](underlying: Map[K, V])
+   * given [K, V]: Collection.Builder[(K, V), MyMap[K, V]] = Collection.Builder.from[Map[K, V]].transform(MyMap.apply)
+   * }}}
+   *
+   * An instance of `Collection.Builder` (or `Collection.Builder.Fallible`) and `Collection.IntoIterator` will allow `chanterelle` to consider a given type as a collection type which enables some additional combinators inside the `.transform` macro,
+   * like the `.each` operator that 'cuts through' collection shapes when configuring transformations.
+   *
+   * This typeclass requires its 2 type parameters to be fully-applied and that's because it abstracts over both 'classic' collection shapes (i.e. ones with a single elem type constructor - like List)
+   * and Map-shaped ones (i.e. with a two elem type constructor - like HashMap).
+   *
+   * **Note** that `chanterelle` will only consider `Coll[_]` and `Map[_, _]` shaped instances when looking for candidates during the expansion of its `.transform` macro.
    */
   opaque type Builder[Elem, Collection] <: Builder.Fallible[[a] =>> a, Elem, Collection] =
     Builder.Fallible[[a] =>> a, Elem, Collection]
 
   object Builder {
+
+    /**
+     * The default way of creating instances of `Collection.Builder`. Example:
+     * {{{
+     * import chanterelle.interop.*
+     *
+     * case class MyVector[A](underlying: Vector[A])
+     *
+     * given [Elem]: Collection.Builder[Elem, MyVector[Elem]] =
+     *   Collection.Builder.from[Vector[Elem]].transform(MyVector.apply)
+     * }}}
+     *
+     * Note that the `Elem` type param can usually be inferred from just providing the `Collection` type param so this method caters to this use case.
+     */
     def from[Collection](using DummyImplicit)[Elem](using factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
 
+    /**
+     * An alternative to `Collection.Builder.from` where one can feed an explicit `Factory`, for example:
+     *
+     * {{{
+     * import chanterelle.interop.*
+     *
+     * case class MyVector[A](underlying: Vector[A])
+     *
+     * given [Elem]: Collection.Builder[Elem, MyVector[Elem]] =
+     *   Collection.Builder.fromFactory(Vector).transform(MyVector.apply) // the companion of `Vector` is also a `Factory` of Vectors
+     * }}}
+     */
     def fromFactory[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
 
     def fromAppendable[Elem, Coll[+elem]](
