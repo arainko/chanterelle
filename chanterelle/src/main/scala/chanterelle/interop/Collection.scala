@@ -14,10 +14,12 @@ object Collection {
    *  {{{
    *  import chanterelle.interop.*
    *
-   *  given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = Collection.IntoIterator.from(_.iterator)
+   *  given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = 
+   *    Collection.IntoIterator.from(_.iterator)
    *
    *  // or for a Map-shaped collection:
-   *  given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = Collection.IntoIterator.from(_.iterator)
+   *  given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = 
+   *    Collection.IntoIterator.from(_.iterator)
    *  }}}
    *
    * This typeclass requires its 2 type parameters to be fully-applied and that's because it abstracts over both 'classic' collection shapes (i.e. ones with a single elem type constructor - like List)
@@ -36,10 +38,13 @@ object Collection {
      * The default way of creating instances of `Collection.IntoIterator`.
      * {{{
      * import chanterelle.interop.*
-     * given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = Collection.IntoIterator.from(_.iterator)
+     *
+     * given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = 
+     *   Collection.IntoIterator.from(_.iterator)
      *
      * // or for a Map-shaped collection:
-     * given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = Collection.IntoIterator.from(_.iterator)
+     * given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = 
+     *   Collection.IntoIterator.from(_.iterator)
      * }}}
      *
      * The `Coll` type parameter can (usually) be used to infer the type of the `Elem` type param, for example:
@@ -92,7 +97,9 @@ object Collection {
    * import chanterelle.interop.*
    *
    * case class MyMap[K, V](underlying: Map[K, V])
-   * given [K, V]: Collection.Builder[(K, V), MyMap[K, V]] = Collection.Builder.from[Map[K, V]].transform(MyMap.apply)
+   *
+   * given [K, V]: Collection.Builder[(K, V), MyMap[K, V]] = 
+   *   Collection.Builder.from[Map[K, V]].transform(MyMap.apply)
    * }}}
    *
    * An instance of `Collection.Builder` (or `Collection.Builder.Fallible`) and `Collection.IntoIterator` will allow `chanterelle` to consider a given type as a collection type which enables some additional combinators inside the `.transform` macro,
@@ -116,7 +123,9 @@ object Collection {
      * case class MyVector[A](underlying: Vector[A])
      *
      * given [Elem]: Collection.Builder[Elem, MyVector[Elem]] =
-     *   Collection.Builder.from[Vector[Elem]].transform(MyVector.apply)
+     *   Collection.Builder
+     *     .from[Vector[Elem]]
+     *     .transform(MyVector.apply)
      * }}}
      *
      * Note that the `Elem` type param can usually be inferred from just providing the `Collection` type param so this method caters to this use case.
@@ -132,7 +141,9 @@ object Collection {
      * case class MyVector[A](underlying: Vector[A])
      *
      * given [Elem]: Collection.Builder[Elem, MyVector[Elem]] =
-     *   Collection.Builder.fromFactory(Vector).transform(MyVector.apply) // the companion of `Vector` is also a `Factory` of Vectors
+     *   Collection.Builder
+     *     .fromFactory(Vector)
+     *     .transform(MyVector.apply) // the companion of `Vector` is also a `Factory` of Vectors
      * }}}
      */
     def fromFactory[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
@@ -166,12 +177,16 @@ object Collection {
        * import chanterelle.interop.*
        *
        * case class NonEmptyList[A] private (head: A, tail: List[A])
+       *
        * object NonEmptyList {
        *   def fromList[A](list: List[A]): Option[NonEmptyList[A]] = ???
        * }
        *
        * given [Elem]: Collection.Builder.Fallible[Option, Elem, NonEmptyList[Elem]] =
-       *   Collection.Builder.from[List[Elem]].transform(NonEmptyList.fromList).fallible
+       *   Collection.Builder
+       *     .from[List[Elem]]
+       *     .transform(NonEmptyList.fromList)
+       *     .fallible
        * }}}
        */
       def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
@@ -188,12 +203,16 @@ object Collection {
      * import chanterelle.interop.*
      *
      * case class NonEmptyList[A] private (head: A, tail: List[A])
+     *
      * object NonEmptyList {
      *   def fromList[A](list: List[A]): Option[NonEmptyList[A]] = ???
      * }
      *
      * given [Elem]: Collection.Builder.Fallible[Option, Elem, NonEmptyList[Elem]] =
-     *   Collection.Builder.from[List[Elem]].transform(NonEmptyList.fromList).fallible
+     *   Collection.Builder
+     *     .from[List[Elem]]
+     *     .transform(NonEmptyList.fromList)
+     *     .fallible
      * }}}
      *
      * ...or if we're operating on a custom Map:
@@ -206,7 +225,12 @@ object Collection {
      * object NonEmptyMap {
      *   def fromMap[K, V](map: Map[K, V]): Option[Map[K, V]] = ???
      * }
-     * given [K, V]: Collection.Builder.Fallible[Option, (K, V), MyMap[K, V]] = Collection.Builder.from[Map[K, V]].transform(NonEmptyMap.fromMap).fallible
+     *
+     * given [K, V]: Collection.Builder.Fallible[Option, (K, V), MyMap[K, V]] = 
+     *   Collection.Builder
+     *     .from[Map[K, V]]
+     *     .transform(NonEmptyMap.fromMap)
+     *     .fallible
      * }}}
      *
      * An instance of `Collection.Builder` (or `Collection.Builder.Fallible`) and `Collection.IntoIterator` will allow `chanterelle` to consider a given type as a collection type which enables some additional combinators inside the `.transform` macro,
