@@ -137,6 +137,15 @@ object Collection {
      */
     def fromFactory[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
 
+    /**
+     * Builds an immutable collection builder given an `empty` collection an a function that creates a new collection with an element appended, for example:
+     * {{{
+     * import chanterelle.interop.*
+     *
+     * given [Elem]: Collection.Builder[Elem, Vector[Elem]] =
+     *   Collection.Builder.fromAppendable(Vector.empty, (acc, elem) => acc.appended(elem))
+     * }}}
+     */
     def fromAppendable[Elem, Coll[+elem]](
       empty: Coll[Nothing],
       append: (Coll[Elem], Elem) => Coll[Elem]
@@ -151,28 +160,87 @@ object Collection {
       def transform[DestColl](f: Collection => DestColl): Builder[Elem, DestColl] =
         TransformedFactory[[a] =>> a, [a] =>> a, Elem, Collection, DestColl](self, f)
 
+      /**
+       * Lift an F-wrapped result of a `Collection.Builder` into a `Collection.Builder.Fallible`, for example:
+       * {{{
+       * import chanterelle.interop.*
+       *
+       * case class NonEmptyList[A] private (head: A, tail: List[A])
+       * object NonEmptyList {
+       *   def fromList[A](list: List[A]): Option[NonEmptyList[A]] = ???
+       * }
+       *
+       * given [Elem]: Collection.Builder.Fallible[Option, Elem, NonEmptyList[Elem]] =
+       *   Collection.Builder.from[List[Elem]].transform(NonEmptyList.fromList).fallible
+       * }}}
+       */
       def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
         self.transform(ev.apply)
     }
 
     given default[Elem, Collection](using factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
 
+    /**
+     * An interop typeclass that abstracts over collection builders where the collection being built cannot be empty (or their construction is fallible in any other way).
+     *
+     * Custom instances of `Collection.Builder.Fallible` are usually meant to be built using `Collection.Builder.from` as the starting point and then transforming it into our target type with `.transform` and finishing up with `.fallible`, for example:
+     * {{{
+     * import chanterelle.interop.*
+     *
+     * case class NonEmptyList[A] private (head: A, tail: List[A])
+     * object NonEmptyList {
+     *   def fromList[A](list: List[A]): Option[NonEmptyList[A]] = ???
+     * }
+     *
+     * given [Elem]: Collection.Builder.Fallible[Option, Elem, NonEmptyList[Elem]] =
+     *   Collection.Builder.from[List[Elem]].transform(NonEmptyList.fromList).fallible
+     * }}}
+     *
+     * ...or if we're operating on a custom Map:
+     *
+     * {{{
+     * import chanterelle.interop.*
+     *
+     * case class NonEmptyMap[K, V] private (underlying: Map[K, V])
+     *
+     * object NonEmptyMap {
+     *   def fromMap[K, V](map: Map[K, V]): Option[Map[K, V]] = ???
+     * }
+     * given [K, V]: Collection.Builder.Fallible[Option, (K, V), MyMap[K, V]] = Collection.Builder.from[Map[K, V]].transform(NonEmptyMap.fromMap).fallible
+     * }}}
+     *
+     * An instance of `Collection.Builder` (or `Collection.Builder.Fallible`) and `Collection.IntoIterator` will allow `chanterelle` to consider a given type as a collection type which enables some additional combinators inside the `.transform` macro,
+     * like the `.each` operator that 'cuts through' collection shapes when configuring transformations.
+     *
+     * This typeclass requires its 2 type parameters to be fully-applied and that's because it abstracts over both 'classic' collection shapes (i.e. ones with a single elem type constructor - like List)
+     * and Map-shaped ones (i.e. with a two elem type constructor - like HashMap).
+     *
+     * **Note** that `chanterelle` will only consider `Coll[_]` and `Map[_, _]` shaped instances when looking for candidates during the expansion of its `.transform` macro.
+     */
     opaque type Fallible[F[_], Elem, Collection] <: Factory[Elem, F[Collection]] = Factory[Elem, F[Collection]]
 
     object Fallible {
+      extension [F[_], Elem, Coll](self: Builder.Fallible[F, Elem, Coll]) {
+
+        /**
+         * Transforms the wrapper type of the fallible builder
+         */
+        def transformK[G[_]](fk: [a] => F[a] => G[a]): Builder.Fallible[G, Elem, Coll] =
+          TransformedFactory[F, G, Elem, Coll, Coll](self, fk.apply)
+      }
+
+      /**
+       * Users are usually encouraged to build `Collection.Builder.Fallible` instances starting with `Collection.Builder.from` but this method exists as an escape hatch of sorts,
+       * which should allow any and all shenanigans by just feeding in a custom-built `Factory`
+       */
+      def fromFactory[F[_], Elem, Collection](factory: Factory[Elem, F[Collection]]): Builder.Fallible[F, Elem, Collection] =
+        factory
+
       given fromTotal[F[_], Elem, Collection](using
         F: Mode[F],
         Builder: Collection.Builder[Elem, Collection]
       ): Collection.Builder.Fallible[F, Elem, Collection] =
         Builder.transform(F.pure)
-
-      extension [F[_], Elem, Coll](self: Builder.Fallible[F, Elem, Coll]) {
-        def transformK[G[_]](fk: [a] => F[a] => G[a]): Builder.Fallible[G, Elem, Coll] =
-          TransformedFactory[F, G, Elem, Coll, Coll](self, fk.apply)
-      }
-
-      def fromFactory[F[_], Elem, Collection](factory: Factory[Elem, F[Collection]]): Builder.Fallible[F, Elem, Collection] =
-        factory
     }
 
     private final class TransformedFactory[F[_], G[_], Elem, SourceColl, DestColl](
