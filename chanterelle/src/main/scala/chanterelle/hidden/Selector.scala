@@ -14,13 +14,13 @@ sealed trait Selector {
 
     /**
      * Cut through an `Option` in the context of a path selector in the `.transform` macro. Example:
-     * {{{
+     * ```scala
      * import chanterelle.*
      *
      * val tup = (field = Some(1))
      * // evaluates to (field = Some(2))
      * tup.transform(_.update(_.field.some)(_ + 1))
-     * }}}
+     * ```
      */
     def some: A
   }
@@ -29,13 +29,13 @@ sealed trait Selector {
 
     /**
      * Cut through a collection in the context of a path selector in the `.transform` macro. Example:
-     * {{{
+     * ```scala
      * import chanterelle.*
      *
      * val tup = (field = List(1, 2, 3))
      * // evaluates to (field = List(2, 3, 4))
      * tup.transform(_.update(_.field.each)(_ + 1))
-     * }}}
+     * ```
      */
     def each[Elem](using Collection.IntoIterator[Elem, Coll]): Elem
   }
@@ -47,7 +47,7 @@ sealed trait Selector {
      * Note that `Mode[F] <: Mappable[F]` so that also works for fallible types.
      *
      * Example:
-     * {{{
+     * ```scala
      * import chanterelle.*
      * import chanterelle.interop.*
      *
@@ -62,7 +62,7 @@ sealed trait Selector {
      * val tup = (field = MyWrapper(1))
      * // evaluates to (field = MyWrapper(2))
      * tup.transform(_.update(_.field.element)(_ + 1))
-     * }}}
+     * ```
      */
     def element[F[_], Elem](using A <:< F[Elem], Mappable[F]): Elem
   }

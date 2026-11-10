@@ -11,16 +11,16 @@ object Collection {
   /**
    * An interop typeclass representing types that can be converted into iterators.
    * Instances of `Collection.IntoIterator` are usually created with `Collection.IntoIterator.from`, for example:
-   *  {{{
+   * ```scala
    *  import chanterelle.interop.*
    *
-   *  given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = 
+   *  given [Elem]: Collection.IntoIterator[Elem, List[Elem]] =
    *    Collection.IntoIterator.from(_.iterator)
    *
    *  // or for a Map-shaped collection:
-   *  given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = 
+   *  given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] =
    *    Collection.IntoIterator.from(_.iterator)
-   *  }}}
+   * ```
    *
    * This typeclass requires its 2 type parameters to be fully-applied and that's because it abstracts over both 'classic' collection shapes (i.e. ones with a single elem type constructor - like List)
    * and Map-shaped ones (i.e. with a two elem type constructor - like HashMap).
@@ -36,21 +36,21 @@ object Collection {
 
     /**
      * The default way of creating instances of `Collection.IntoIterator`.
-     * {{{
+     * ```scala
      * import chanterelle.interop.*
      *
-     * given [Elem]: Collection.IntoIterator[Elem, List[Elem]] = 
+     * given [Elem]: Collection.IntoIterator[Elem, List[Elem]] =
      *   Collection.IntoIterator.from(_.iterator)
      *
      * // or for a Map-shaped collection:
-     * given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] = 
+     * given [Key, Value]: Collection.IntoIterator[(Key, Value), Map[Key, Value]] =
      *   Collection.IntoIterator.from(_.iterator)
-     * }}}
+     * ```
      *
      * The `Coll` type parameter can (usually) be used to infer the type of the `Elem` type param, for example:
-     * {{{
+     * ```scala
      * val intoIter = Collection.IntoIterator.from[List[String]](_.iterator)
-     * }}}
+     * ```
      * However, given than `Collection.IntoIterator` is a typeclass it's usually inferred from the its `given` definition (and those always have their type ascription anyway) so users can just drop the type ascriptions altogether.
      */
     def from[Coll](using DummyImplicit)[Elem](toIterator: Coll => Iterator[Elem]): IntoIterator[Elem, Coll] = IntoIter(toIterator)
@@ -82,25 +82,25 @@ object Collection {
    *
    * Custom instances of `Collection.Builder` are usually meant to be built using `Collection.Builder.from` as the starting point and then transforming it into our target type with `.transform`, for example:
    *
-   * {{{
+   * ```scala
    * import chanterelle.interop.*
    *
    * case class MyVector[A](underlying: Vector[A])
    *
    * given [Elem]: Collection.Builder[Elem, MyVector[Elem]] =
    *   Collection.Builder.from[Vector[Elem]].transform(MyVector.apply)
-   * }}}
+   * ```
    *
    * ...or if we're operating on a custom Map:
    *
-   * {{{
+   * ```scala
    * import chanterelle.interop.*
    *
    * case class MyMap[K, V](underlying: Map[K, V])
    *
-   * given [K, V]: Collection.Builder[(K, V), MyMap[K, V]] = 
+   * given [K, V]: Collection.Builder[(K, V), MyMap[K, V]] =
    *   Collection.Builder.from[Map[K, V]].transform(MyMap.apply)
-   * }}}
+   * ```
    *
    * An instance of `Collection.Builder` (or `Collection.Builder.Fallible`) and `Collection.IntoIterator` will allow `chanterelle` to consider a given type as a collection type which enables some additional combinators inside the `.transform` macro,
    * like the `.each` operator that 'cuts through' collection shapes when configuring transformations.
@@ -117,7 +117,7 @@ object Collection {
 
     /**
      * The default way of creating instances of `Collection.Builder`. Example:
-     * {{{
+     * ```scala
      * import chanterelle.interop.*
      *
      * case class MyVector[A](underlying: Vector[A])
@@ -126,7 +126,7 @@ object Collection {
      *   Collection.Builder
      *     .from[Vector[Elem]]
      *     .transform(MyVector.apply)
-     * }}}
+     * ```
      *
      * Note that the `Elem` type param can usually be inferred from just providing the `Collection` type param so this method caters to this use case.
      */
@@ -135,7 +135,7 @@ object Collection {
     /**
      * An alternative to `Collection.Builder.from` where one can feed an explicit `Factory`, for example:
      *
-     * {{{
+     * ```scala
      * import chanterelle.interop.*
      *
      * case class MyVector[A](underlying: Vector[A])
@@ -144,18 +144,18 @@ object Collection {
      *   Collection.Builder
      *     .fromFactory(Vector)
      *     .transform(MyVector.apply) // the companion of `Vector` is also a `Factory` of Vectors
-     * }}}
+     * ```
      */
     def fromFactory[Elem, Collection](factory: Factory[Elem, Collection]): Builder[Elem, Collection] = factory
 
     /**
      * Builds an immutable collection builder given an `empty` collection an a function that creates a new collection with an element appended, for example:
-     * {{{
+     * ```scala
      * import chanterelle.interop.*
      *
      * given [Elem]: Collection.Builder[Elem, Vector[Elem]] =
      *   Collection.Builder.fromAppendable(Vector.empty, (acc, elem) => acc.appended(elem))
-     * }}}
+     * ```
      */
     def fromAppendable[Elem, Coll[+elem]](
       empty: Coll[Nothing],
@@ -173,7 +173,7 @@ object Collection {
 
       /**
        * Lift an F-wrapped result of a `Collection.Builder` into a `Collection.Builder.Fallible`, for example:
-       * {{{
+       * ```scala
        * import chanterelle.interop.*
        *
        * case class NonEmptyList[A] private (head: A, tail: List[A])
@@ -187,9 +187,11 @@ object Collection {
        *     .from[List[Elem]]
        *     .transform(NonEmptyList.fromList)
        *     .fallible[Option] // this type ascription can usually be inferred
-       * }}}
+       * ```
        */
-      def fallible[F[_]](using DummyImplicit)[UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
+      def fallible[F[_]](using
+        DummyImplicit
+      )[UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
         self.transform(ev.apply)
     }
 
@@ -199,7 +201,7 @@ object Collection {
      * An interop typeclass that abstracts over collection builders where the collection being built cannot be empty (or their construction is fallible in any other way).
      *
      * Custom instances of `Collection.Builder.Fallible` are usually meant to be built using `Collection.Builder.from` as the starting point and then transforming it into our target type with `.transform` and finishing up with `.fallible`, for example:
-     * {{{
+     * ```scala
      * import chanterelle.interop.*
      *
      * case class NonEmptyList[A] private (head: A, tail: List[A])
@@ -213,25 +215,25 @@ object Collection {
      *     .from[List[Elem]]
      *     .transform(NonEmptyList.fromList)
      *     .fallible
-     * }}}
+     * ```
      *
      * ...or if we're operating on a custom Map:
      *
-     * {{{
+     * ```scala
      * import chanterelle.interop.*
      *
      * case class NonEmptyMap[K, V] private (underlying: Map[K, V])
      *
      * object NonEmptyMap {
-     *   def fromMap[K, V](map: Map[K, V]): Option[Map[K, V]] = ???
+     *   def fromMap[K, V](map: Map[K, V]): Option[NonEmptyMap[K, V]] = ???
      * }
      *
-     * given [K, V]: Collection.Builder.Fallible[Option, (K, V), MyMap[K, V]] = 
+     * given [K, V]: Collection.Builder.Fallible[Option, (K, V), NonEmptyMap[K, V]] =
      *   Collection.Builder
      *     .from[Map[K, V]]
      *     .transform(NonEmptyMap.fromMap)
      *     .fallible
-     * }}}
+     * ```
      *
      * An instance of `Collection.Builder` (or `Collection.Builder.Fallible`) and `Collection.IntoIterator` will allow `chanterelle` to consider a given type as a collection type which enables some additional combinators inside the `.transform` macro,
      * like the `.each` operator that 'cuts through' collection shapes when configuring transformations.

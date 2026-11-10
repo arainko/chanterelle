@@ -13,14 +13,15 @@ object TupleModifier {
 
     /**
      * Adds a new field inside the selected named tuple.
-     * {{{
+     * ```scala
+     * import chanterelle.*
      * val tup = (anotherField = (field1 = 123))
      * val expected = (anotherField = (field1 = 123, newField = "garmanbozia"))
      *
      * val actual = tup.transform(_.put(_.anotherField)((newField = "garmanbozia")))
      *
-     * assertEquals(actual, expected)
-     * }}}
+     * // assertEquals(actual, expected)
+     * ```
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def put[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[Value <: AnyNamedTuple](
@@ -29,14 +30,15 @@ object TupleModifier {
 
     /**
      * Adds a new field inside the selected named tuple by evaluating a function over the selection.
-     * {{{
+     * ```scala
+     * import chanterelle.*
      * val tup = (anotherField = (field1 = 123))
      * val expected = (anotherField = (field1 = 123, newField = 123 + 23))
      *
      * val actual = tup.transform(_.compute(_.anotherField)(value => (newField = value.field1 + 23)))
      *
-     * assertEquals(actual, expected)
-     * }}}
+     * // assertEquals(actual, expected)
+     * ```
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def compute[Selected <: AnyNamedTuple](selector: Selector ?=> Tup => Selected)[Value <: AnyNamedTuple](
@@ -45,56 +47,60 @@ object TupleModifier {
 
     /**
      * Updates a value under the selected path.
-     * {{{
+     * ```scala
+     * import chanterelle.*
      * val tup = (anotherField = (field1 = 123))
      * val expected = (anotherField = (field1 = 124))
      *
      * val actual = tup.transform(_.update(_.anotherField.field1)(_ + 1))
      *
-     * assertEquals(actual, expected)
-     * }}}
+     * // assertEquals(actual, expected)
+     * ```
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def update[Selected](selector: Selector ?=> Tup => Selected)[NewField](f: Selected => NewField): TupleModifier[Tup]
 
     /**
      * Removes the selected field.
-     * {{{
+     * ```scala
+     * import chanterelle.*
      * val tup = (anotherField = (field1 = 123, field2 = 123))
      * val expected = (anotherField = (field1 = 123))
      *
      * val actual = tup.transform(_.remove(_.anotherField.field2))
      *
-     * assertEquals(actual, expected)
-     * }}}
+     * // assertEquals(actual, expected)
+     * ```
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def remove[Selected](selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
 
     /**
      * Renames fields according to the passed in FieldName to FieldName function (which needs to be known at compile time).
-     * {{{
+     * ```scala
+     * import chanterelle.*
      * val tup = (anotherField = (field1 = 123, field2 = 123)).transform(_.rename(_.toUpperCase))
      *
      * val expected = (ANOTHERFIELD = (FIELD1 = 123, FIELD2 = 123))
      *
-     * assertEquals(tup, expected)
-     * }}}
+     * // assertEquals(tup, expected)
+     * ```
      *
      * The blast radius of the renaming function can be further controlled with '.local' and '.regional':
-     * {{{
+     * ```scala
+     * import chanterelle.*
      *  val tup = (optField = Some((field = (lowerDown = 1))))
      *
      *  // point it at the named tuple inside the Option to only rename the 'toplevel' fields
      *  val actualLocal = tup.transform(_.rename(_.toUpperCase).local(_.optField.element))
      *  val expectedLocal = (optField = Some((FIELD = (lowerDown = 1))))
-     *  assertEquals(actualLocal, expectedLocal)
+     * // assertEquals(actualLocal, expectedLocal)
      *
      *  // '.regional' makes it so that all the fields underneath the path are transformed.
      *  val actualRegional = tup.transform(_.rename(_.toUpperCase).regional(_.optField.element))
      *  val expectedRegional = (optField = Some((FIELD = (LOWERDOWN = 1))))
-     *  assertEquals(actualRegional, expectedRegional)
-     * }}}
+     * // assertEquals(actualRegional, expectedRegional)
+     * ```
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def rename(fieldName: FieldName => FieldName): TupleModifier[Tup] & Local[Tup] & Regional[Tup]
@@ -104,7 +110,8 @@ object TupleModifier {
      *
      * Named tuples are merged by field name. Fields from the named tuple we merge with (the mergee) take precedence. Nested named tuples (that don't come from modifications) and merged values are recursed. Other values get completely overwritten using the value from the mergee.
      *
-     * {{{
+     * ```scala
+     * import chanterelle.*
      * val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
      * val mergee = (field2 = (level1Field3 = 5, level1Field2 = (anotherField = 6)))
      *
@@ -122,11 +129,12 @@ object TupleModifier {
      *    )
      *  )
      *
-     * assertEquals(actual, expected)
-     * }}}
+     * // assertEquals(actual, expected)
+     * ```
      *
      * Merges can be pointed at a specific nested named tuple with `.regional`.
-     * {{{
+     * ```scala
+     * import chanterelle.*
      * val tup = (field1 = 1, field2 = (level1Field1 = 3, level1Field2 = (level2Field = 4)))
      * val mergee = (level1Field2 = (anotherField = 6))
      *
@@ -143,8 +151,8 @@ object TupleModifier {
      *   )
      * )
      *
-     * assertEquals(actual, expected)
-     * }}}
+     * // assertEquals(actual, expected)
+     * ```
      *
      * Certain limitations are imposed on merged values:
      *  * `.remove`, `.put`, and `.compute` are not currently supported. (Users can still 'cut through' merged values to access other nodes of the transformation.)
@@ -157,7 +165,7 @@ object TupleModifier {
      * This will also hoist each fallible field that it encouters on the path to the selected field.
      *
      * Example:
-     * {{{
+     * ```scala
      * import chanterelle.*
      *
      * val tup = (field1 = 1, field2 = (nested = Some(1)))
@@ -165,7 +173,7 @@ object TupleModifier {
      *   // evaluates to Some((field1 = 1, field2 = (nested = 1)))
      *   tup.transform(_.hoist(_.field2.nested))
      * }
-     * }}}
+     * ```
      */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def hoist[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]

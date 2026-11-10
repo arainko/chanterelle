@@ -6,14 +6,14 @@ import chanterelle.interop.{ Collection, Mappable }
 
 /**
  * `Mode` is a capability that provides the ability to 'bubble up' nested wrapped values (i.e. ones wrapped in an `F`) up to the top, for example:
- * {{{
+ * ```scala
  * import chanterelle.*
  *
  * Mode.FailFast.option {
  *   // evaluates to Some((field1 = 1, field2 = 2, field3 = 3))
  *   (field1 = Some(1), field2 = Some(2), field3 = Some(3)).transform(_.hoist)
  * }
- * }}}
+ * ```
  *
  * `Modes` come in 3 flavors:
  * * `Accumulating` - the least powerful, able to model error accumulation but the the whole structure needs to be known from the get go (in other words, it can't hoist nested fallible fields like `F[F[Int]]`),
@@ -41,7 +41,7 @@ object Mode {
    * This also means that its `traverseCollection` method is not able to function with fallible builders (since that'd entail that it's able to flatten a shape of `F[F[A]]` into `F[A]`).
    *
    * Example:
-   * {{{
+   * ```scala
    * import chanterelle.*
    *
    * Mode.Accumulating.either[List[String]] {
@@ -49,16 +49,16 @@ object Mode {
    *   (field1 = Right(1), field2 = Left(List("err1", "err2")), field3 = Left(List("err3"))).transform(_.hoist)
    *
    * }
-   * }}}
+   * ```
    *
    * At the same time, trying to use it as such will fail to compile:
-   * {{{
+   * ```scala sc:fail
    * import chanterelle.*
    *
    * Mode.Accumulating.either[List[String]] {
    *   (field1 = Right(Right(1))).transform(_.hoist(_.field1.element)) // error: It's not possible to hoist nested fallible fields with just a Mode.Accumulating
    * }
-   * }}}
+   * ```
    */
   trait Accumulating[F[_]] extends Mode[F] {
     final type Builder[Elem, Collection] = Collection.Builder[Elem, Collection]
@@ -70,7 +70,7 @@ object Mode {
    * This one can model fail fast transformations and hoisting of nested fallible fields, but it's not really possible to accumulate errors with it.
    *
    * Example:
-   * {{{
+   * ```scala
    * import chanterelle.*
    *
    * Mode.FailFast.option {
@@ -80,7 +80,7 @@ object Mode {
    *  // it's also possible to hoist nested fields
    *  (field1 = Some(Some(1))).transform(_.hoist(_.field1.element)) // evaluates to Some((field1 = 1))
    * }
-   * }}}
+   * ```
    */
   trait FailFast[F[_]] extends Mode[F] {
     final type Builder[Elem, Collection] = Collection.Builder.Fallible[F, Elem, Collection]
@@ -92,7 +92,7 @@ object Mode {
    * A mix of both `Mode.Accumulating` and `Mode.FailFast` - it's able to both accumulate errors and do nested fallible transformations.
    *
    * Example:
-   *  {{{
+   * ```scala
    * import chanterelle.*
    *
    * Mode.Parallel.either[List[String]] {
@@ -102,7 +102,7 @@ object Mode {
    *   // hoisting nested fields also works
    *   (field1 = Right(Right(1))).transform(_.hoist(_.field1.element)) // evaluates to Right((field1 = 1))
    * }
-   * }}}
+   * ```
    */
   trait Parallel[F[_]] extends Mode[F] {
     final type Builder[Elem, Collection] = Collection.Builder.Fallible[F, Elem, Collection]
@@ -119,7 +119,7 @@ object Mode {
 
     /**
      * An instance of `Mode.Accumulating` for `Either` that collects errors (where the type param of `Errors` is the left side of the `Either`), example:
-     * {{{
+     * ```scala
      * import chanterelle.*
      *
      * Mode.Accumulating.either[List[String]] {
@@ -129,7 +129,7 @@ object Mode {
      *   // in case of errors: evaluates to Left(List("err1", "err2", "err3"))
      *   (field1 = Right(1), field2 = Left(List("err1", "err2")), field3 = Left(List("err3"))).transform(_.hoist)
      * }
-     * }}}
+     * ```
      *
      * Providing the `Errors` type param is usually enough to infer `E` by itself.
      */
@@ -198,7 +198,7 @@ object Mode {
 
     /**
      * An instance of `Mode.Parallel` for `Either` that collects errors (where the type param of `Errors` is the left side of the `Either`), example:
-     * {{{
+     * ```scala
      * import chanterelle.*
      *
      * Mode.Parallel.either[List[String]] {
@@ -208,7 +208,7 @@ object Mode {
      *   // when there are errors: evaluates to Left(List("err1", "err2", "err3"))
      *   (field1 = Right(1), field2 = Left(List("err1", "err2")), field3 = Left(List("err3"))).transform(_.hoist)
      * }
-     * }}}
+     * ```
      *
      * Providing the `Errors` type param is usually enough to infer `E` by itself.
      */
@@ -281,7 +281,7 @@ object Mode {
 
     /**
      * An instance of `Mode.FailFast` for `Either` that fails fast at the first error it encounters (where the type param `E` is the left side of the `Either`), example:
-     * {{{
+     * ```scala
      * import chanterelle.*
      *
      * Mode.FailFast.either[String] {
@@ -291,7 +291,7 @@ object Mode {
      *   // when there are errors: evaluates to Left("err1")
      *   (field1 = Right(1), field2 = Left("err1"), field3 = Left("err2")).transform(_.hoist)
      * }
-     * }}}
+     * ```
      */
     def either[E]: Mode.FailFast[scala.Either[E, _]] =
       eitherInstance.asInstanceOf[Mode.FailFast[scala.Either[E, _]]]
@@ -332,9 +332,9 @@ object Mode {
 
     }
 
-     /**
+    /**
      * An instance of `Mode.FailFast` for `Option` that fails fast with a `None` once it encounters one.
-     * {{{
+     * ```scala
      * import chanterelle.*
      *
      * Mode.FailFast.option {
@@ -344,7 +344,7 @@ object Mode {
      *   // when there are errors: evaluates to None
      *   (field1 = Right(1), field2 = None, field3 = Some(3)).transform(_.hoist)
      * }
-     * }}}
+     * ```
      */
 
     val option: Mode.FailFast[scala.Option] = Option
