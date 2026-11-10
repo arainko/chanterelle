@@ -186,10 +186,10 @@ object Collection {
        *   Collection.Builder
        *     .from[List[Elem]]
        *     .transform(NonEmptyList.fromList)
-       *     .fallible
+       *     .fallible[Option] // this type ascription can usually be inferred
        * }}}
        */
-      def fallible[F[_], UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
+      def fallible[F[_]](using DummyImplicit)[UnwrappedColl](using ev: Collection <:< F[UnwrappedColl]): Builder.Fallible[F, Elem, UnwrappedColl] =
         self.transform(ev.apply)
     }
 

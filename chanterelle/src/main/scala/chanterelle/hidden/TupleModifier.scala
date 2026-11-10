@@ -152,9 +152,53 @@ object TupleModifier {
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def merge[A <: NamedTuple.AnyNamedTuple](mergee: A): TupleModifier[Tup] & Regional[Tup]
 
+    /**
+     * Hoist a single field up to the top of the transformation (based on the `Mode` that's currently in scope).
+     * This will also hoist each fallible field that it encouters on the path to the selected field.
+     *
+     * Example:
+     * {{{
+     * import chanterelle.*
+     *
+     * val tup = (field1 = 1, field2 = (nested = Some(1)))
+     * Mode.FailFast.option {
+     *   // evaluates to Some((field1 = 1, field2 = (nested = 1)))
+     *   tup.transform(_.hoist(_.field2.nested))
+     * }
+     * }}}
+     */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def hoist[F[_], Selected](using Mode[F])(selector: Selector ?=> Tup => Selected): TupleModifier[Tup]
 
+    /**
+     * Hoists a group of fields up to the top of the transformation (based on the `Mode` that's currently in scope). Example:
+     *
+     * ```scala
+     * import chanterelle.*
+     * val tup = (field1 = Some(1), field2 = Some(2), field3 = Some(3), nested = (nestedField1 = Some(1)))
+     *
+     * Mode.FailFast.option {
+     *   // evaluates to (Some(field1 = 1, field2 = 2, field3 = 3, nested = (nestedField1 = Some(1))))
+     *   tup.transform(_.hoist) // equivalent to tup.transform(_.hoist.local)
+     * }
+     * ```
+     *
+     * Note that this transformation can be further customized with `.local` and `.regional`
+     *   - `.local` hoists the currently selected set of fields (like in the example above, note that `nestedField1` wasn't hoisted)
+     *   - `.regional` hoists ALL possible fields in a given region.
+     *
+     * An example with `.regional`:
+     *
+     * ```scala
+     * import chanterelle.*
+     * val tup = (field1 = Some(1), field2 = Some(2), field3 = Some(3), nested = (nestedField1 = Some(1)))
+     *
+     * Mode.FailFast.option {
+     *   // evaluates to Some(field1 = 1, field2 = 2, field3 = 3, nested = (nestedField1 = 1))
+     *   tup.transform(_.hoist.regional)
+     * }
+     * ```
+     */
     @compileTimeOnly("Only usable as part of the .transform DSL")
     def hoist[F[_]](using Mode[F]): TupleModifier[Tup] & Regional[Tup] & Local[Tup]
   }

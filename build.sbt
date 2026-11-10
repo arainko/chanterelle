@@ -48,6 +48,7 @@ lazy val chanterelle =
         "-Xcheck-macros",
         "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
+      Compile / doc / scalacOptions ++= Seq("-snippet-compiler:compile"),
       libraryDependencies ++= Seq(
         "org.scalameta" %%% "munit" % "1.3.4" % Test,
         "org.typelevel" %%% "discipline-munit" % "2.0.0" % Test
