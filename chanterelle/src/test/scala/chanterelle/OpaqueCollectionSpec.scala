@@ -22,6 +22,23 @@ class OpaqueCollectionSpec extends ChanterelleSuite {
     }
   }
 
+  test("hoisting elements of an opaque fallible collection (OpqNel) works") {
+    Mode.FailFast.either[String] {
+      val ok = (field = OpqNel[Either[String, Int]](Right(1), List(Right(2))))
+
+      val actualOk = ok.transform(_.hoist(_.field.each))
+      val expectedOk = Right((field = OpqNel(1, List(2))))
+      assertEquals(actualOk, expectedOk)
+
+      val failing = (field = OpqNel[Either[String, Int]](Right(1), List(Left("boom"), Right(3))))
+
+      val actualFailed = failing.transform(_.hoist(_.field.each))
+      val expectedFailed = Left("boom")
+
+      assertEquals(actualFailed, expectedFailed)
+    }
+  }
+
   test("hoisting values out of opaque map entries works") {
     Mode.FailFast.either[String] {
       val ok = (map = OpqMap(HashMap("a" -> Right(1), "b" -> Right(2))))

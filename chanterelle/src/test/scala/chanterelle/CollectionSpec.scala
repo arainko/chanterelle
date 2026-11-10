@@ -150,11 +150,13 @@ class CollectionSpec extends ChanterelleSuite {
   test("hoisting elements of custom collections works") {
     case class CusVector[+A](vec: Vector[A])
 
-    given [A]: chanterelle.interop.Collection.IntoIterator[A, CusVector[A]] =
-      chanterelle.interop.Collection.IntoIterator.from(_.vec.iterator)
+    object CusVector {
+      given [A]: chanterelle.interop.Collection.IntoIterator[A, CusVector[A]] =
+        chanterelle.interop.Collection.IntoIterator.from(_.vec.iterator)
 
-    given [A]: chanterelle.interop.Collection.Builder[A, CusVector[A]] =
-      chanterelle.interop.Collection.Builder.fromFactory(Vector).transform(CusVector.apply)
+      given [A]: chanterelle.interop.Collection.Builder[A, CusVector[A]] =
+        chanterelle.interop.Collection.Builder.fromFactory(Vector).transform(CusVector.apply)
+    }
 
     Mode.FailFast.either[String] {
       val ok = (field = CusVector(Vector(Right(1), Right(2))))
@@ -186,4 +188,15 @@ class CollectionSpec extends ChanterelleSuite {
       assertEquals(actualFailed, expectedFailed)
     }
   }
+
+  test("hoisting elements of a custom NonEmptyList goes through its fallible builder") {
+    Mode.FailFast.either[String] {
+      val ok = (field = NonEmptyList[Either[String, Int]](Right(1), List(Right(2), Right(3))))
+      assertEquals(ok.transform(_.hoist(_.field.each)), Right((field = NonEmptyList(1, List(2, 3)))))
+
+      val failing = (field = NonEmptyList[Either[String, Int]](Right(1), List(Left("boom"), Right(3))))
+      assertEquals(failing.transform(_.hoist(_.field.each)), Left("boom"))
+    }
+  }
+
 }

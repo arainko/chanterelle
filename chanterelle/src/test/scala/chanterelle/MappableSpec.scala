@@ -113,4 +113,12 @@ class MappableSpec extends ChanterelleSuite {
 
     assertEquals(actual, expected)
   }
+
+  test(".rename inside a Mappable wrapper") {
+    val tup = (field = Box((field1 = 1, field2 = 2, field3 = 3), "asd"))
+    val actual = tup.transform(_.rename(_.toUpperCase))
+
+    val expected = (FIELD = Box((FIELD1 = 1, FIELD2 = 2, FIELD3 = 3), "asd"))
+    assertEquals(actual, expected)
+  }
 }

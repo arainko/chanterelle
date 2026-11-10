@@ -359,17 +359,6 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     )
   }
 
-  // test("error messages around .passthroughHoisted with Accumulating (not Accumulating & FailFast) are alright-ish") {
-  //   (Mode.Parallel.either[List, String]: Mode.Accumulating[Either[List[String], _]]) {
-  //     assertFailsToCompileContains {
-  //       """
-  //       val tup = (field = Right(List(Right(1), Left(List("boom")))))
-  //       tup.transform(_.hoist(_.field.element.each))
-  //     """
-  //     }("It's not possible to hoist nested fallible fields with just a Mode.Accumulating")
-  //   }
-  // }
-
   test(
     "when operating on a Mode.Parallel errors are accumulated but nested fallible transformations can still be traversed"
   ) {
@@ -403,7 +392,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }("No field 'nest' found")
   }
 
-  test("interactions with .some is equivalent to .element when operating with Mode[Option]") {
+  test("interaction with .some is equivalent to .element when operating with Mode[Option]") {
     Mode.FailFast.option {
       val tup = (field = Some((inner = Some(1))))
 

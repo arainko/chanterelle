@@ -37,6 +37,21 @@ object OpaqueFixtures {
       .transform(OpqMap.apply)
   }
 
+  opaque type OpqNel[+A] = NonEmptyList[A]
+
+  object OpqNel {
+    def apply[A](head: A, tail: List[A]): OpqNel[A] = NonEmptyList(head, tail)
+
+    extension [A](nel: OpqNel[A]) def underlying: NonEmptyList[A] = nel
+
+    given [A]: Collection.IntoIterator[A, OpqNel[A]] = Collection.IntoIterator.from(_.underlying.toList.iterator)
+
+    given [A]: Collection.Builder.Fallible[[a] =>> Either[String, a], A, OpqNel[A]] = Collection.Builder
+      .from[List[A]]
+      .transform(list => NonEmptyList.fromList(list).toRight("empty OpqNel"))
+      .fallible[[a] =>> Either[String, a]]
+  }
+
   opaque type OpqBox[+A] = (A, String)
 
   object OpqBox {
