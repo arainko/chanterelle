@@ -5,7 +5,7 @@ import munit.Location
 
 import scala.collection.immutable.HashMap
 
-class CollectionInteropSuite extends ChanterelleSuite {
+class CollectionInteropSpec extends ChanterelleSuite {
 
   test("IntoIterator.iterableOnce works") {
     val list = IntoIterator.iterableOnce[Int, List]

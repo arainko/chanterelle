@@ -2,10 +2,7 @@ package chanterelle.internal
 
 import chanterelle.internal.Debug.LabelColor
 import chanterelle.internal.FallibleInterpreter.TransformationMode
-import chanterelle.internal.Plan.{
-  Hoist,
-  IsModified
-}
+import chanterelle.internal.Plan.{ Hoist, IsModified }
 import chanterelle.internal.Structure.MappableInstance
 import chanterelle.interop.Collection
 

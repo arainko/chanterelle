@@ -6,10 +6,12 @@ import org.scalacheck.Prop.*
 import org.scalacheck.{ Arbitrary, Prop }
 import org.typelevel.discipline.*
 
-final class ModeLawsSuite extends DisciplineSuite {
+final class ModeLawsSpec extends DisciplineSuite {
   checkAll("Mode.FailFast for Option laws", ModeLaws.FailFast(Mode.FailFast.option)[Int, Int])
   checkAll("Mode.FailFast for Either laws", ModeLaws.FailFast(Mode.FailFast.either[String])[Int, Int])
   checkAll("Mode.Parallel for Either laws", ModeLaws.Parallel(Mode.Parallel.either[List[String]])[Int, Int, Int])
+  checkAll("Mode.Accumulating for Either laws", ModeLaws.Accumulating(Mode.Accumulating.either[List[String]])[Int, Int, Int])
+
 }
 
 sealed abstract class ModeLaws[F[_]](val F: Mode[F]) extends Laws {

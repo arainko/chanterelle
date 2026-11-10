@@ -63,13 +63,14 @@ lazy val chanterelle =
       mimaPreviousArtifacts := Set.empty
     )
 
+// disable publishing for now, this needs a revision first and I want to add tests against some libs like dynosaur and decline because they have cool applicative data types
 lazy val chanterelleCats =
   crossProject(JSPlatform, JVMPlatform, NativePlatform)
     .withoutSuffixFor(JVMPlatform)
     .crossType(CrossType.Pure)
     .enablePlugins(
       NoPublishPlugin
-    ) // disable publishing for now, this needs a revision first and I want to add tests against some libs like dynosaur and decline because they have cool applicative data types
+    ) 
     .in(file("chanterelle-cats"))
     .settings(
       libraryDependencies ++= Seq(
