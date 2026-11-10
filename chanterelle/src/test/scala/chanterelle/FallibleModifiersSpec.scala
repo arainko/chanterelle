@@ -87,7 +87,7 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }
   }
 
-  test("Accumulating mode gathers errors from all hoisted fields") {
+  test("Parallel mode gathers errors from all hoisted fields") {
     Mode.Parallel.either[List[String]] {
 
       val tup = (
@@ -102,7 +102,22 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }
   }
 
-  test("Accumulating mode gathers errors from all failing elements of a hoisted collection") {
+  test("Accumulating mode gathers errors from all hoisted fields") {
+    Mode.Accumulating.either[List[String]] {
+
+      val tup = (
+        one = Left(List("one")),
+        two = Left(List("two"))
+      )
+
+      val actual = tup.transform(_.hoist(_.one), _.hoist(_.two))
+      val expected = Left(List("one", "two"))
+
+      assertEquals(actual, expected)
+    }
+  }
+
+  test("Parallel mode gathers errors from all failing elements of a hoisted collection") {
     Mode.Parallel.either[List[String]] {
 
       val tup = (list = List(Right(1), Left(List("boom")), Right(2), Left(List("bang"))))
@@ -114,7 +129,19 @@ class FallibleModifiersSpec extends ChanterelleSuite {
     }
   }
 
-  test(".? hoisting through nested wrappers flattens them (Accumulating Either mode)") {
+  test("Accumulating mode gathers errors from all failing elements of a hoisted collection") {
+    Mode.Accumulating.either[List[String]] {
+
+      val tup = (list = List(Right(1), Left(List("boom")), Right(2), Left(List("bang"))))
+
+      val actual = tup.transform(_.hoist(_.list.element))
+      val expected = Left(List("boom", "bang"))
+
+      assertEquals(actual, expected)
+    }
+  }
+
+  test(".? hoisting through nested wrappers flattens them (Parallel Either mode)") {
     Mode.Parallel.either[List[String]] {
 
       val tup = (nest = Right(Right((leaf = Right(1)))))
@@ -124,6 +151,17 @@ class FallibleModifiersSpec extends ChanterelleSuite {
 
       assertEquals(actual, expected)
     }
+  }
+
+  test(".? hoisting through nested wrappers is not possible with Accumulating Either mode") {
+    assertFailsToCompileContains {
+      """
+      (??? : Mode.Accumulating[Either[List[String], _]]) {
+        val tup = (nest = Right(Right((leaf = Right(1)))))
+        tup.transform(_.hoist(_.nest.element.element.leaf))
+      }
+      """
+    }("It's not possible to hoist nested fallible fields with just a Mode.Accumulating")
   }
 
   test(".? reports hoisting a value that isn't wrapped in F as an error") {

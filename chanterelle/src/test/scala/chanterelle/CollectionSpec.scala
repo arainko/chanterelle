@@ -18,8 +18,21 @@ class CollectionSpec extends ChanterelleSuite {
     }
   }
 
-  test("hoisting wrapped fields out of elements accumulates errors (Accumulating)") {
+  test("hoisting wrapped fields out of elements accumulates errors (Parallel)") {
     Mode.Parallel.either[List[String]] {
+      val tup = (list =
+        List[(count: Either[List[String], Int])]((count = Left(List("one"))), (count = Right(1)), (count = Left(List("two"))))
+      )
+
+      val actual = tup.transform(_.hoist(_.list.each.count))
+      val expected = Left(List("one", "two"))
+
+      assertEquals(actual, expected)
+    }
+  }
+
+  test("hoisting wrapped fields out of elements accumulates errors (Accumulating)") {
+    Mode.Accumulating.either[List[String]] {
       val tup = (list =
         List[(count: Either[List[String], Int])]((count = Left(List("one"))), (count = Right(1)), (count = Left(List("two"))))
       )
