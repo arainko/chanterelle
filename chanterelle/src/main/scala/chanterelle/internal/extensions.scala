@@ -3,7 +3,7 @@ package chanterelle.internal
 import scala.quoted.*
 
 extension (tpe: Type[? <: AnyKind]) {
-  def assertBoundedBy[A: Type as A](using Quotes): Type[? <: A] =
+  private[chanterelle] def assertBoundedBy[A: Type as A](using Quotes): Type[? <: A] =
     tpe match {
       case tpe @ '[A] => tpe
       case _          =>
