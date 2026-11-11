@@ -67,7 +67,7 @@ lazy val chanterelle =
       ),
       Compile / doc / scalacOptions ++= Seq("-snippet-compiler:compile"),
       libraryDependencies ++= Seq(
-        "org.scalameta" %%% "munit" % "1.3.4" % Test,
+        "org.scalameta" %%% "munit" % "1.3.6" % Test,
         "org.typelevel" %%% "discipline-munit" % "2.0.0" % Test
       )
     )
