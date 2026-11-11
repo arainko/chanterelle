@@ -32,7 +32,7 @@ ThisBuild / githubWorkflowBuild += WorkflowStep.Run(
   commands = "sbt --client docs/mdoc" :: Nil
 )
 
-lazy val root = tlCrossRootProject.aggregate(chanterelle, chanterelleCats)
+lazy val root = tlCrossRootProject.aggregate(chanterelle)
 
 lazy val chanterelle =
   crossProject(JSPlatform, JVMPlatform, NativePlatform)
@@ -62,32 +62,6 @@ lazy val chanterelle =
       bspEnabled := false,
       mimaPreviousArtifacts := Set.empty
     )
-
-// disable publishing for now, this needs a revision first and I want to add tests against some libs like dynosaur and decline because they have cool applicative data types
-lazy val chanterelleCats =
-  crossProject(JSPlatform, JVMPlatform, NativePlatform)
-    .withoutSuffixFor(JVMPlatform)
-    .crossType(CrossType.Pure)
-    .enablePlugins(
-      NoPublishPlugin
-    ) 
-    .in(file("chanterelle-cats"))
-    .settings(
-      libraryDependencies ++= Seq(
-        "org.typelevel" %%% "cats-core" % "2.13.0",
-        "com.monovore" %%% "decline" % "2.6.2" % Test,
-        "org.scalameta" %%% "munit" % "1.3.4" % Test
-      )
-    )
-    .jsSettings(
-      bspEnabled := false,
-      mimaPreviousArtifacts := Set.empty
-    )
-    .nativeSettings(
-      bspEnabled := false,
-      mimaPreviousArtifacts := Set.empty
-    )
-    .dependsOn(chanterelle % "compile->compile;test->test")
 
 lazy val docs =
   project
