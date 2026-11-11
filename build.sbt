@@ -15,7 +15,24 @@ ThisBuild / mimaBinaryIssueFilters ++= Seq(
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.rightElement"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.rename"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.merge"),
-  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.FieldName.transformViaType")
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.FieldName.transformViaType"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.some"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.each"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.element"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.put"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.compute"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.update"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.remove"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.put"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.compute"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.update"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.remove"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.hoist"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.hoist"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Local.local"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem](
+    "chanterelle.hidden.TupleModifier#package#TupleModifier#Regional.regional"
+  )
 )
 
 ThisBuild / tlCiReleaseBranches := Seq("main")
