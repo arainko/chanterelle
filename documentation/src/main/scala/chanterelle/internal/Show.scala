@@ -46,6 +46,14 @@ object Show extends LowPriorityShow {
     }
   }
 
+  given list[A: Show as A]: Show[List[A]] with {
+    def astify(self: List[A]): AST = Collection("List", self.map(A.astify).toVector)
+  }
+
+  given vector[A: Show as A]: Show[Vector[A]] with {
+    def astify(self: Vector[A]): AST = Collection("Vector", self.map(A.astify))
+  }
+
   given map[K: Show as K, V: Show as V]: Show[Map[K, V]] with {
 
     def astify(self: Map[K, V]): AST = {
@@ -96,6 +104,13 @@ object Show extends LowPriorityShow {
     }
   }
 
+  private inline def summonShows[Tup <: Tuple]: Tuple =
+    inline erasedValue[Tup] match {
+      case _: (head *: tail) =>
+        summonInline[Show[head]].asInstanceOf[Show[Any]] *: summonShows[tail]
+      case _: EmptyTuple => EmptyTuple
+    }
+
   private inline def product[A: Mirror.ProductOf as A]: Show[A] = {
     val tpeName =
       inline erasedValue[A] match {
@@ -104,7 +119,7 @@ object Show extends LowPriorityShow {
         case _                           => constValue[A.MirroredLabel].toString
       }
     val fieldNames = inline constValueTuple[A.MirroredElemLabels].toList match { case fields: List[String] => fields }
-    def instances = summonAll[Tuple.Map[A.MirroredElemTypes, Show]].toIArray.map(_.asInstanceOf[Show[Any]])
+    def instances = summonShows[A.MirroredElemTypes].toIArray.map(_.asInstanceOf[Show[Any]])
     ForProduct(tpeName, fieldNames, instances)
   }
 
