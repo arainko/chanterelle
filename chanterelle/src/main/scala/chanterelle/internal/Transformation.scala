@@ -196,7 +196,7 @@ private[chanterelle] object Transformation {
 
         case p: Plan.Wrapped[Nothing, f] =>
           Context.current match {
-            case _: (Context.Total.type | Context.NonFallible[?]) =>
+            case _: (Context.Total.type | Context.Weakened[?]) =>
               p.isHoisted match {
                 case Hoist.No =>
                   Transformation.Mapped[f](
@@ -250,7 +250,7 @@ private[chanterelle] object Transformation {
 
         case Plan.ConfedUp(config, _) =>
           Context.current match {
-            case (Context.Total | Context.NonFallible(_, _)) =>
+            case (Context.Total | Context.Weakened(_, _)) =>
               config match {
                 case update: Configured.Update =>
                   ConfedUp(update)
@@ -301,7 +301,7 @@ object CollBuilder {
     Context.current match {
       case Context.Total =>
         Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
-      case _: Context.NonFallible[f] =>
+      case _: Context.Weakened[f] =>
         Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
       case ctx: Context.PossiblyFallible[f] =>
         ctx.mode.builderTpe match {

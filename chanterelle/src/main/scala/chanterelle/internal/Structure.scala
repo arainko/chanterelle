@@ -94,7 +94,7 @@ private[chanterelle] object Structure {
   }
 
   case class Wrapped[F[_]](
-    tpe: Type[?], // the literal source slot type; may be narrower than F[underlying] (e.g. Right[Int] for Either[String, Int])
+    tpe: Type[?],
     wrapper: WrapperType[F],
     path: Path,
     mappable: MappableInstance[F],
@@ -273,7 +273,7 @@ private[chanterelle] object Structure {
         .flatten
 
       context match {
-        case ctx: Context.PossibleFallible[?, ?] =>
+        case ctx: Context.NonTotal[?, ?] =>
           ctx.wrapperType
             .unapply(tpe)
             .map((wrapper, wrapped) =>

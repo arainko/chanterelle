@@ -1,7 +1,7 @@
 package chanterelle.internal
 
 import chanterelle.Mode
-import chanterelle.internal.Context.{ NonFallible, PossiblyFallible, Total }
+import chanterelle.internal.Context.{ Weakened, PossiblyFallible, Total }
 import chanterelle.internal.Debug.AST
 import chanterelle.internal.FallibleInterpreter.TransformationMode
 
@@ -17,15 +17,15 @@ private[chanterelle] type Fallible = Fallible.type
 private[chanterelle] sealed trait Context[+F <: Fallible] {
   def weaken: Context[Nothing] = this match {
     case Total                           => Total
-    case PossiblyFallible(mode, wrapper) => NonFallible(mode, wrapper)
-    case non: NonFallible[g]             => non
+    case PossiblyFallible(mode, wrapper) => Weakened(mode, wrapper)
+    case non: Weakened[g]             => non
   }
 
   inline def locally[A](inline f: Context[F] ?=> A): A = f(using this)
 
   final def isFallibleFailFast: Boolean =
     this match {
-      case ctx: Context.PossibleFallible[?, ?] => ctx.mode.canPassthrough
+      case ctx: Context.NonTotal[?, ?] => ctx.mode.canPassthrough
       case Context.Total                       => false
     }
 }
@@ -44,7 +44,7 @@ private[chanterelle] object Context {
       }
       .getOrElse(Context.Total)
 
-  sealed trait PossibleFallible[+F <: Fallible, G[_]] extends Context[F], Product {
+  sealed trait NonTotal[+F <: Fallible, G[_]] extends Context[F], Product {
     def mode: TransformationMode[G, ?]
     def wrapperType: WrapperType[G]
 
@@ -53,8 +53,7 @@ private[chanterelle] object Context {
   }
 
   case object Total extends Context[Nothing]
-  // TODO: rename to 'weakened'
-  case class NonFallible[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G]) extends PossibleFallible[Nothing, G]
+  case class Weakened[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G]) extends NonTotal[Nothing, G]
   case class PossiblyFallible[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G])
-      extends PossibleFallible[Fallible, G]
+      extends NonTotal[Fallible, G]
 }

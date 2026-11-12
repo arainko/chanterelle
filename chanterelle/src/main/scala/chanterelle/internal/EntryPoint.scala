@@ -35,7 +35,7 @@ object EntryPoint {
       _ = Logger.debug("Initial plan", plan)
       _ = Logger.debug("Refined plan", refinedPlan)
       expr <- Context.current match {
-        case ctx @ given (Context.Total.type | Context.NonFallible[f]) =>
+        case ctx @ given (Context.Total.type | Context.Weakened[f]) =>
           Transformation
             .create(refinedPlan)
             .leftMap(err => ErrorsWithSpan(err :: Nil))
@@ -44,9 +44,8 @@ object EntryPoint {
             }
 
         case ctx @ given Context.PossiblyFallible[f] =>
-          val transformation = Transformation.create(refinedPlan)
-
-          transformation
+          Transformation
+            .create(refinedPlan)
             .leftMap(err => ErrorsWithSpan(err :: Nil))
             .map { trans =>
               Logger.info("Fallible transformation", trans)
