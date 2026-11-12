@@ -1,10 +1,12 @@
 package chanterelle.internal
 
-import chanterelle.internal.Sources.Ref
+import chanterelle.internal.Configured.NamedSpecific
+import chanterelle.internal.Sources.{ Ref, Scope }
 import chanterelle.internal.Structure.*
 import chanterelle.internal.Transformation.Field
+import chanterelle.interop.Collection
 
-import scala.collection.Factory
+import scala.annotation.unused
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 
@@ -12,33 +14,22 @@ import NamedTuple.*
 
 private[chanterelle] object Interpreter {
 
-  def runTransformation(primary: Expr[Any], transformation: Transformation)(using Sources, Quotes): Expr[?] = {
-    def handleField(source: Structure.Named, field: Transformation.Field)(using Sources, Sources.Scope, Quotes) =
+  def runTransformation(primary: Expr[Any], transformation: Transformation[Nothing])(using
+    Sources,
+    Quotes,
+    Context.Of[Nothing]
+  ): Expr[?] = {
+    def handleField(source: Structure.Named, field: Transformation.Field[Nothing])(using Sources, Sources.Scope, Quotes) =
       field match {
         case Field.FromSource(srcName, transformation) =>
           runTransformation(StructuredValue.of(source, primary).fieldValue(srcName), transformation)
         case Field.FromModifier(modifier) =>
-          modifier match {
-            case Configured.NamedSpecific.Add(valueStructure = struct, value = value) =>
-              val source = Sources.current.get(value)
-              StructuredValue.of(struct, source).fieldValue(struct.fieldName)
-            case Configured.NamedSpecific.Compute(valueStructure = struct, fn = fn) =>
-              Sources.current.get(fn) match {
-                case '{ $fn: (src => out) } =>
-                  '{
-                    val computed = $fn(${ primary.asExprOf[src] })
-                    ${
-                      val computedValue = 'computed
-                      StructuredValue.of(struct, computedValue).fieldValue(struct.fieldName)
-                    }
-                  }
-              }
-          }
+          handleNamedSpecific(modifier)
       }
 
     Sources.current.withPrimary(primary) {
       transformation match {
-        case Transformation.Named(source, fields, namesTpe, valuesTpe) =>
+        case Transformation.Named(source, fields, namesTpe, valuesTpe, _) =>
           (namesTpe, valuesTpe).runtimeChecked match {
             case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
               val args = fields.map((_, field) => handleField(source, field))
@@ -78,29 +69,62 @@ private[chanterelle] object Interpreter {
               Sources.current.get(fn) match { case '{ $fn: (src => out) } => '{ $fn(${ primary.asExprOf[src] }) } }
           }
 
-        case Transformation.IterLike(source, paramTransformation, factory, outputTpe) =>
-          (source.tycon, outputTpe, primary).runtimeChecked match {
-            case (
-                  '[type coll[a]; coll],
-                  '[Iterable[elem]],
-                  '{ $srcValue: Iterable[srcElem] }
-                ) =>
-              val f = factory.asExprOf[Factory[elem, coll[elem]]]
-              '{
-                $srcValue
-                  .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
-                  .to[coll[elem]]($f)
+        case mapped: Transformation.Mapped[f] =>
+          @unused given Type[f] = mapped.source.wrapper.wrapper
+          (mapped.source.wrapped.tpe, mapped.wrapped.outputTpe).runtimeChecked match {
+            case '[a] -> '[b] =>
+              val src = primary.asExprOf[f[a]]
+              '{ ${ mapped.source.mappable.value }.map[a, b]($src, a => ${ runTransformation('a, mapped.wrapped).asExprOf[b] }) }
+          }
+
+        case Transformation.IterLike(
+              source: Structure.Collection.Repr.IterLike[coll],
+              paramTransformation,
+              factory,
+              outputTpe
+            ) =>
+          @unused given Type[coll] = source.tycon
+          (source.element.tpe, paramTransformation.outputTpe).runtimeChecked match {
+            case '[srcElem] -> '[elem] =>
+              val f = factory match { case CollBuilder.Total(builder) => builder.unerase[elem, coll[elem]] }
+              primary match {
+                case '{ $srcValue: Iterable[`srcElem`] } =>
+                  Logger.debug(s"coll[elem] is ${Type.show[coll[elem]]}")
+                  '{
+                    $srcValue
+                      .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
+                      .to[coll[elem]]($f)
+                  }
+                case _ =>
+                  val srcValue = primary.asExprOf[coll[srcElem]]
+                  val isColl = source.intoIter.unerase[srcElem, coll[srcElem]]
+                  '{
+                    $isColl
+                      .iterator($srcValue)
+                      .map[elem](srcElem => ${ runTransformation('srcElem, paramTransformation).asExprOf[elem] })
+                      .to[coll[elem]]($f)
+                  }
               }
           }
 
-        case Transformation.MapLike(source, keyTransformation, valueTransformation, fac, outputTpe) =>
-          (source.tycon, outputTpe, primary).runtimeChecked match {
+        case Transformation.MapLike(
+              source: Structure.Collection.Repr.MapLike[outMap],
+              keyTransformation,
+              valueTransformation,
+              fac,
+              outputTpe
+            ) =>
+          @unused given Type[outMap] = source.tycon
+
+          (outputTpe, primary) match {
             case (
-                  '[type outMap[k, v]; outMap],
-                  '[collection.Map[outKey, outValue]],
+                  '[`outMap`[outKey, outValue]],
                   '{ $srcValue: collection.Map[srcKey, srcValue] }
                 ) =>
-              val factory = fac.asExprOf[Factory[(outKey, outValue), outMap[outKey, outValue]]]
+              val factory = fac match {
+                case CollBuilder.Total(builder) => builder.unerase[(outKey, outValue), outMap[outKey, outValue]]
+              }
+
               '{
                 $srcValue
                   .map[outKey, outValue]((k, v) =>
@@ -111,9 +135,42 @@ private[chanterelle] object Interpreter {
                   )
                   .to[outMap[outKey, outValue]]($factory)
               }
+
+            case _ =>
+              (
+                keyTransformation.outputTpe,
+                valueTransformation.outputTpe,
+                source.key.tpe,
+                source.value.tpe
+              ).runtimeChecked match {
+                case (
+                      '[outKey],
+                      '[outValue],
+                      '[srcKey],
+                      '[srcValue]
+                    ) =>
+                  val srcValue = primary.asExprOf[outMap[srcKey, srcValue]]
+                  val isColl = source.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
+                  val factory = fac match {
+                    case CollBuilder.Total(builder) => builder.unerase[(outKey, outValue), outMap[outKey, outValue]]
+                  }
+                  '{
+                    $isColl
+                      .iterator(
+                        $srcValue
+                      )
+                      .map[(outKey, outValue)]((k, v) =>
+                        (
+                          ${ runTransformation('k, keyTransformation).asExprOf[outKey] },
+                          ${ runTransformation('v, valueTransformation).asExprOf[outValue] }
+                        )
+                      )
+                      .to[outMap[outKey, outValue]]($factory)
+                  }
+              }
           }
 
-        case Transformation.Merged(mergees, fields, namesTpe, valuesTpe) =>
+        case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, _) =>
           (namesTpe, valuesTpe).runtimeChecked match {
             case ('[type names <: scala.Tuple; names], '[type values <: scala.Tuple; values]) =>
               val args = fields.map {
@@ -138,6 +195,24 @@ private[chanterelle] object Interpreter {
       }
     }
   }
+
+  def handleNamedSpecific(modifier: NamedSpecific)(using Sources, Scope, Quotes): Expr[Any] =
+    modifier match {
+      case Configured.NamedSpecific.Add(valueStructure = struct, value = value) =>
+        val source = Sources.current.get(value)
+        StructuredValue.of(struct, source).fieldValue(struct.fieldName)
+      case Configured.NamedSpecific.Compute(valueStructure = struct, fn = fn) =>
+        Sources.current.get(fn) match {
+          case '{ $fn: (src => out) } =>
+            '{
+              val computed = $fn(${ Sources.current.get(Sources.Ref.Primary).asExprOf[src] })
+              ${
+                val computedValue = 'computed
+                StructuredValue.of(struct, computedValue).fieldValue(struct.fieldName)
+              }
+            }
+        }
+    }
 
   extension (sources: Sources)
     private def advance(

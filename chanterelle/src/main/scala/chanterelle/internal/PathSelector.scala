@@ -8,8 +8,6 @@ private[chanterelle] object PathSelector {
   def unapply(using outer: Quotes)(expr: quotes.reflect.Term): Some[Path] = {
     import quotes.reflect.*
 
-    val NamedTupleCompanion = Symbol.requiredModule("scala.NamedTuple")
-
     @tailrec
     def recurse(using
       Quotes
@@ -39,11 +37,44 @@ private[chanterelle] object PathSelector {
           )
 
         case Apply(
-              TypeApply(Select(Ident(_), "element"), elemTpe :: Nil),
+              TypeApply(Select(Ident(_), "element" | "some"), elemTpe :: Nil),
               tree :: Nil
             ) =>
+          Logger
+            .debug(
+              s"Matched 'Apply(TypeApply(...)) (matching .element or .some)'",
+              elemTpe.tpe.asType
+            )
+          recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
+
+        case Apply(
+              TypeApply(
+                Apply(
+                  TypeApply(Select(Ident(_), "element"), elemTpe :: Nil),
+                  tree :: Nil
+                ),
+                _
+              ),
+              _
+            ) =>
           Logger.debug(
-            s"Matched 'Apply(TypeApply(...)) (matching .element)'",
+            s"Matched 'Apply(Apply((TypeApply(...)))) (matching .element on a Wrapped node)'",
+            elemTpe.tpe.asType
+          )
+          recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
+
+        case Apply(
+              TypeApply(
+                Apply(
+                  TypeApply(Select(Ident(_), "each"), elemTpe :: Nil),
+                  tree :: Nil
+                ),
+                _
+              ),
+              _
+            ) =>
+          Logger.debug(
+            s"Matched 'Apply(Apply((TypeApply(...)))) (matching .each on a collection node)'",
             elemTpe.tpe.asType
           )
           recurse(acc.prepended(Path.Segment.Element(elemTpe.tpe.asType)), tree)
@@ -66,15 +97,15 @@ private[chanterelle] object PathSelector {
             s"Matched 'Apply(TypeApply(...)) (matching .rightElement)'",
             rightTpe.tpe.asType
           )
-          recurse(acc.prepended(Path.Segment.RightElement(rightTpe.tpe.asType)), tree)
+          recurse(acc.prepended(Path.Segment.Element(rightTpe.tpe.asType)), tree)
 
         case Apply(
               Apply(
-                TypeApply(Select(ident, "apply"), List(namesTpe, _)),
+                TypeApply(Select(Ident("NamedTuple"), "apply") | Ident("apply"), List(namesTpe, _)),
                 tree :: Nil
               ),
               Literal(IntConstant(idx)) :: Nil
-            ) if ident.symbol == NamedTupleCompanion =>
+            ) =>
           Logger.debug(s"Matching NamedTuple#apply at index ($idx)")
           val names = TupleTypes.unrollStrings(namesTpe.tpe)
           // widen here because we're dealing with a singleton type of the lambda param, eg. '_$4'
@@ -98,7 +129,8 @@ private[chanterelle] object PathSelector {
           Logger.debug(s"Matched an unexpected term: ${Printer.TreeStructure.show(other)}")
           val pos = expr.pos
           val code = pos.sourceCode.mkString
-          outer.reflect.report.errorAndAbort(s"Couldn't parse '$code' as a valid path selector", pos)
+          outer.reflect.report
+            .errorAndAbort(s"Couldn't parse '$code' as a valid path selector", pos)
       }
     }
 

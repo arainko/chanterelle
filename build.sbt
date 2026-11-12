@@ -1,6 +1,6 @@
 import com.typesafe.tools.mima.core._
 
-ThisBuild / scalaVersion := "3.8.4"
+ThisBuild / scalaVersion := "3.9.0"
 
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / organization := "io.github.arainko"
@@ -15,7 +15,24 @@ ThisBuild / mimaBinaryIssueFilters ++= Seq(
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.rightElement"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.rename"),
   ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.merge"),
-  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.FieldName.transformViaType")
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.FieldName.transformViaType"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.some"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.each"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.Selector.element"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.put"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.compute"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.update"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.remove"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.put"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.compute"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.update"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.remove"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.hoist"),
+  ProblemFilters.exclude[ReversedMissingMethodProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Builder.hoist"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem]("chanterelle.hidden.TupleModifier#package#TupleModifier#Local.local"),
+  ProblemFilters.exclude[IncompatibleResultTypeProblem](
+    "chanterelle.hidden.TupleModifier#package#TupleModifier#Regional.regional"
+  )
 )
 
 ThisBuild / tlCiReleaseBranches := Seq("main")
@@ -42,13 +59,16 @@ lazy val chanterelle =
     .settings(
       scalacOptions ++= Seq(
         "-preview",
+        "-Xkind-projector:underscores",
         "-Wunused:all",
         "-WunstableInlineAccessors",
         "-Xcheck-macros",
         "-Wconf:msg=(infix named):s,msg=(@nowarn annotation does not):s" // TODO: report errors reported without this to dotty (when adding stuff with '+' and the -> syntax into a SortedMap)
       ),
+      Compile / doc / scalacOptions ++= Seq("-snippet-compiler:compile"),
       libraryDependencies ++= Seq(
-        "org.scalameta" %%% "munit" % "1.3.6" % Test
+        "org.scalameta" %%% "munit" % "1.3.6" % Test,
+        "org.typelevel" %%% "discipline-munit" % "2.0.0" % Test
       )
     )
     .jsSettings(

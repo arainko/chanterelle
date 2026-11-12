@@ -19,21 +19,40 @@ object EntryPoint {
     import quotes.reflect.*
 
     val transformation = for {
+      given Context.Any = Context.create
       structure = Structure.toplevel[A]
       mods = Varargs.unapply(modifications).getOrElse(report.errorAndAbort("Modifications are not a simple vararg list"))
-      transformation = Plan.create(structure)
+      plan = Plan.create(structure)
       given Span = Span.ofMacroExpansion
       builder @ given Sources.Builder = Sources.newBuilder
       modifiers <- Modifier.parse(mods.toList).leftMap(ErrorsWithSpan)
       given Span = Span.minimalAvailable(modifiers.map(_.span))
-      modifiedTransformation = modifiers.foldLeft[Plan[Err]](transformation)((transformation, mod) =>
-        transformation.applyModifier(mod)
-      )
-      refinedTransformation <- modifiedTransformation.refine.leftMap(ErrorsWithSpan)
-      interpretableTransformation <-
-        Transformation.create(refinedTransformation).leftMap(err => ErrorsWithSpan(err :: Nil))
+      refinedPlan <- modifiers
+        .foldLeft[Plan[Err]](plan)((transformation, mod) => transformation.applyModifier(mod))
+        .refine
+        .leftMap(ErrorsWithSpan)
       given Sources = builder.build
-    } yield Interpreter.runTransformation(tuple, interpretableTransformation)
+      _ = Logger.debug("Initial plan", plan)
+      _ = Logger.debug("Refined plan", refinedPlan)
+      expr <- Context.current match {
+        case ctx @ given (Context.Total.type | Context.Weakened[f]) =>
+          Transformation
+            .create(refinedPlan)
+            .leftMap(err => ErrorsWithSpan(err :: Nil))
+            .map { trans =>
+              Interpreter.runTransformation(tuple, trans)
+            }
+
+        case ctx @ given Context.PossiblyFallible[f] =>
+          Transformation
+            .create(refinedPlan)
+            .leftMap(err => ErrorsWithSpan(err :: Nil))
+            .map { trans =>
+              Logger.info("Fallible transformation", trans)
+              FallibleInterpreter.run(trans, tuple)
+            }
+      }
+    } yield expr
 
     transformation match {
       case Left((errors = errs, errorSpan = span)) => reportErrorsAndAbort(errs, span)

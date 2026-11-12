@@ -23,7 +23,7 @@ private[chanterelle] object TupleTypes {
           builder.result()
         case other =>
           report.errorAndAbort(
-            s"Unexpected type (${other.repr.show}) encountered when extracting tuple type elems. This is a bug in ducktape."
+            s"Unexpected type (${other.repr.show}) encountered when extracting tuple type elems. This is a bug in chanterelle."
           )
       }
     }
@@ -44,7 +44,7 @@ private[chanterelle] object TupleTypes {
           builder.result()
         case other =>
           report.errorAndAbort(
-            s"Unexpected type (${other.repr.show}) encountered when extracting tuple type elems. This is a bug in ducktape."
+            s"Unexpected type (${other.repr.show}) encountered when extracting tuple type elems. This is a bug in chanterelle."
           )
       }
     }

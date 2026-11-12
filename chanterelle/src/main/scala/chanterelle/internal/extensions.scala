@@ -3,7 +3,7 @@ package chanterelle.internal
 import scala.quoted.*
 
 extension (tpe: Type[? <: AnyKind]) {
-  def assertBoundedBy[A: Type as A](using Quotes): Type[? <: A] =
+  private[chanterelle] def assertBoundedBy[A: Type as A](using Quotes): Type[? <: A] =
     tpe match {
       case tpe @ '[A] => tpe
       case _          =>
@@ -20,6 +20,15 @@ extension (tpe: Type[? <: AnyKind]) {
 
   private[chanterelle] def repr(using Quotes): quotes.reflect.TypeRepr =
     quotes.reflect.TypeRepr.of(using tpe)
+}
+
+extension (self: Type.type) {
+  private[chanterelle] def unapplied(tpe: Type[?])(using Quotes): Option[(tycon: Type[?], args: ::[Type[?]])] =
+    import quotes.reflect.*
+    tpe.repr.simplified.dealias.widen match {
+      case AppliedType(tycon, head :: tail) => Some((tycon.asType, ::(head.asType, tail.map(_.asType))))
+      case _                                => None
+    }
 }
 
 extension [A, B](self: Either[A, B]) {

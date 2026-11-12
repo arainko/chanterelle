@@ -1,0 +1,360 @@
+package chanterelle.internal
+
+import chanterelle.Mode
+import chanterelle.internal.Debug.AST
+import chanterelle.internal.FallibleInterpreter.TransformationMode.{ Accumulating, FailFast, Parallel }
+import chanterelle.internal.Structure.Collection.Repr.{ IterLike, MapLike }
+import chanterelle.internal.Transformation.{ Field, HoistedTransformation }
+import chanterelle.interop.Collection
+
+import scala.annotation.unused
+import scala.quoted.*
+
+private[chanterelle] object FallibleInterpreter {
+
+  // TODO: add caching! This is ran a lot of times
+  def run[F[_]](transformation: Transformation[Fallible], source: Expr[Any])(using
+    Quotes,
+    Sources,
+    Context.PossiblyFallible[F]
+  ): Expr[Any] = {
+    given Type[F] = Context.current.wrapperType.wrapper
+    Context.current.mode match {
+      case mode: TransformationMode[F, collBuilder] =>
+        @unused given Type[collBuilder] = mode.builderTpe
+        recurse(transformation, source, mode) match {
+          case Value.Unwrapped(value) => value
+          case Value.Wrapped(value)   => value
+        }
+    }
+  }
+
+  private def recurse[F[_]: Type, CollBuilder[_, _]: Type](
+    transformation: Transformation[Fallible],
+    source: Expr[Any],
+    F: TransformationMode[F, CollBuilder]
+  )(using
+    Quotes,
+    Sources,
+    Context.PossiblyFallible[F]
+  ): Value[F] = {
+    def nonfallibleTransformation(src: Expr[Any], nonfallible: Transformation[Nothing]) =
+      Context.current.weaken.locally(Interpreter.runTransformation(src, nonfallible))
+
+    FallibilityRefiner.run(transformation) match {
+      case nonfallible: Transformation[Nothing] =>
+        Value.Unwrapped(nonfallibleTransformation(source, nonfallible))
+      case None =>
+        transformation match {
+          case t @ Transformation.Named(_, fields, namesTpe, valuesTpe, _) =>
+            val (unwrappeds, wrappeds) = t.fields.zipWithIndex.partitionMap {
+              case (_, Field.FromSource(name, transformation)) -> idx =>
+                val fieldValue = StructuredValue.of(t.source, source).fieldValue(name)
+                recurse(transformation, fieldValue, F).asFieldValue(idx, transformation.outputTpe)
+              case (_, Field.FromModifier(modifier)) -> idx =>
+                Sources.current.withPrimary(source) {
+                  Left(new FieldValue.Unwrapped(idx, modifier.tpe, Interpreter.handleNamedSpecific(modifier)))
+                }
+            }
+            handleTransformation(F, t, unwrappeds, wrappeds, ProductConstructor.Primary(t.outputTpe))
+
+          case t @ Transformation.Tuple(src, fields, outputTpe) =>
+            val (unwrappeds, wrappeds) = fields.partitionMap { (idx, transformation) =>
+              val fieldValue = StructuredValue.of(t.source, source).elementValue(idx)
+              recurse(transformation, fieldValue, F).asFieldValue(idx, transformation.outputTpe)
+            }
+            handleTransformation(F, t, unwrappeds, wrappeds, ProductConstructor.Tuple(src))
+
+          case Transformation.Optional(sourceStruct, paramTransformation, outputTpe) =>
+            (sourceStruct.tpe, paramTransformation.outputTpe).runtimeChecked match {
+              case '[Option[src]] -> '[out] =>
+                val src = source.asExprOf[Option[src]]
+                Value.Wrapped {
+                  '{
+                    $src match {
+                      case Some(value) =>
+                        ${ F.value }.map(${ recurse(paramTransformation, 'value, F).wrapped(F).asExprOf[F[out]] }, Some.apply)
+                      case None => ${ F.value }.pure(None)
+                    }
+                  }
+                }
+            }
+          case Transformation.EitherLike(sourceStruct, left, right, outputTpe) =>
+            (sourceStruct.tpe, left.outputTpe, right.outputTpe).runtimeChecked match {
+              case ('[Either[left, right]], '[leftOut], '[rightOut]) =>
+                val src = source.asExprOf[Either[left, right]]
+                Value.Wrapped {
+                  '{
+                    $src match {
+                      case Right(rightValue) =>
+                        ${ F.value }.map(${ recurse(right, 'rightValue, F).wrapped(F).asExprOf[F[rightOut]] }, Right.apply)
+                      case Left(leftValue) =>
+                        ${ F.value }.pure(Left(${ nonfallibleTransformation('leftValue, left).asExprOf[leftOut] }))
+                    }
+                  }
+                }
+            }
+          case Transformation.MapLike(sourceStruct: MapLike[outMap], key, value, factory, outputTpe) =>
+            @unused given Type[outMap] = sourceStruct.tycon
+            (key.outputTpe, value.outputTpe, sourceStruct.key.tpe, sourceStruct.value.tpe).runtimeChecked match {
+              case (
+                    '[outKey],
+                    '[outValue],
+                    '[srcKey],
+                    '[srcValue]
+                  ) =>
+                val srcValue = source.asExprOf[outMap[srcKey, srcValue]]
+                val fac = resolveCollBuilder[(outKey, outValue), outMap[outKey, outValue]](F, factory)
+                val isColl = sourceStruct.intoIter.unerase[(srcKey, srcValue), outMap[srcKey, srcValue]]
+                def handlePair[A: Type, B: Type](left: Expr[F[A]], right: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
+                  F match {
+                    case TransformationMode.Accumulating(value) =>
+                      '{
+                        $value.zip[A, B]($left, $right)
+                      }
+                    case TransformationMode.FailFast(value) =>
+                      '{ $value.flatMap[A, (A, B)]($left, left => $value.map($right, right => (left, right))) }
+
+                    case TransformationMode.Parallel(value) =>
+                      '{
+                        $value.zip[A, B]($left, $right)
+                      }
+                  }
+                Value.Wrapped {
+                  '{
+                    ${ F.exact }
+                      .traverseCollection[
+                        (srcKey, srcValue),
+                        (outKey, outValue),
+                        outMap[srcKey, srcValue],
+                        outMap[outKey, outValue]
+                      ](
+                        $srcValue,
+                        (srcKey, srcValue) =>
+                          ${
+                            handlePair(
+                              recurse(key, 'srcKey, F).wrapped(F).asExprOf[F[outKey]],
+                              recurse(value, 'srcValue, F).wrapped(F).asExprOf[F[outValue]]
+                            )
+                          }
+                      )(using $isColl, $fac)
+                  }
+                }
+
+            }
+          case Transformation.IterLike(sourceStruct: IterLike[coll], elem, factory, outputTpe) =>
+            @unused given Type[coll] = sourceStruct.tycon
+            (elem.outputTpe, sourceStruct.element.tpe).runtimeChecked match {
+              case (
+                    '[elem],
+                    '[srcElem]
+                  ) =>
+                val srcValue = source.asExprOf[coll[srcElem]]
+                val fac = resolveCollBuilder[elem, coll[elem]](F, factory)
+                val isColl = sourceStruct.intoIter.unerase[srcElem, coll[srcElem]]
+                Value.Wrapped {
+                  '{
+                    ${ F.exact }.traverseCollection[srcElem, elem, coll[srcElem], coll[elem]](
+                      $srcValue,
+                      srcElem => ${ recurse(elem, 'srcElem, F).wrapped(F).asExprOf[F[elem]] }
+                    )(using $isColl, $fac)
+                  }
+                }
+            }
+
+          case Transformation.Leaf(output) =>
+            Value.Unwrapped(source)
+          case Transformation.ConfedUp(config) =>
+            config match {
+              case update: Configured.Update =>
+                Value.Unwrapped(
+                  nonfallibleTransformation(source, Transformation.ConfedUp(update))
+                )
+            }
+          case merged: (Transformation.Merged | Transformation.Mapped[f]) =>
+            Value.Unwrapped(nonfallibleTransformation(source, merged))
+          case t: Transformation.Hoisted[f] =>
+            (t.source.wrapped.tpe, t.outputTpe).runtimeChecked match {
+              case '[src] -> '[out] =>
+                val src = source.asExprOf[F[src]]
+                (t.wrapped) match {
+                  case HoistedTransformation.Passthrough(wrapped, mode) =>
+                    mode match {
+                      case TransformationMode.FailFast(ff) =>
+                        val failFast = ff.asExprOf[Mode.FailFast[F]]
+                        Value.Wrapped {
+                          '{
+                            $failFast.flatMap[src, out](
+                              $src,
+                              src => ${ recurse[F, CollBuilder](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
+                            )
+                          }
+                        }
+                      case TransformationMode.Parallel(par) =>
+                        val parallel = par.asExprOf[Mode.Parallel[F]]
+                        Value.Wrapped {
+                          '{
+                            $parallel.flatMap[src, out](
+                              $src,
+                              src => ${ recurse[F, CollBuilder](wrapped, 'src, F).wrapped(Context.current.mode).asExprOf[F[out]] }
+                            )
+                          }
+                        }
+                    }
+                  case HoistedTransformation.Bottommost(wrapped) =>
+                    Value.Wrapped {
+                      '{
+                        ${ F.value }
+                          .map[src, out](
+                            $src,
+                            src => ${ Context.current.weaken.locally(Interpreter.runTransformation('src, wrapped)).asExprOf[out] }
+                          )
+                      }
+                    }
+                }
+            }
+        }
+    }
+  }
+
+  private def handleTransformation[F[_]](
+    F: TransformationMode[F, ?],
+    transformation: Transformation[Fallible],
+    unwrappeds: Iterable[FieldValue.Unwrapped],
+    wrappeds: Iterable[FieldValue.Wrapped[F]],
+    construct: ProductConstructor
+  )(using Type[F], Quotes): Value[F] =
+    transformation.outputTpe match {
+      case '[dest] =>
+        F match {
+          case mode: (TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]) =>
+            NonEmptyList
+              .fromList(wrappeds.toList)
+              .map(wrappeds =>
+                Value.Wrapped(
+                  ProductZipper.zipAndConstruct[F, dest](mode, wrappeds, unwrappeds.toList)(
+                    construct
+                  )
+                )
+              )
+              .getOrElse(Value.Unwrapped(construct(unwrappeds.map(_.value).toSeq)))
+          case mode: TransformationMode.FailFast[F] =>
+            Value.Wrapped[F] {
+              ProductBinder.nestFlatMapsAndConstruct[F, dest](
+                mode,
+                unwrappeds.toList,
+                wrappeds.toList,
+                construct
+              )
+            }
+        }
+    }
+
+  sealed trait TransformationMode[F[x], CollBuilder[Elem, Coll]](val builderTpe: Quotes ?=> Type[CollBuilder]) {
+    def exact: Expr[Mode[F] { type Builder[Elem, Coll] = CollBuilder[Elem, Coll] }]
+    def value: Expr[Mode[F]] = exact
+
+    def canPassthrough: Boolean =
+      this match {
+        case TransformationMode.Accumulating(_) => false
+        case TransformationMode.FailFast(_)     => true
+        case TransformationMode.Parallel(_)     => true
+
+      }
+  }
+
+  object TransformationMode {
+    case class Accumulating[F[_]: Type](exact: Expr[Mode.Accumulating[F]])
+        extends TransformationMode[F, Collection.Builder](Type.of)
+    case class FailFast[F[_]: Type](exact: Expr[Mode.FailFast[F]])
+        extends TransformationMode[F, Collection.Builder.Fallible[F, _, _]](Type.of)
+    case class Parallel[F[_]: Type](exact: Expr[Mode.Parallel[F]])
+        extends TransformationMode[F, Collection.Builder.Fallible[F, _, _]](Type.of)
+
+    def create[F[x]: Type](expr: Expr[Mode[F]])(using Quotes) =
+      expr match
+        case '{ $acc: Mode.Parallel[F] } =>
+          Parallel[F](acc)
+        case '{ $acc: Mode.Accumulating[F] } =>
+          Accumulating[F](acc)
+        case '{ $ff: Mode.FailFast[F] } =>
+          FailFast[F](ff)
+        case _ =>
+          val rendered = Type.show[F]
+          quotes.reflect.report.errorAndAbort(
+            s"Couldn't determine the transformation mode, make sure an instance of either Mode.FailFast[$rendered] or Mode.Accumulating[$rendered] is in implicit scope"
+          )
+
+    given Debug[TransformationMode[?, ?]] with {
+      def astify(self: TransformationMode[?, ?])(using Quotes): AST =
+        self match
+          case Accumulating(_) => AST.Text("Accumulating")
+          case FailFast(_)     => AST.Text("FailFast")
+          case Parallel(_)     => AST.Text("Parallel")
+
+    }
+
+    extension [F[_]: Type](self: TransformationMode.Accumulating[F] | TransformationMode.Parallel[F]) {
+      def zip[A: Type, B: Type](a: Expr[F[A]], b: Expr[F[B]])(using Quotes): Expr[F[(A, B)]] =
+        self match {
+          case Accumulating(value) => '{ $value.zip[A, B]($a, $b) }
+          case Parallel(value)     => '{ $value.zip[A, B]($a, $b) }
+        }
+    }
+
+    extension [F[_]: Type](self: TransformationMode.FailFast[F] | TransformationMode.Parallel[F]) {
+      def flatMap[A: Type, B: Type](a: Expr[F[A]], fn: Expr[A => F[B]])(using Quotes): Expr[F[B]] =
+        self match {
+          case FailFast(value) => '{ $value.flatMap[A, B]($a, $fn) }
+          case Parallel(value) => '{ $value.flatMap[A, B]($a, $fn) }
+        }
+    }
+  }
+  private enum Value[F[x]] {
+    final def wrapped(F: TransformationMode[F, ?])(using Quotes, Type[F]) = {
+      this.runtimeChecked match
+        case Unwrapped('{ $value: a }) =>
+          '{ ${ F.value }.pure[a](${ value }) }
+        case Wrapped(value) =>
+          value
+    }
+
+    final def asFieldValue(
+      index: Int,
+      unwrappedTpe: Type[?]
+    ): scala.Either[FieldValue.Unwrapped, FieldValue.Wrapped[F]] =
+      this match {
+        case unw: Unwrapped[F]   => Left(new FieldValue.Unwrapped(index, unwrappedTpe, unw.value))
+        case wrapped: Wrapped[F] => Right(new FieldValue.Wrapped(index, unwrappedTpe, wrapped.value))
+      }
+
+    case Unwrapped(value: Expr[Any]) extends Value[F]
+    case Wrapped[F[_]](value: Expr[Any]) extends Value[F]
+  }
+
+  private def resolveCollBuilder[Elem: Type, Coll: Type](using
+    Quotes
+  )[F[_]: Type, Builder[_, _]: Type](
+    mode: TransformationMode[F, Builder],
+    builder: CollBuilder[Fallible]
+  ): Expr[Builder[Elem, Coll]] = {
+    mode match
+      case Accumulating(exact) =>
+        builder match
+          case CollBuilder.Total(builder)                           => builder.unerase[Elem, Coll]
+          case cb: CollBuilder.PossiblyFallible[Builder @unchecked] => cb.builder.unerase[Elem, Coll]
+
+      case FailFast(exact) =>
+        builder match
+          case CollBuilder.Total(builder) =>
+            '{ Collection.Builder.Fallible.fromTotal(using $exact, ${ builder.unerase[Elem, Coll] }) }
+          case cb: CollBuilder.PossiblyFallible[Builder @unchecked] => cb.builder.unerase[Elem, Coll]
+
+      case Parallel(exact) =>
+        builder match
+          case CollBuilder.Total(builder) =>
+            '{ Collection.Builder.Fallible.fromTotal(using $exact, ${ builder.unerase[Elem, Coll] }) }
+          case cb: CollBuilder.PossiblyFallible[Builder @unchecked] => cb.builder.unerase[Elem, Coll]
+
+  }
+}

@@ -6,6 +6,7 @@ import scala.deriving.Mirror
 import scala.quoted.*
 import scala.reflect.ClassTag
 import chanterelle.internal.Debug.AST
+import chanterelle.internal.Debug.LabelColor
 
 trait Show[-A] {
   def astify(self: A): Debug.AST
@@ -45,13 +46,21 @@ object Show extends LowPriorityShow {
     }
   }
 
+  given list[A: Show as A]: Show[List[A]] with {
+    def astify(self: List[A]): AST = Collection("List", self.map(A.astify).toVector)
+  }
+
+  given vector[A: Show as A]: Show[Vector[A]] with {
+    def astify(self: Vector[A]): AST = Collection("Vector", self.map(A.astify))
+  }
+
   given map[K: Show as K, V: Show as V]: Show[Map[K, V]] with {
 
     def astify(self: Map[K, V]): AST = {
       Collection(
         "Map",
         self
-          .map((key, value) => Product("Entry", VectorMap("key" -> K.astify(key), "value" -> V.astify(value))))
+          .map((key, value) => Product("Entry", VectorMap("key" -> K.astify(key), "value" -> V.astify(value)), LabelColor.create(_.YELLOW)))
           .toVector
       )
     }
@@ -91,9 +100,16 @@ object Show extends LowPriorityShow {
         }
         .to(VectorMap)
 
-      Product(tpeName, fields)
+      Product(tpeName, fields, LabelColor.create(_.YELLOW))
     }
   }
+
+  private inline def summonShows[Tup <: Tuple]: Tuple =
+    inline erasedValue[Tup] match {
+      case _: (head *: tail) =>
+        summonInline[Show[head]].asInstanceOf[Show[Any]] *: summonShows[tail]
+      case _: EmptyTuple => EmptyTuple
+    }
 
   private inline def product[A: Mirror.ProductOf as A]: Show[A] = {
     val tpeName =
@@ -103,7 +119,7 @@ object Show extends LowPriorityShow {
         case _                           => constValue[A.MirroredLabel].toString
       }
     val fieldNames = inline constValueTuple[A.MirroredElemLabels].toList match { case fields: List[String] => fields }
-    def instances = summonAll[Tuple.Map[A.MirroredElemTypes, Show]].toIArray.map(_.asInstanceOf[Show[Any]])
+    def instances = summonShows[A.MirroredElemTypes].toIArray.map(_.asInstanceOf[Show[Any]])
     ForProduct(tpeName, fieldNames, instances)
   }
 

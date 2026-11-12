@@ -5,25 +5,27 @@ package chanterelle
  *
  * Its compiletime nature means that all the operations and the arguments to those operations need to be known ahead of time, for example:
  *
- * {{{
- * (fieldName: FieldName) => fieldName.toUpperCase.rename("fromThis", "toThat")
- * }}}
+ * ```scala
+ * val f: FieldName => FieldName =
+ *   (fieldName: FieldName) => fieldName.toUpperCase.rename("fromThis", "toThat")
+ * ```
  *
  * ...is a valid fieldName expression that can be lifted at compiletime, while something like:
- * {{{
- * val dynamicString = Random.nextString(10)
- * (fieldName: FieldName) => fieldName.toUpperCase.rename("fromThis", dynamicString)
- * }}}
+ * ```scala
+ * val dynamicString = scala.util.Random.nextString(10)
+ * val f: FieldName => FieldName =
+ *   (fieldName: FieldName) => fieldName.toUpperCase.rename("fromThis", dynamicString)
+ * ```
  *
  * ...is not since the value of `dynamicString` is not known at compiletime.
  *
  * Users can provide their own 'bundles' of operations by creating and using `transparent inline defs`, like so:
- * {{{
+ * ```scala
  * transparent inline def renamedAndUppercased(inline fieldName: FieldName) =
  *   fieldName.rename("someName", "someOtherName").toUpperCase
  *
  * (someName = 1).transform(_.rename(renamedAndUppercased)) // yields (SOMEOTHERNAME = 1)
- * }}}
+ * ```
  */
 sealed trait FieldName {
 
@@ -74,7 +76,7 @@ sealed trait FieldName {
 
   /**
    * Evaluate `Trans` over each field, yielding the new name.
-   * {{{
+   * ```scala
    * type RenameSpecific[Source <: String] <: String = Source match {
    *    case "i_want_this_one_renamed" => "aight"
    *    case "andThisOneToo" => "thereYouGo"
@@ -82,7 +84,7 @@ sealed trait FieldName {
    *  }
    * val tup = (field = 1, i_want_this_one_renamed = 2, andThisOneToo = 3)
    * tup.transform(_.rename(_.transformViaType[RenameSpecific])) // yields (field: Int, aight: Int, thereYouGo: Int)
-   * }}}
+   * ```
    *
    * Match types are turing-complete so you can do ANY transformation you desire here, this modifier serves as a fallback mechanism in case a specific name transformation isn't supported by other means.
    *

@@ -1,17 +1,20 @@
 package chanterelle.internal
 
+import scala.annotation.nowarn
 import scala.quoted.*
 
-private[chanterelle] enum Configured derives Debug {
+@nowarn("msg=unused implicit")
+private[chanterelle] enum Configured[+F <: Fallible] derives Debug {
   def tpe: Type[?]
 
   case Update(
     tpe: Type[?],
     fn: Sources.Ref
-  )
+  ) extends Configured[Nothing]
 }
 
 private[chanterelle] object Configured {
+
   sealed trait NamedSpecific derives Debug {
     def tpe: Type[?]
   }

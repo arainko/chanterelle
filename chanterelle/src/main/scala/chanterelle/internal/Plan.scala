@@ -1,11 +1,15 @@
 package chanterelle.internal
 
+import chanterelle.internal.Debug.LabelColor
+import chanterelle.internal.Modifier.Kind
 import chanterelle.internal.Plan.IsModified
 import chanterelle.internal.Plan.Merged.Field
 
-import scala.annotation.{ nowarn, tailrec }
+import scala.annotation.{ nowarn, tailrec, unused }
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
+import scala.util.boundary
+import scala.util.boundary.Label
 
 import Plan.Error
 
@@ -34,15 +38,43 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
       case other => Error(errorMessage(other))
     }
 
+  @nowarn("msg=Unreachable")
+  final inline def narrow[A <: Plan[Err], B <: Plan[Err], C <: Plan[Err]](
+    inline fnA: A => Plan[Err],
+    inline fnB: B => Plan[Err],
+    inline fnC: C => Plan[Err]
+  )(inline errorMessage: Plan[Err] => ErrorMessage): Plan[Err] =
+    this match {
+      case a: A  => fnA(a)
+      case b: B  => fnB(b)
+      case c: C  => fnC(c)
+      case other => Error(errorMessage(other))
+    }
+
+  @nowarn("msg=Unreachable")
+  final inline def narrow[A <: Plan[Err], B <: Plan[Err], C <: Plan[Err], D <: Plan[Err]](
+    inline fnA: A => Plan[Err],
+    inline fnB: B => Plan[Err],
+    inline fnC: C => Plan[Err],
+    inline fnD: D => Plan[Err]
+  )(inline errorMessage: Plan[Err] => ErrorMessage): Plan[Err] =
+    this match {
+      case a: A  => fnA(a)
+      case b: B  => fnB(b)
+      case c: C  => fnC(c)
+      case d: D  => fnD(d)
+      case other => Error(errorMessage(other))
+    }
+
   def calculateTpe(using Quotes): Type[?]
 
   def isModified: IsModified
 
-  final def applyModifier(modifier: Modifier)(using Quotes): Plan[Err] = {
+  final def applyModifier(modifier: Modifier)(using Quotes, Context.Any): Plan[Err] = {
     def recurse(
       segments: List[Path.Segment],
       traversed: Path
-    )(curr: Plan[Err])(using Quotes): Plan[Err] = {
+    )(curr: Plan[Err])(using Quotes, Label[ErrorMessage], Context.Any): Plan[Err] = {
       segments match {
         case (seg @ Path.Segment.Field(name = name)) :: next =>
           val traversedPath = traversed :+ seg
@@ -76,28 +108,28 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 
           curr.narrow(
             when[Plan.Optional[Err]](_.update(recurse(next, traversedPath))),
-            when[Plan.IterLike[Err, ?]](_.update(recurse(next, traversedPath)))
+            when[Plan.Either[Err]](_.updateRight(recurse(next, traversedPath))),
+            when[Plan.IterLike[Err, ?]](_.update(recurse(next, traversedPath))),
+            when[Plan.Wrapped[Err, ?]] { plan =>
+              val updated = plan.update(recurse(next, traversedPath))
+              // hoist all plans on a path of a hoist, otherwise hoisting fields nested within other wrapped fields is dumb
+              if modifier.isInstanceOf[Modifier.Hoist[?]] then updated.passthroughHoisted else updated
+            }
           )(other => ErrorMessage.UnexpectedTransformation("option or collection", other, traversedPath, modifier.span))
 
         case (elem @ Path.Segment.LeftElement(tpe)) :: next =>
           val traversedPath = traversed :+ elem
 
           curr.narrow[Plan.Either[Err]](_.updateLeft(recurse(next, traversedPath)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
-          )
-
-        case (elem @ Path.Segment.RightElement(tpe)) :: next =>
-          val traversedPath = traversed :+ elem
-
-          curr.narrow[Plan.Either[Err]](_.updateRight(recurse(next, traversedPath)))(other =>
-            ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
+            if other.isInstanceOf[Plan.Wrapped[Err, ?]] then ErrorMessage.CantTraverseLeftSideOfEither(modifier.span)
+            else ErrorMessage.UnexpectedTransformation("either", other, traversedPath, modifier.span)
           )
 
         case Nil => apply(modifier, curr, traversed)
       }
     }
 
-    def apply(modifier: Modifier, transformation: Plan[Err], traversedPath: Path): Plan[Err] = {
+    def apply(modifier: Modifier, transformation: Plan[Err], traversedPath: Path)(using Context.Any): Plan[Err] = {
       modifier match {
         case m: Modifier.Put =>
           transformation.narrow[Plan.Named[Err]](
@@ -136,9 +168,45 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
             when[Plan.Named[Err]](transformation => Plan.Merged.create(transformation, m.valueStructure, m.ref)),
             when[Plan.Merged[Err]](_.merge(m.valueStructure, m.ref))
           )(other => ErrorMessage.UnexpectedTransformation("named tuple", other, traversedPath, modifier.span))
+
+        case m: Modifier.Hoist[f] =>
+          m.kind match {
+            case None =>
+              transformation.narrow(
+                when[Plan.Wrapped[Err, f]](_.hoisted)
+              )(other => ErrorMessage.UnexpectedTransformation("wrapped value", other, traversedPath, modifier.span))
+            case Some(Modifier.Kind.Local) =>
+              transformation.narrow(
+                when[Plan.Named[Err]](_.updateSelected { case wrapped: Plan.Wrapped[Err, ?] => wrapped.hoisted }),
+                when[Plan.Tuple[Err]](_.updateSelected { case wrapped: Plan.Wrapped[Err, ?] => wrapped.hoisted }),
+                when[Plan.Merged[Err]](_.updateSelected { case wrapped: Plan.Wrapped[Err, ?] => wrapped.hoisted })
+              )(other =>
+                ErrorMessage.UnexpectedTransformation(
+                  "named or positional tuple, merged value",
+                  other,
+                  traversedPath,
+                  modifier.span
+                )
+              )
+            case Some(Modifier.Kind.Regional) if Context.current.isFallibleFailFast =>
+              Plan.updateTransitively(
+                transformation,
+                {
+                  case wrapped: Plan.Wrapped[Err, f] => wrapped.passthroughHoisted
+                  case other                         => other
+                }
+              )
+            case Some(Modifier.Kind.Regional) =>
+              Plan.Error(ErrorMessage.CantUseHoistRegionalWithAccumulating(modifier.span))
+          }
       }
     }
-    recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this)
+
+    boundary[ErrorMessage | Plan[Err]](recurse(modifier.path.segments.toList, Path.empty(modifier.path.root))(this)) match {
+      case plan: Plan[Err]   => plan
+      case err: ErrorMessage => Plan.Error(err)
+    }
+
   }
 
   def refine: Either[List[ErrorMessage], Plan[Nothing]] = {
@@ -184,6 +252,8 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
               recurse(tail, acc)
             case Plan.ConfedUp(config, span) =>
               recurse(tail, acc)
+            case Plan.Wrapped(wrapped = plan) =>
+              recurse(plan :: tail, acc)
             case err @ Plan.Error(message) =>
               recurse(tail, err.message :: acc)
 
@@ -195,28 +265,17 @@ private[chanterelle] sealed abstract class Plan[+E <: Err](val readableName: Str
 }
 
 private[chanterelle] object Plan {
-  type Exact[Struct <: Structure] <: Plan[Nothing] =
-    Struct match {
-      case Structure.Named      => Plan.Named[Nothing]
-      case Structure.Tuple      => Plan.Tuple[Nothing]
-      case Structure.Optional   => Plan.Optional[Nothing]
-      case Structure.Either     => Plan.Either[Nothing]
-      case Structure.Collection =>
-        Plan.MapLike[Nothing, scala.collection.Map] | Plan.IterLike[Nothing, Iterable]
-      case Structure.Leaf => Leaf
-    }
+  private[chanterelle] given LabelColor = LabelColor.create(_.BLUE)
 
   given Debug[Plan[Err]] = Debug.derived
 
-  def create(structure: Structure): Plan[Nothing] = createExact(structure)
-
-  def createExact(structure: Structure): Plan.Exact[structure.type] = {
+  def create(structure: Structure): Plan[Nothing] = {
     structure match {
       case named: Structure.Named =>
         Named(
           named,
           named.fields.map { (name, field) =>
-            name -> (field = Plan.Field.FromSource(name, createExact(field)), removed = false)
+            name -> (field = Plan.Field.FromSource(name, create(field)), removed = false)
           },
           IsModified.No
         )
@@ -224,22 +283,26 @@ private[chanterelle] object Plan {
       case tuple: Structure.Tuple =>
         Tuple(
           tuple,
-          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = createExact(t), removed = false)).to(SortedMap),
+          tuple.elements.zipWithIndex.map((t, idx) => idx -> (transformation = create(t), removed = false)).to(SortedMap),
           IsModified.No
         )
 
       case optional: Structure.Optional =>
-        Optional(optional, createExact(optional.paramStruct), IsModified.No)
+        Optional(optional, create(optional.paramStruct), IsModified.No)
 
       case either: Structure.Either =>
-        Either(either, createExact(either.left), createExact(either.right), IsModified.No)
+        Either(either, create(either.left), create(either.right), IsModified.No)
 
       case coll: Structure.Collection =>
         coll.repr match
-          case source @ Structure.Collection.Repr.MapLike(tycon, key, value) =>
-            Plan.MapLike(source, createExact(key), createExact(value), IsModified.No)
-          case source @ Structure.Collection.Repr.IterLike(tycon, element) =>
-            Plan.IterLike(source, createExact(element), IsModified.No)
+          case source @ Structure.Collection.Repr.MapLike(_, _, key, value) =>
+            Plan.MapLike(source, create(key), create(value), IsModified.No)
+          case source @ Structure.Collection.Repr.IterLike(_, _, element) =>
+            Plan.IterLike(source, create(element), IsModified.No)
+
+      case wrapped: Structure.Wrapped[f] =>
+        Plan.Wrapped(wrapped, Plan.create(wrapped.wrapped), IsModified.No, Hoist.No)
+
       case leaf: Structure.Leaf =>
         Leaf(leaf)
     }
@@ -278,6 +341,9 @@ private[chanterelle] object Plan {
 
       this.copy(allFields = updatedFields, isModified = IsModified.Yes)
     }
+
+    def updateSelected(fn: PartialFunction[Plan[E], Plan[Err]]): Named[Err] =
+      updateAll((name, field) => name -> field.update(plan => fn.applyOrElse(plan, identity)))
 
     def update(name: String, f: Plan[E] => Plan[Err], modifierSpan: Span): Named[Err] = {
       val fieldTransformation =
@@ -365,6 +431,9 @@ private[chanterelle] object Plan {
       val updatedFields = fields.map { (name, field) => f(name) -> field.update(primaryUpdate, secondaryMerged) }
       this.copy(fields = updatedFields)
     }
+
+    def updateSelected(fn: PartialFunction[Plan[E], Plan[Err]]): Merged[Err] =
+      updateAll(identity, _.update(plan => fn.applyOrElse(plan, identity)), identity)
 
     def merge(mergee: Structure.Named, ref: Sources.Ref): Merged[Err] = {
       val mutualKeys = fields.keySet.intersect(mergee.fields.keySet)
@@ -545,6 +614,9 @@ private[chanterelle] object Plan {
         isModified = IsModified.Yes
       )
 
+    def updateSelected(fn: PartialFunction[Plan[E], Plan[Err]]): Tuple[Err] =
+      updateAll(plan => fn.applyOrElse(plan, identity))
+
     def update(index: Int, f: Plan[E] => Plan[Err]): Tuple[Err] = {
       val t =
         allFields.andThen { case (transformation, _) => (transformation = f(transformation), removed = false) }
@@ -601,7 +673,7 @@ private[chanterelle] object Plan {
       this.copy(right = f(right), isModified = IsModified.Yes)
   }
 
-  case class MapLike[+E <: Err, F[k, v] <: collection.Map[k, v]](
+  case class MapLike[+E <: Err, F[k, v]](
     source: Structure.Collection.Repr.MapLike[F],
     key: Plan[E],
     value: Plan[E],
@@ -620,7 +692,7 @@ private[chanterelle] object Plan {
       this.copy(value = f(value), isModified = IsModified.Yes)
   }
 
-  case class IterLike[+E <: Err, F[elem] <: Iterable[elem]](
+  case class IterLike[+E <: Err, F[elem]](
     source: Structure.Collection.Repr.IterLike[F],
     elem: Plan[E],
     isModified: IsModified
@@ -636,13 +708,38 @@ private[chanterelle] object Plan {
       this.copy(elem = f(elem), isModified = IsModified.Yes)
   }
 
+  case class Wrapped[+E <: Err, F[_]](
+    source: Structure.Wrapped[F],
+    wrapped: Plan[E],
+    isModified: IsModified,
+    isHoisted: Hoist
+  ) extends Plan[E]("wrapped") {
+    def calculateTpe(using Quotes): Type[? <: AnyKind] = {
+      @unused given Type[F] = source.wrapper.wrapper
+      isHoisted match {
+        case Hoist.Yes | Hoist.Passthrough => wrapped.calculateTpe
+        case Hoist.No                      => (wrapped.calculateTpe).runtimeChecked match { case '[tpe] => Type.of[F[tpe]] }
+      }
+    }
+
+    def update(f: Plan[E] => Plan[Err]): Wrapped[Err, F] =
+      this.copy(wrapped = f(wrapped), isModified = IsModified.Yes)
+
+    def hoisted: Wrapped[Err, F] =
+      this.copy(isHoisted = if isHoisted == Hoist.Passthrough then isHoisted else Hoist.Yes, isModified = IsModified.Yes)
+
+    def passthroughHoisted: Wrapped[Err, F] =
+      this.copy(isHoisted = Hoist.Passthrough, isModified = IsModified.Yes)
+
+  }
+
   case class Leaf(output: Structure.Leaf) extends Plan[Nothing]("ordinary value") {
     def calculateTpe(using Quotes): Type[?] = output.tpe
     val isModified = IsModified.No
   }
 
   // TODO: change this goofyahh name
-  case class ConfedUp(config: Configured, span: Span) extends Plan[Nothing]("configured value") {
+  case class ConfedUp(config: Configured[?], span: Span) extends Plan[Nothing]("configured value") {
     def calculateTpe(using Quotes): Type[?] = config.tpe
     val isModified = IsModified.Yes
   }
@@ -704,6 +801,10 @@ private[chanterelle] object Plan {
     case Yes, No
   }
 
+  enum Hoist derives Debug {
+    case Yes, No, Passthrough
+  }
+
   private def renameNamedNodes(
     transformation: Plan[Err],
     rename: String => String,
@@ -725,14 +826,16 @@ private[chanterelle] object Plan {
         opt.update(recurse)
       case either: Plan.Either[Err] =>
         either.updateLeft(recurse).updateRight(recurse)
-      case map: Plan.MapLike[Err, scala.collection.Map] =>
+      case map: Plan.MapLike[Err, ?] =>
         map.updateKey(recurse).updateValue(recurse)
-      case iter: Plan.IterLike[Err, Iterable] =>
+      case iter: Plan.IterLike[Err, ?] =>
         iter.update(recurse)
       case merged: Plan.Merged[Err] =>
         def update(merged: Plan.Merged[Err]): Plan.Merged[Err] =
           merged.updateAll(rename, _.update(recurse), update)
         checkAmbiguities(merged.fields)(update(merged))
+      case wrapped: Plan.Wrapped[Err, f] =>
+        wrapped.update(recurse)
       case leaf: Plan.Leaf =>
         leaf
       case confed: Plan.ConfedUp =>
@@ -751,4 +854,36 @@ private[chanterelle] object Plan {
 
     if kind.isLocal then locally(transformation) else recurse(transformation)
   }
+
+  private def updateTransitively(plan: Plan[Err], update: Plan[Err] => Plan[Err]): Plan[Err] = {
+    def recurse(curr: Plan[Err]): Plan[Err] = curr match {
+      case named: Plan.Named[Err] =>
+        update(named.updateAll((name, field) => name -> field.update(recurse)))
+      case tup: Plan.Tuple[Err] =>
+        update(tup.updateAll(recurse))
+      case opt: Plan.Optional[Err] =>
+        update(opt.update(recurse))
+      case either: Plan.Either[Err] =>
+        update(either.updateLeft(recurse).updateRight(recurse))
+      case map: Plan.MapLike[Err, ?] =>
+        update(map.updateKey(recurse).updateValue(recurse))
+      case iter: Plan.IterLike[Err, ?] =>
+        update(iter.update(recurse))
+      case merged: Plan.Merged[Err] =>
+        def updateMerged(merged: Plan.Merged[Err]): Plan.Merged[Err] =
+          merged.updateAll(identity, _.update(recurse), updateMerged)
+        update(updateMerged(merged))
+      case wrapped: Plan.Wrapped[Err, f] =>
+        update(wrapped.update(recurse))
+      case leaf: Plan.Leaf =>
+        update(leaf)
+      case confed: Plan.ConfedUp =>
+        update(confed)
+      case err: Plan.Error =>
+        update(err)
+    }
+
+    recurse(plan)
+  }
+
 }

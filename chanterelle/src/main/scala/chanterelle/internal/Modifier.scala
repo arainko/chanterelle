@@ -17,12 +17,13 @@ private[chanterelle] enum Modifier derives Debug {
   case Remove(path: Path, fieldToRemove: String | Int, span: Span)
   case Rename(path: Path, fieldName: String => String, kind: Modifier.Kind, span: Span)
   case Merge(path: Path, valueStructure: Structure.Named, ref: Sources.Ref, span: Span)
+  case Hoist[F[_]](path: Path, span: Span, wrapperType: WrapperType[F], kind: Option[Modifier.Kind])
 }
 
 private[chanterelle] object Modifier {
   def parse[A](
     mods: List[Expr[TupleModifier.Builder[A] => TupleModifier[A]]]
-  )(using sources: Sources.Builder, quotes: Quotes): Either[List[ErrorMessage], List[Modifier]] = {
+  )(using sources: Sources.Builder, quotes: Quotes, context: Context.Any): Either[List[ErrorMessage], List[Modifier]] = {
     import quotes.reflect.*
 
     def parseMerged[Mergee: Type](path: Path, mergee: Expr[Mergee], cfgSpan: Span)(using
@@ -94,6 +95,14 @@ private[chanterelle] object Modifier {
         )
 
       case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.rename($fieldName).local
+          } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
+        Right(
+          Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Local, Span.fromExpr(cfg))
+        )
+
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
             builder.rename($fieldName).regional(${ AsTerm(PathSelector(path)) })
           } =>
         val parsedRenames = ParseFieldName.parse(fieldName)
@@ -101,6 +110,13 @@ private[chanterelle] object Modifier {
           Modifier.Rename(path, parsedRenames, Kind.Regional, Span.fromExpr(cfg))
         )
 
+      case cfg @ '{ (builder: TupleModifier.Builder[tup]) =>
+            builder.rename($fieldName).regional
+          } =>
+        val parsedRenames = ParseFieldName.parse(fieldName)
+        Right(
+          Modifier.Rename(Path.empty(Type.of[tup]), parsedRenames, Kind.Regional, Span.fromExpr(cfg))
+        )
       case cfg @ AsTerm(Lambda(_, Apply(TypeApply(Select(Ident(_), "merge"), tpe :: Nil), List(mergee)))) =>
         tpe.tpe.asType match {
           case '[a] => parseMerged(Path.empty(Type.of[Any]), mergee.asExprOf[a], Span.fromExpr(cfg))
@@ -111,6 +127,68 @@ private[chanterelle] object Modifier {
             (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergee).regional(${ AsTerm(PathSelector(path)) })
           } =>
         parseMerged(path, mergee.asExprOf[a], Span.fromExpr(cfg))
+
+      case cfg @ '{
+            type a <: NamedTuple.AnyNamedTuple
+            (builder: TupleModifier.Builder[tup]) => builder.merge[a]($mergee).regional
+          } =>
+        parseMerged(Path.empty(Type.of[tup]), mergee.asExprOf[a], Span.fromExpr(cfg))
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f, selected](using $_)(${ AsTerm(PathSelector(path)) })
+          } =>
+        Right(
+          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], None)
+        )
+
+      // case cfg @ '{
+      //       type f[_]
+      //       (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_)
+      //     } =>
+      //   Right(
+      //     Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+      //   )
+      // The below encoding is the same as above... BUT IT WORKS: https://github.com/scala/scala3/issues/25238
+      case cfg @ AsTerm(Lambda(_, Apply(TypeApply(Select(Ident(_), "hoist"), tpe :: Nil), _ :: Nil))) =>
+        tpe.tpe.asType match {
+          case '[type f[_]; f] =>
+            Right(
+              Modifier.Hoist(Path.empty(Type.of[Any]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+            )
+        }
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).local(${ AsTerm(PathSelector(path)) })
+          } =>
+        Right(
+          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+        )
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).local
+          } =>
+        Right(
+          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Local))
+        )
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).regional(${ AsTerm(PathSelector(path)) })
+          } =>
+        Right(
+          Modifier.Hoist(path, Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Regional))
+        )
+
+      case cfg @ '{
+            type f[_]
+            (builder: TupleModifier.Builder[tup]) => builder.hoist[f](using $_).regional
+          } =>
+        Right(
+          Modifier.Hoist(Path.empty(Type.of[tup]), Span.fromExpr(cfg), WrapperType.create[f], Some(Kind.Regional))
+        )
 
       case other =>
         Logger.debug(s"Error parsing modifier: ${other.asTerm.show(using Printer.TreeStructure)}")

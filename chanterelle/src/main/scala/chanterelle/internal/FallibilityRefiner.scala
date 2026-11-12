@@ -1,0 +1,63 @@
+package chanterelle.internal
+
+import chanterelle.internal.Transformation.{ Field, Merged }
+
+import scala.annotation.publicInBinary
+import scala.util.boundary
+
+private[chanterelle] object FallibilityRefiner {
+  def run(transformation: Transformation[Fallible]): Transformation[Nothing] | None =
+    recurse(transformation) match
+      case ()   => transformation.asInstanceOf[Transformation[Nothing]]
+      case None => None
+
+  @publicInBinary
+  private[FallibilityRefiner] def recurse(trans: Transformation[Fallible]): Unit | None =
+    boundary[Unit | None] {
+      trans match
+        case Transformation.Named(source, fields, namesTpe, valuesTpe, _) =>
+          evaluate(fields.collect { case (_, Field.FromSource(name, transformation)) => transformation })
+        case Transformation.Tuple(source, fields, outputTpe) =>
+          evaluate(fields.values)
+        case Transformation.Optional(source, paramTransformation, outputTpe) =>
+          recurse(paramTransformation)
+        case Transformation.EitherLike(source, left, right, outputTpe) =>
+          recurse(right)
+        case Transformation.MapLike(source, key, value, factory, outputTpe) =>
+          evaluateCollBuilder(factory)
+          recurse(key)
+          recurse(value)
+        case Transformation.IterLike(source, elem, factory, outputTpe) =>
+          evaluateCollBuilder(factory)
+          recurse(elem)
+        case Transformation.Leaf(output) =>
+          ()
+        case Transformation.Mapped(_, _, _) =>
+          ()
+        case Transformation.ConfedUp(config) =>
+          config match
+            case Configured.Update(tpe, fn) => ()
+
+        case Transformation.Merged(mergees, fields, namesTpe, valuesTpe, _) =>
+          evaluate(fields.collect {
+            case (_, Merged.Field.FromPrimary(underlying = Field.FromSource(transformation = t))) => t
+            case (_, Merged.Field.FromSecondary(transformation = t))                              => t
+          })
+        case Transformation.Hoisted(source, wrapped, outputTpe) =>
+          boundary.break(None)
+    }
+
+  private inline def evaluate(plans: Iterable[Transformation[Fallible]])(using inline label: boundary.Label[None | Unit]) =
+    val iterator = plans.iterator
+    while iterator.hasNext do
+      recurse(iterator.next()) match {
+        case None => boundary.break(None)
+        case ()   => ()
+      }
+
+  private inline def evaluateCollBuilder(builder: CollBuilder[Fallible])(using inline label: boundary.Label[None | Unit]) =
+    builder match
+      case CollBuilder.Total(builder)            => ()
+      case CollBuilder.PossiblyFallible(builder) => boundary.break(None)
+
+}

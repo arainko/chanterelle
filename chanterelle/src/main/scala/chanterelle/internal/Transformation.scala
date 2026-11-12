@@ -1,71 +1,110 @@
 package chanterelle.internal
 
-import chanterelle.internal.Plan.IsModified
+import chanterelle.internal.Debug.LabelColor
+import chanterelle.internal.FallibleInterpreter.TransformationMode
+import chanterelle.internal.Plan.{ Hoist, IsModified }
+import chanterelle.internal.Structure.MappableInstance
+import chanterelle.interop.Collection
 
-import scala.collection.Factory
+import scala.annotation.nowarn
 import scala.collection.immutable.{ SortedMap, VectorMap }
 import scala.quoted.*
 import scala.util.boundary
 import scala.util.boundary.Label
 
-private[chanterelle] enum Transformation derives Debug {
-  case Named(
-    source: Structure.Named,
-    fields: VectorMap[String, Transformation.Field],
-    namesTpe: Type[? <: scala.Tuple],
-    valuesTpe: Type[? <: scala.Tuple]
-  )
+@nowarn("msg=unused implicit")
+private[chanterelle] sealed trait Transformation[+F <: Fallible] derives Debug {
 
-  case Tuple(
-    source: Structure.Tuple,
-    fields: SortedMap[Int, Transformation],
-    outputTpe: Type[?]
-  )
-
-  case Optional(
-    source: Structure.Optional,
-    paramTransformation: Transformation,
-    outputTpe: Type[? <: Option[?]]
-  )
-
-  case EitherLike(
-    source: Structure.Either,
-    left: Transformation,
-    right: Transformation,
-    outputTpe: Type[? <: scala.Either[?, ?]]
-  )
-
-  case MapLike[F[k, v] <: collection.Map[k, v]](
-    source: Structure.Collection.Repr.MapLike[F],
-    key: Transformation,
-    value: Transformation,
-    factory: Expr[Factory[?, ?]],
-    outputTpe: Type[?]
-  )
-
-  case IterLike[F[elem] <: Iterable[elem]](
-    source: Structure.Collection.Repr.IterLike[F],
-    elem: Transformation,
-    factory: Expr[Factory[?, ?]],
-    outputTpe: Type[?]
-  )
-
-  case Leaf(output: Structure.Leaf)
-
-  case ConfedUp(config: Configured)
-
-  case Merged(
-    mergees: VectorMap[Sources.Ref, Structure.Named],
-    fields: VectorMap[String, Transformation.Merged.Field],
-    namesTpe: Type[? <: scala.Tuple],
-    valuesTpe: Type[? <: scala.Tuple]
-  )
+  def outputTpe: Type[?]
 }
 
 private[chanterelle] object Transformation {
+  private[chanterelle] given LabelColor = LabelColor.create(_.MAGENTA)
 
-  def create(transformation: Plan[Nothing])(using Quotes): scala.Either[ErrorMessage, Transformation] = {
-    def transformField(field: Plan.Field[Nothing])(using Label[ErrorMessage]): Field =
+  case class Named[+F <: Fallible](
+    source: Structure.Named,
+    fields: VectorMap[String, Transformation.Field[F]],
+    namesTpe: Type[? <: scala.Tuple],
+    valuesTpe: Type[? <: scala.Tuple],
+    outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
+  ) extends Transformation[F]
+
+  case class Tuple[+F <: Fallible](
+    source: Structure.Tuple,
+    fields: SortedMap[Int, Transformation[F]],
+    outputTpe: Type[?]
+  ) extends Transformation[F]
+
+  case class Optional[+F <: Fallible](
+    source: Structure.Optional,
+    paramTransformation: Transformation[F],
+    outputTpe: Type[? <: Option[?]]
+  ) extends Transformation[F]
+
+  case class EitherLike[+F <: Fallible](
+    source: Structure.Either,
+    left: Transformation[Nothing],
+    right: Transformation[F],
+    outputTpe: Type[? <: scala.Either[?, ?]]
+  ) extends Transformation[F]
+
+  case class MapLike[+F <: Fallible, map[k, v]](
+    source: Structure.Collection.Repr.MapLike[map],
+    key: Transformation[F],
+    value: Transformation[F],
+    builder: CollBuilder[F],
+    outputTpe: Type[?]
+  ) extends Transformation[F]
+
+  case class IterLike[+F <: Fallible, iter[elem]](
+    source: Structure.Collection.Repr.IterLike[iter],
+    elem: Transformation[F],
+    builder: CollBuilder[F],
+    outputTpe: Type[?]
+  ) extends Transformation[F]
+
+  case class Leaf(output: Structure.Leaf) extends Transformation[Nothing] {
+    export output.tpe as outputTpe
+  }
+
+  case class ConfedUp[+F <: Fallible](config: Configured[F]) extends Transformation[F] {
+    export config.tpe as outputTpe
+  }
+
+  case class Merged(
+    mergees: VectorMap[Sources.Ref, Structure.Named],
+    fields: VectorMap[String, Transformation.Merged.Field],
+    namesTpe: Type[? <: scala.Tuple],
+    valuesTpe: Type[? <: scala.Tuple],
+    outputTpe: Type[? <: NamedTuple.AnyNamedTuple]
+  ) extends Transformation[Nothing]
+
+  // OK so, small invariant: hoisting a wrapped node hoists all encountered wrapped nodes on its way
+  case class Hoisted[F[_]](
+    source: Structure.Wrapped[F],
+    wrapped: HoistedTransformation,
+    outputTpe: Type[?]
+  ) extends Transformation[Fallible]
+
+  // Passthrough means that there are more wrapped nodes underneath, Bottommost means we're not hoisting anything lower than this
+  enum HoistedTransformation derives Debug {
+    case Passthrough[F[_]](
+      transformation: Transformation[Fallible],
+      mode: TransformationMode.FailFast[F] | TransformationMode.Parallel[F]
+    )
+    case Bottommost(transformation: Transformation[Nothing])
+  }
+
+  case class Mapped[F[_]](
+    source: Structure.Wrapped[F],
+    wrapped: Transformation[Nothing],
+    outputTpe: Type[?]
+  ) extends Transformation[Nothing]
+
+  def create[F <: Fallible](
+    transformation: Plan[Nothing]
+  )(using Quotes, Context.Of[F]): scala.Either[ErrorMessage, Transformation[F]] = {
+    def transformField[F <: Fallible](field: Plan.Field[Nothing])(using Label[ErrorMessage], Context.Of[F]): Field[F] =
       field match {
         case Plan.Field.FromSource(srcName, plan) =>
           Field.FromSource(srcName, recurse(plan))
@@ -73,27 +112,36 @@ private[chanterelle] object Transformation {
           Field.FromModifier(mod)
       }
 
-    def fromMerged(plan: Plan.Merged[Nothing])(using Quotes, Label[ErrorMessage]): Transformation.Merged = {
-      val fields =
-        plan.fields.collect {
-          case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
-            name -> Transformation.Merged.Field.FromPrimary(source, transformField(field))
-          case (name, Plan.Merged.Field.FromSecondary(secName, ref, accessibleFrom, plan)) =>
-            val transformation: Transformation.Leaf | Transformation.Merged = plan match {
-              case leaf: Plan.Leaf              => Transformation.fromLeaf(leaf)
-              case merged: Plan.Merged[Nothing] => fromMerged(merged)
-            }
-            name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
-        }
-      Merged(
-        plan.mergees,
-        fields,
-        plan.calculateNamesTpe,
-        plan.calculateValuesTpe
-      )
-    }
+    def fromMerged(
+      plan: Plan.Merged[Nothing]
+    )(using Quotes, Label[ErrorMessage], Context.Any): Transformation.Merged =
+      Context.current.weaken.locally {
+        val fields =
+          plan.fields.collect {
+            case (name, Plan.Merged.Field.FromPrimary(source, field, false)) =>
+              name -> Transformation.Merged.Field.FromPrimary(source, transformField(field))
+            case (name, Plan.Merged.Field.FromSecondary(secName, ref, accessibleFrom, plan)) =>
+              val transformation: Transformation.Leaf | Transformation.Merged = plan match {
+                case leaf: Plan.Leaf              => Transformation.fromLeaf(leaf)
+                case merged: Plan.Merged[Nothing] => fromMerged(merged)
+              }
+              name -> Transformation.Merged.Field.FromSecondary(secName, ref, accessibleFrom, transformation)
+          }
+        (plan.calculateNamesTpe, plan.calculateValuesTpe).runtimeChecked match {
+          case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
+            Merged(
+              plan.mergees,
+              fields,
+              Type.of[names],
+              Type.of[values],
+              Type.of[NamedTuple.NamedTuple[names, values]]
+            )
 
-    def recurse(transformation: Plan[Nothing])(using Label[ErrorMessage]): Transformation =
+        }
+
+      }
+
+    def recurse[F <: Fallible](transformation: Plan[Nothing])(using Label[ErrorMessage], Context.Of[F]): Transformation[F] =
       transformation match {
         // optimization: if a Transformation hasn't been modified it's valid to just treat it as a Leaf (i.e. rewrite the source value)
         case plan if plan.isModified == IsModified.No =>
@@ -101,12 +149,16 @@ private[chanterelle] object Transformation {
           Leaf(Structure.Leaf(tpe, Path.empty(tpe))) // TODO: figure out what to do about the path here
 
         case p @ Plan.Named(source, fields, _) =>
-          Named(
-            source,
-            fields.transform((_, field) => transformField(field)),
-            p.calculateNamesTpe,
-            p.calculateValuesTpe
-          )
+          (p.calculateNamesTpe, p.calculateValuesTpe).runtimeChecked match {
+            case '[type names <: scala.Tuple; names] -> '[type values <: scala.Tuple; values] =>
+              Named(
+                source,
+                fields.transform((_, field) => transformField(field)),
+                Type.of[names],
+                Type.of[values],
+                Type.of[NamedTuple.NamedTuple[names, values]]
+              )
+          }
 
         case p @ Plan.Tuple(source, fields, _) =>
           Tuple(source, fields.map((idx, plan) => idx -> recurse(plan)), p.calculateTpe)
@@ -115,57 +167,148 @@ private[chanterelle] object Transformation {
           Optional(source, recurse(paramTransformation), p.calculateTpe)
 
         case p @ Plan.Either(source, left, right, _) =>
-          EitherLike(source, recurse(left), recurse(right), p.calculateTpe)
+          EitherLike(source, Context.current.weaken.locally(recurse(left)), recurse(right), p.calculateTpe)
 
         case p @ Plan.MapLike(source, key, value, _) =>
           val tpe = p.calculateTpe
-          val factory = (source.tycon, tpe).runtimeChecked match {
-            case ('[type map[k, v]; map], '[collection.Map[key, value]]) =>
-              Expr.summon[Factory[(key, value), map[key, value]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+          (source.tycon, key.calculateTpe, value.calculateTpe).runtimeChecked match {
+            case ('[type map[k, v]; map], '[key], '[value]) =>
+              val factory =
+                CollBuilder
+                  .make[(key, value), map[key, value]]
+                  .getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
+              MapLike(source, recurse(key), recurse(value), factory, tpe)
           }
-          MapLike(source, recurse(key), recurse(value), factory, tpe)
 
         case t @ Plan.IterLike(source, elem, _) =>
           val tpe = t.calculateTpe
-          val factory = (source.tycon, tpe).runtimeChecked match {
-            case ('[type coll[a]; coll], '[Iterable[elem]]) =>
-              Expr.summon[Factory[elem, coll[elem]]].getOrElse(boundary.break(ErrorMessage.NoFactoryFound(tpe)))
+          (source.tycon, elem.calculateTpe).runtimeChecked match {
+            case ('[type coll[a]; coll], '[elem]) =>
+              val factory =
+                CollBuilder
+                  .make[elem, coll[elem]]
+                  .getOrElse(boundary.break(ErrorMessage.NoCollectionBuilderFound(tpe)))
+              IterLike(source, recurse(elem), factory, tpe)
           }
-          IterLike(source, recurse(elem), factory, tpe)
 
         case p: Plan.Merged[Nothing] =>
           fromMerged(p)
+
+        case p: Plan.Wrapped[Nothing, f] =>
+          Context.current match {
+            case _: (Context.Total.type | Context.Weakened[?]) =>
+              p.isHoisted match {
+                case Hoist.No =>
+                  Transformation.Mapped[f](
+                    p.source,
+                    Context.current.weaken.locally(recurse(p.wrapped)),
+                    p.calculateTpe
+                  )
+                case Hoist.Passthrough | Hoist.Yes =>
+                  boundary.break(ErrorMessage.CantSequenceWithoutFallibleContext)
+              }
+            case ctx @ given Context.PossiblyFallible[`f`] =>
+              (p.isHoisted, p.source.mappable) match
+                case Plan.Hoist.Passthrough -> (MappableInstance.Contextual(tm @ TransformationMode.FailFast(_))) =>
+                  Transformation.Hoisted(
+                    p.source,
+                    HoistedTransformation.Passthrough(recurse(p.wrapped), tm),
+                    p.wrapped.calculateTpe
+                  )
+
+                case Plan.Hoist.Passthrough -> (MappableInstance.Contextual(tm @ TransformationMode.Parallel(_))) =>
+                  Transformation.Hoisted(
+                    p.source,
+                    HoistedTransformation.Passthrough(recurse(p.wrapped), tm),
+                    p.wrapped.calculateTpe
+                  )
+
+                case Plan.Hoist.Passthrough -> MappableInstance.Contextual(TransformationMode.Accumulating(_)) =>
+                  boundary.break(ErrorMessage.CantHoistNestedFallibleFields(ctx.wrapperType))
+
+                case (Plan.Hoist.Passthrough | Plan.Hoist.Yes) -> MappableInstance.TypeSpecific(mappable) =>
+                  boundary.break(ErrorMessage.CantHoistThroughMappable(p.source.wrapper))
+
+                case Plan.Hoist.Yes -> _ =>
+                  Transformation.Hoisted(
+                    p.source,
+                    Context.current.weaken.locally(HoistedTransformation.Bottommost(recurse(p.wrapped))),
+                    p.wrapped.calculateTpe
+                  )
+
+                case Plan.Hoist.No -> _ =>
+                  Transformation.Mapped[f](
+                    p.source,
+                    Context.current.weaken.locally(recurse(p.wrapped)),
+                    p.calculateTpe
+                  )
+
+          }
 
         case leaf: Plan.Leaf =>
           Transformation.fromLeaf(leaf)
 
         case Plan.ConfedUp(config, _) =>
-          ConfedUp(config)
+          Context.current match {
+            case (Context.Total | Context.Weakened(_, _)) =>
+              config match {
+                case update: Configured.Update =>
+                  ConfedUp(update)
+              }
+            case Context.PossiblyFallible(mode, wrapperType) =>
+              ConfedUp(config)
+          }
       }
 
-    boundary[Transformation | ErrorMessage](recurse(transformation)) match {
-      case transformation: Transformation => Right(transformation)
-      case error: ErrorMessage            => Left(error)
+    boundary[Transformation[F] | ErrorMessage](recurse(transformation)) match {
+      case transformation: Transformation[F] =>
+        Logger.info("Transformation:", transformation)
+        Right(transformation)
+      case error: ErrorMessage => Left(error)
     }
   }
 
   def fromLeaf(leaf: Plan.Leaf): Transformation.Leaf = Transformation.Leaf(leaf.output)
 
-  enum Field derives Debug {
-    case FromSource(name: String, transformation: Transformation)
+  @nowarn("msg=unused implicit")
+  enum Field[+F <: Fallible] derives Debug {
+    case FromSource(name: String, transformation: Transformation[F])
     case FromModifier(modifier: Configured.NamedSpecific)
 
   }
 
   object Merged {
     enum Field derives Debug {
-      case FromPrimary(source: Structure.Named, underlying: Transformation.Field)
+      case FromPrimary(source: Structure.Named, underlying: Transformation.Field[Nothing])
       case FromSecondary(
         name: String,
         ref: Sources.Ref,
         accessibleFrom: Set[Sources.Ref],
         transformation: Leaf | Merged
       )
+    }
+  }
+}
+
+@nowarn("msg=unused implicit")
+enum CollBuilder[+F <: Fallible] derives Debug {
+  case Total(builder: Erased.K2[Collection.Builder]) extends CollBuilder[Nothing]
+  case PossiblyFallible[Builder[Elem, Coll]](builder: Erased.K2[Builder]) extends CollBuilder[Fallible]
+}
+
+object CollBuilder {
+  def make[Elem: Type, Coll: Type](using Quotes)[F <: Fallible](using Context.Of[F]): Option[CollBuilder[F]] = {
+    Context.current match {
+      case Context.Total =>
+        Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
+      case _: Context.Weakened[f] =>
+        Expr.summon[Collection.Builder[Elem, Coll]].map(builder => CollBuilder.Total(Erased.K2(builder)))
+      case ctx: Context.PossiblyFallible[f] =>
+        ctx.mode.builderTpe match {
+          case '[type builder[elem, coll]; builder] =>
+            Expr.summon[builder[Elem, Coll]].map(builder => CollBuilder.PossiblyFallible(Erased.K2(builder)))
+        }
+
     }
   }
 }

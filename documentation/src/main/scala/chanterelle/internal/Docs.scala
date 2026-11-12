@@ -30,9 +30,13 @@ ${Show.show(value)}
         .getOrElse(report.errorAndAbort("Couldn't unpack varargs", values))
         .map {
           case '{ $expr: tpe } =>
-            val Show = Expr.summon[Show[tpe]].getOrElse(report.errorAndAbort(s"Couldn't get Show instance for ${Type.show[tpe]}"))
-            val valName = valNameMacro(expr)
-            '{ (valName = $valName, repr = $Show.show($expr)) }
+            TypeRepr.of[tpe].widen.asType match {
+              case '[tpe] =>
+                val Show =
+                  Expr.summon[Show[tpe]].getOrElse(report.errorAndAbort(s"Couldn't get Show instance for ${Type.show[tpe]}"))
+                val valName = valNameMacro(expr)
+                '{ (valName = $valName, repr = $Show.show(${ expr.asExprOf[tpe] })) }
+            }
         }
     }
   }

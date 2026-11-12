@@ -53,11 +53,13 @@ private[chanterelle] object ErrorMessage {
 
   }
 
-  case class NoFactoryFound(tpe: Type[?]) extends ErrorMessage {
+  case class NoCollectionBuilderFound(tpe: Type[?]) extends ErrorMessage {
     def render(using Quotes) = {
 
       import quotes.reflect.*
-      s"Couldn't find an implicit instance of Factory for ${tpe.repr.show(using Printer.TypeReprCode)}"
+      s"Couldn't find an implicit instance of chanterelle.interop.Collection.Builder for ${tpe.repr.show(using
+          Printer.TypeReprCode
+        )}"
     }
 
   }
@@ -77,6 +79,33 @@ private[chanterelle] object ErrorMessage {
   case class AmbiguousRename(ambs: Map[String, Vector[String]], override val span: Span) extends ErrorMessage {
     def render(using Quotes): String = {
       s"Ambiguous field renames detected: ${System.lineSeparator()}${ambs.map((source, dest) => s"  * field '$source' maps to: ${dest.map(name => s"'$name'").mkString(", ")}").mkString(System.lineSeparator())}"
+    }
+  }
+
+  case object CantSequenceWithoutFallibleContext extends ErrorMessage {
+    def render(using Quotes): String =
+      s"Can't use fallible transformations without providing Mode[F] in scope"
+  }
+
+  case class CantHoistNestedFallibleFields(wrapper: WrapperType[?]) extends ErrorMessage {
+    def render(using Quotes): String =
+      s"It's not possible to hoist nested fallible fields with just a Mode.Accumulating[${Type.show(using wrapper.wrapper)}] in scope - you'll need an instance of Mode.FailFast or Mode.Parallel for ${Type
+          .show(using wrapper.wrapper)} to do so."
+  }
+
+  case class CantTraverseLeftSideOfEither(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String =
+      s"Can't traverse the left side of either when operating inside a Mode[Either[_, _]] - this path selector is only available on non-fallible transformations."
+  }
+
+  case class CantUseHoistRegionalWithAccumulating(override val span: Span) extends ErrorMessage {
+    def render(using Quotes): String =
+      s"'.hoist.regional' is only available with a Mode.FailFast or Mode.Parallel in scope - transformations with a Mode.Accumulating in scope can use '.hoist.local'"
+  }
+
+  case class CantHoistThroughMappable(wrapper: WrapperType[?]) extends ErrorMessage {
+    def render(using Quotes): String = {
+      s"Using '.element' inside of a '.hoist' with just an implicit instance of Mappable[${Type.show(using wrapper.wrapper)}] is not possible."
     }
   }
 }

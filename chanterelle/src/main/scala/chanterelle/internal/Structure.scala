@@ -1,7 +1,11 @@
 package chanterelle.internal
-
+import chanterelle.internal.Debug.LabelColor
+import chanterelle.internal.FallibleInterpreter.TransformationMode
 import chanterelle.internal.Structure.Leaf
+import chanterelle.interop.Collection.IntoIterator
+import chanterelle.interop.Mappable
 
+import scala.annotation.unused
 import scala.collection.immutable.VectorMap
 import scala.quoted.*
 import scala.reflect.TypeTest
@@ -17,6 +21,7 @@ private[chanterelle] sealed trait Structure extends scala.Product derives Debug 
 }
 
 private[chanterelle] object Structure {
+  private[chanterelle] given LabelColor = LabelColor.create(_.GREEN)
 
   def unapply(struct: Structure): Structure = struct
 
@@ -71,31 +76,54 @@ private[chanterelle] object Structure {
   ) extends Structure
 
   case class Collection(
-    tpe: Type[? <: Iterable[?]],
+    tpe: Type[?],
     path: Path,
     repr: Collection.Repr
   ) extends Structure
 
   object Collection {
     enum Repr derives Debug {
-      case MapLike[F[k, v] <: scala.collection.Map[k, v]](tycon: Type[F], key: Structure, value: Structure)
-      case IterLike[F[elem] <: scala.Iterable[elem]](tycon: Type[F], element: Structure)
+      case MapLike[F[_, _]](
+        tycon: Type[F],
+        intoIter: Erased.K2[IntoIterator],
+        key: Structure,
+        value: Structure
+      )
+      case IterLike[F[_]](tycon: Type[F], intoIter: Erased.K2[IntoIterator], element: Structure)
     }
   }
+
+  case class Wrapped[F[_]](
+    tpe: Type[?],
+    wrapper: WrapperType[F],
+    path: Path,
+    mappable: MappableInstance[F],
+    wrapped: Structure
+  ) extends Structure
 
   case class Leaf(tpe: Type[?], path: Path) extends Structure {
     def calculateTpe(using Quotes): Type[?] = tpe
   }
 
-  def toplevel[A: Type](using Quotes): Structure =
+  def toplevel[A: Type](using Quotes, Context.Any): Structure =
     Structure.of[A](Path.empty(Type.of[A]))
 
-  def of[A: Type](path: Path)(using Quotes): Structure = {
+  def of[A: Type](path: Path)(using Quotes, Context.Any): Structure = {
     given Path = path // just for SupportedCollection, maybe come up with something nicer?
     Logger.loggedInfo("Structure"):
       Type.of[A] match {
         case tpe @ '[Nothing] =>
           Structure.Leaf(tpe, path)
+
+        case tpe @ WrappedType(ExtractedWrapper(wrapper = wrapper: WrapperType[f], wrapped = '[wrapped], mappable = m)) =>
+          @unused given Type[f] = wrapper.wrapper
+          Structure.Wrapped[f](
+            tpe,
+            wrapper,
+            path,
+            m,
+            Structure.of[wrapped](path.appended(Path.Segment.Element(Type.of[wrapped])))
+          )
 
         case tpe @ '[Option[param]] =>
           Structure.Optional(
@@ -114,7 +142,7 @@ private[chanterelle] object Structure {
               path.appended(Path.Segment.LeftElement(Type.of[e]))
             ),
             Structure.of[a](
-              path.appended(Path.Segment.RightElement(Type.of[a]))
+              path.appended(Path.Segment.Element(Type.of[a]))
             )
           )
 
@@ -176,47 +204,85 @@ private[chanterelle] object Structure {
   }
 
   private object SupportedCollection {
-    def unapply(tpe: Type[?])(using q: Quotes, path: Path): Option[Structure.Collection] = {
-      import quotes.reflect.*
-      tpe match {
-        case tpe @ '[Iterable[param]] =>
-          tpe.repr.simplified.widen match {
-            case AppliedType(tycon, args) =>
-              (tycon.asType -> args.map(_.asType)) match {
-                case '[type map[k, v] <: collection.Map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
-                  Some(
-                    Structure.Collection(
-                      tpe,
-                      path,
-                      Structure.Collection.Repr.MapLike(
-                        Type.of[map],
-                        Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
-                        Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
-                      )
-                    )
-                  )
+    def unapply(tpe: Type[?])(using q: Quotes, path: Path, context: Context.Any): Option[Structure.Collection] = {
+      Type.unapplied(tpe).flatMap {
+        case '[type map[k, v]; map] -> ('[key] :: '[value] :: Nil) =>
+          Expr.summon[IntoIterator[(key, value), map[key, value]]].map { intoIter =>
+            Structure.Collection(
+              tpe,
+              path,
+              Structure.Collection.Repr.MapLike(
+                Type.of[map],
+                Erased.K2(intoIter),
+                Structure.of[key](path.appended(Path.Segment.TupleElement(Type.of[key], 0))),
+                Structure.of[value](path.appended(Path.Segment.TupleElement(Type.of[value], 1)))
+              )
+            )
+          }
 
-                // matches on the likes of IntMap and LongMap
-                case '[type map[v] <: collection.Map[?, v]; map] -> _ =>
-                  None // TODO: support later? maybeeeee
-
-                case '[type coll[a] <: Iterable[a]; coll] -> ('[elem] :: Nil) =>
-                  Some(
-                    Structure.Collection(
-                      tpe,
-                      path,
-                      Structure.Collection.Repr.IterLike(
-                        Type.of[coll],
-                        Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
-                      )
-                    )
-                  )
-                case _ => None
-              }
-            case _ => None
+        case '[type coll[a]; coll] -> ('[elem] :: Nil) =>
+          Expr.summon[IntoIterator[elem, coll[elem]]].map { intoIter =>
+            Structure.Collection(
+              tpe,
+              path,
+              Structure.Collection.Repr.IterLike(
+                Type.of[coll],
+                Erased.K2(intoIter),
+                Structure.of[elem](path.appended(Path.Segment.Element(Type.of[elem])))
+              )
+            )
           }
         case _ => None
       }
     }
+  }
+
+  enum MappableInstance[F[_]](val value: Expr[Mappable[F]]) {
+
+    case Contextual(mode: TransformationMode[F, ?]) extends MappableInstance(mode.value)
+    case TypeSpecific(mappable: Expr[Mappable[F]]) extends MappableInstance(mappable)
+  }
+
+  object MappableInstance {
+    given Debug[MappableInstance[?]] = Debug.derived
+  }
+
+  private case class ExtractedWrapper[F[_]](wrapper: WrapperType[F], wrapped: Type[?], mappable: MappableInstance[F])
+
+  private object WrappedType {
+    def unapply(
+      tpe: Type[?]
+    )(using
+      q: Quotes,
+      context: Context.Any
+    ): Option[ExtractedWrapper[?]] = {
+      def mappableCandidate = Type
+        .unapplied(tpe)
+        .collect {
+          case (tycon = '[type f[_]; f], args = wrapped :: Nil) =>
+            Expr
+              .summon[Mappable[f]]
+              .map(mappable =>
+                ExtractedWrapper(
+                  wrapper = WrapperType.create[f],
+                  wrapped = wrapped,
+                  mappable = MappableInstance.TypeSpecific(mappable)
+                )
+              )
+        }
+        .flatten
+
+      context match {
+        case ctx: Context.NonTotal[?, ?] =>
+          ctx.wrapperType
+            .unapply(tpe)
+            .map((wrapper, wrapped) =>
+              ExtractedWrapper(wrapper = wrapper, wrapped = wrapped, mappable = MappableInstance.Contextual(ctx.mode))
+            )
+            .orElse(mappableCandidate)
+        case Context.Total => mappableCandidate
+      }
+    }
+
   }
 }

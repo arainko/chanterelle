@@ -1,10 +1,11 @@
 package chanterelle
 
+import chanterelle.interop.{ Collection, Mappable }
 import munit.FunSuite
 
 import scala.annotation.nowarn
 import scala.collection.SortedSet
-import scala.collection.immutable.HashMap
+import scala.collection.immutable.{ HashMap, SortedMap }
 import scala.compiletime.ops.string.*
 
 class ModifiersSpec extends ChanterelleSuite {
@@ -58,7 +59,7 @@ class ModifiersSpec extends ChanterelleSuite {
 
   test("modifiers can traverse collections (and keep the same collection type)") {
     val tup = (anotherField = List((field1 = 123), (field1 = 124)))
-    val expected =
+    val expected: (anotherField: List[(field1: Int, newField: String)]) =
       (anotherField =
         List(
           (field1 = 123, newField = "ashtray wasp"),
@@ -80,7 +81,7 @@ class ModifiersSpec extends ChanterelleSuite {
         )
       )
 
-    val actual =
+    val actual: (anotherField: HashMap[(key: Int, newField: String), (value: Int, newField: String)]) =
       tup.transform(
         _.put(_.anotherField.element._1)((newField = "the king of limbs is a good album")),
         _.put(_.anotherField.element._2)((newField = "frfr"))
@@ -92,9 +93,19 @@ class ModifiersSpec extends ChanterelleSuite {
   test("modifiers can traverse sorted collections") {
     val tup = (anotherField = SortedSet(1, 2, 3))
     val expected = (anotherField = SortedSet(2, 3, 4))
-    val actual = tup.transform(_.update(_.anotherField.element)(_ + 1))
+    val actual: (anotherField: SortedSet[Int]) = tup.transform(_.update(_.anotherField.element)(_ + 1))
 
     assertEquals(actual, expected)
+  }
+
+  test("modifiers can traverse sorted maps") {
+
+    val tup = (anotherField = SortedMap(1 -> 1, 2 -> 2, 3 -> 3))
+    val expected = (anotherField = SortedMap(2 -> 1, 3 -> 2, 4 -> 3))
+    val actual: (anotherField: SortedMap[Int, Int]) = tup.transform(_.update(_.anotherField.element._1)(_ + 1))
+
+    assertEquals(actual, expected)
+
   }
 
   test("modifiers can traverse classic tuples (using _N accessors)") {
@@ -125,7 +136,7 @@ class ModifiersSpec extends ChanterelleSuite {
       _.remove(_.anotherField.element.field1)
     )
 
-    val expected =
+    val expected: (anotherField: List[(field2: Int, newField1: Int, newField2: Int, newField3: Int)]) =
       (anotherField =
         List(
           (field2 = 1, newField1 = 1, newField2 = 2, newField3 = 3),
@@ -944,6 +955,60 @@ class ModifiersSpec extends ChanterelleSuite {
       ),
       actual
     )
+  }
+
+  test("custom mappable type works") {
+    case class CusVector[+A](vec: Vector[A])
+
+    object CusVector {
+      given Mappable[CusVector] with {
+        def map[A, B](fa: CusVector[A], f: A => B) = fa.copy(vec = fa.vec.map(f))
+      }
+    }
+
+    val tup = (someField = CusVector(Vector(1, 2, 3, 4)))
+
+    val actual = tup.transform(_.update(_.someField.element)(_.toString))
+
+    val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
+    assertEquals(actual, expected)
+
+  }
+
+  test("custom collection type works") {
+    case class CusVector[+A](vec: Vector[A])
+
+    object CusVector {
+      given [A]: Collection.IntoIterator[A, CusVector[A]] =
+        Collection.IntoIterator.from(_.vec.iterator)
+
+      given [A]: Collection.Builder[A, CusVector[A]] =
+        Collection.Builder
+          .fromFactory(Vector)
+          .transform(CusVector.apply)
+    }
+    val tup = (someField = CusVector(Vector(1, 2, 3, 4)))
+
+    val actual = tup.transform(_.update(_.someField.each)(_.toString))
+    val expected = (someField = CusVector(Vector("1", "2", "3", "4")))
+    assertEquals(actual, expected)
+
+  }
+
+  test("custom map type works") {
+    case class CusMap[K, +V](map: HashMap[K, V])
+
+    object CusMap {
+      given [K, V]: Collection.IntoIterator[(K, V), CusMap[K, V]] = Collection.IntoIterator.from(_.map.iterator)
+
+      given [K, V]: Collection.Builder[(K, V), CusMap[K, V]] = Collection.Builder.fromFactory(HashMap).transform(CusMap.apply)
+    }
+    val tup = (someField = CusMap(HashMap(1 -> 2, 3 -> 4)))
+
+    val actual = tup.transform(_.update(_.someField.each._2)(_ * 2))
+    val expected = (someField = CusMap(HashMap(1 -> 4, 3 -> 8)))
+
+    assertEquals(actual, expected)
   }
 }
 

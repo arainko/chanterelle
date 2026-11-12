@@ -1,0 +1,58 @@
+package chanterelle.internal
+
+import chanterelle.Mode
+import chanterelle.internal.Context.{ PossiblyFallible, Total, Weakened }
+import chanterelle.internal.Debug.AST
+import chanterelle.internal.FallibleInterpreter.TransformationMode
+
+import scala.quoted.{ Expr, Quotes }
+
+private[chanterelle] object Fallible {
+  given Debug[Fallible] with {
+    def astify(self: Fallible)(using Quotes): AST = AST.Text("Fallible")
+  }
+}
+private[chanterelle] type Fallible = Fallible.type
+
+private[chanterelle] sealed trait Context[+F <: Fallible] {
+  def weaken: Context[Nothing] = this match {
+    case Total                           => Total
+    case PossiblyFallible(mode, wrapper) => Weakened(mode, wrapper)
+    case non: Weakened[g]                => non
+  }
+
+  inline def locally[A](inline f: Context[F] ?=> A): A = f(using this)
+
+  final def isFallibleFailFast: Boolean =
+    this match {
+      case ctx: Context.NonTotal[?, ?] => ctx.mode.canPassthrough
+      case Context.Total               => false
+    }
+}
+
+private[chanterelle] object Context {
+  type Of[FF <: Fallible] = Context[FF]
+  type Any = Context[?]
+
+  transparent inline def current(using ctx: Context.Any): ctx.type = ctx
+
+  def create(using Quotes): Context.Any =
+    Expr
+      .summon[Mode[?]]
+      .map {
+        case '{ type f[_]; $mode: Mode[f] } => Context.PossiblyFallible(TransformationMode.create[f](mode), WrapperType.create[f])
+      }
+      .getOrElse(Context.Total)
+
+  sealed trait NonTotal[+F <: Fallible, G[_]] extends Context[F], Product {
+    def mode: TransformationMode[G, ?]
+    def wrapperType: WrapperType[G]
+
+    def _1: TransformationMode[G, ?]
+    def _2: WrapperType[G]
+  }
+
+  case object Total extends Context[Nothing]
+  case class Weakened[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G]) extends NonTotal[Nothing, G]
+  case class PossiblyFallible[G[_]](mode: TransformationMode[G, ?], wrapperType: WrapperType[G]) extends NonTotal[Fallible, G]
+}
